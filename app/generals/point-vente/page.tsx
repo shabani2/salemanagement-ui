@@ -1,4 +1,4 @@
-'use client'
+"use client";
 import { useState, useEffect, useRef } from "react";
 import { BreadCrumb } from "primereact/breadcrumb";
 import { InputText } from "primereact/inputtext";

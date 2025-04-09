@@ -26,8 +26,14 @@ import { FileUpload } from "primereact/fileupload";
 //import { Menu } from 'lucide-react';
 import { Toast } from "primereact/toast";
 import { registerUser } from "@/stores/slices/auth/authSlice";
-import { fetchPointVentes, selectAllPointVentes } from "@/stores/slices/pointvente/pointventeSlice";
-import { fetchRegions, selectAllRegions } from "@/stores/slices/regions/regionSlice";
+import {
+  fetchPointVentes,
+  selectAllPointVentes,
+} from "@/stores/slices/pointvente/pointventeSlice";
+import {
+  fetchRegions,
+  selectAllRegions,
+} from "@/stores/slices/regions/regionSlice";
 
 const breadcrumbItems = [{ label: "SuperAdmin" }, { label: "Users" }];
 
@@ -239,6 +245,7 @@ const Page = () => {
           });
           setUsers(resp.payload);
         });
+        console.log("user created : ", response.payload);
       });
 
       setDialogType(null);
@@ -261,10 +268,12 @@ const Page = () => {
     }
   };
 
-   useEffect(() => {
-      dispatch(fetchPointVentes());
-      dispatch(fetchRegions());
-    }, [dispatch]);
+  useEffect(() => {
+    dispatch(fetchPointVentes());
+    dispatch(fetchRegions());
+  }, [dispatch]);
+
+  console.log("users heres => ", users);
 
   return (
     <div className="bg-gray-100 h-screen-min">
@@ -505,30 +514,28 @@ const Page = () => {
                 className="w-full mb-3"
               />
               {showRegionField && (
-               <Dropdown
-               value={newUser.region}
-               options={regions}
-               onChange={(e) =>
-                 setNewUser({ ...newUser, region: e.value })
-               }
-               optionLabel="nom"
-               optionValue="_id"
-               placeholder="Sélectionnez une région"
-               className="w-full"
-             />
+                <Dropdown
+                  value={newUser.region}
+                  options={regions}
+                  onChange={(e) => setNewUser({ ...newUser, region: e.value })}
+                  optionLabel="nom"
+                  optionValue="_id"
+                  placeholder="Sélectionnez une région"
+                  className="w-full"
+                />
               )}
               {showPointVenteField && (
                 <Dropdown
-                value={newUser.pointVente}
-                options={pointsVente}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, pointVente: e.value })
-                }
-                optionLabel="nom"
-                optionValue="_id"
-                placeholder="Sélectionnez un point de vente"
-                className="w-full"
-              />
+                  value={newUser.pointVente}
+                  options={pointsVente}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, pointVente: e.value })
+                  }
+                  optionLabel="nom"
+                  optionValue="_id"
+                  placeholder="Sélectionnez un point de vente"
+                  className="w-full"
+                />
               )}
             </div>
 

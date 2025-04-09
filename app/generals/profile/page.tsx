@@ -19,7 +19,6 @@ import { useDispatch } from "react-redux";
 import { AppDispatch } from "@/stores/store";
 import { Menu } from "primereact/menu";
 
-
 const page = () => {
   const menu = useRef(null);
   const menuItems = [
@@ -77,54 +76,54 @@ const page = () => {
       </div>
 
       <Card className="w-full h-full shadow-lg rounded-none overflow-hidden p-0 ">
-      <div className="relative bg-gradient-to-r from-indigo-500 to-purple-600 h-40 md:h-56 lg:h-72 flex justify-center items-center">
-        <div className="absolute -bottom-20 md:-bottom-24 z-10">
-          <img
-            src={`http://localhost:8000/${user.image.replace("../", "")}`}
-            alt="Avatar"
-            className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-xl object-cover"
-          />
+        <div className="relative bg-gradient-to-r from-indigo-500 to-purple-600 h-40 md:h-56 lg:h-72 flex justify-center items-center">
+          <div className="absolute -bottom-20 md:-bottom-24 z-10">
+            <img
+              src={`http://localhost:8000/${user.image.replace("../", "")}`}
+              alt="Avatar"
+              className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-xl object-cover"
+            />
+          </div>
         </div>
-      </div>
-      <div className="pt-28 md:pt-32 px-5 pb-6 text-center">
-        <h2 className="text-lg md:text-xl font-semibold text-gray-800">{`${user.prenom} ${user.nom}`}</h2>
-        <p className="text-sm md:text-base text-gray-500">{user.role}</p>
-        <div className="mt-4 text-gray-700 text-sm md:text-base">
-          <p>📧 {user.email}</p>
-          <p>📞 {user.telephone}</p>
-          <p>📍 {user.adresse}</p>
-          {user.region && <p>🌍 {user.region}</p>}
-          {user.pointVente && <p>🏬 {user.pointVente}</p>}
-        </div>
+        <div className="pt-28 md:pt-32 px-5 pb-6 text-center">
+          <h2 className="text-lg md:text-xl font-semibold text-gray-800">{`${user.prenom} ${user.nom}`}</h2>
+          <p className="text-sm md:text-base text-gray-500">{user.role}</p>
+          <div className="mt-4 text-gray-700 text-sm md:text-base">
+            <p>📧 {user.email}</p>
+            <p>📞 {user.telephone}</p>
+            <p>📍 {user.adresse}</p>
+            {user.region && <p>🌍 {user.region}</p>}
+            {user.pointVente && <p>🏬 {user.pointVente}</p>}
+          </div>
 
-        {/* Desktop actions */}
-        <div className="hidden md:flex mt-6 justify-center gap-3">
-          <Button
-            label="Modifier"
-            icon="pi pi-pencil"
-            className="p-button-rounded p-button-primary p-button-sm"
-            onClick={() => setDialogType("edit")}
-          />
-          <Button
-            label="Supprimer"
-            icon="pi pi-trash"
-            className="p-button-rounded p-button-danger p-button-sm"
-          />
-        </div>
+          {/* Desktop actions */}
+          <div className="hidden md:flex mt-6 justify-center gap-3">
+            <Button
+              label="Modifier"
+              icon="pi pi-pencil"
+              className="p-button-rounded p-button-primary p-button-sm"
+              onClick={() => setDialogType("edit")}
+            />
+            <Button
+              label="Supprimer"
+              icon="pi pi-trash"
+              className="p-button-rounded p-button-danger p-button-sm"
+            />
+          </div>
 
-        {/* Mobile menu */}
-        <div className="flex md:hidden justify-center mt-6">
-          <Menu model={menuItems} popup ref={menu} />
-          <Button
-            icon="pi pi-ellipsis-v"
-            className="p-button-text p-button-sm"
-            onClick={(e) => menu.current.toggle(e)}
-            aria-haspopup
-            aria-controls="popup_menu"
-          />
+          {/* Mobile menu */}
+          <div className="flex md:hidden justify-center mt-6">
+            <Menu model={menuItems} popup ref={menu} />
+            <Button
+              icon="pi pi-ellipsis-v"
+              className="p-button-text p-button-sm"
+              onClick={(e) => menu.current.toggle(e)}
+              aria-haspopup
+              aria-controls="popup_menu"
+            />
+          </div>
         </div>
-      </div>
-    </Card>
+      </Card>
       {/* dialog of update */}
       <Dialog
         visible={dialogType === "edit"}

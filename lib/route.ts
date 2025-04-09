@@ -9,6 +9,9 @@ const Profile = dynamic(() => import("@/app/generals/profile/page"), {
   ssr: false,
 });
 const zone = dynamic(() => import("@/app/generals/zones/page"), { ssr: false });
+const produits = dynamic(() => import("@/app/generals/produits/page"), {
+  ssr: false,
+});
 
 // 📌 AdminPV
 const AdminPVDashboard = dynamic(
@@ -209,6 +212,12 @@ const superAdminRoutes = [
     title: "Points de Vente",
     icon: PrimeIcons.SHOPPING_BAG,
     component: Pointventes,
+  },
+  {
+    path: "/generals/produits",
+    title: "Produits",
+    icon: PrimeIcons.TAG, // Représente une étiquette de prix
+    component: zone,
   },
   {
     path: "/superAdmin/Ventes",
