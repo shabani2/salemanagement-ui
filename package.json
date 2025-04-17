@@ -28,6 +28,7 @@
     "react-redux": "^9.2.0",
     "react-spinner": "^0.2.7",
     "react-spinners": "^0.15.0",
+    "salemanagement-ui": "file:",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7"
   },

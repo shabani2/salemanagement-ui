@@ -21,3 +21,11 @@ export interface Produit {
   createdAt?: Date;
   updatedAt?: Date;
 }
+export interface ProduitModel {
+  nom: string;
+  categorie: string | Categorie; // peut être une référence ou un objet peuplé
+  prix: number;
+  tva: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}

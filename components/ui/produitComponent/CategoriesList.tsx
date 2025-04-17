@@ -15,9 +15,11 @@ const CategorieList: React.FC<Props> = ({
   filterProduitByCategorie,
 }) => {
   const menuRefs = useRef<Record<string, Menu | null>>({});
-  const [activeSwitches, setActiveSwitches] = useState<Record<string, boolean>>({
-    all: true,
-  });
+  const [activeSwitches, setActiveSwitches] = useState<Record<string, boolean>>(
+    {
+      all: true,
+    },
+  );
 
   const menuItems = [
     { label: "Modifier", icon: "pi pi-pencil" },
