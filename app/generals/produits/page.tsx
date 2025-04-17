@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/rules-of-hooks */
 "use client";
 import CategorieList from "@/components/ui/produitComponent/CategoriesList";
@@ -11,6 +12,7 @@ import {
   deleteProduit,
   fetchProduits,
   selectAllProduits,
+  updateProduit,
 } from "@/stores/slices/produits/produitsSlice";
 import { AppDispatch, RootState } from "@/stores/store";
 import { BreadCrumb } from "primereact/breadcrumb";
@@ -28,7 +30,8 @@ const page = () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const menuRef = useRef<any>(null);
   const dispatch = useDispatch<AppDispatch>();
-  const produits = useSelector((state: RootState) => selectAllProduits(state));
+  const [produits,setProduits]=useState<Produit[]>([])  //useSelector((state: RootState) => selectAllProduits(state));
+  const [allProduits, setAllProduits] = useState<Produit[]>([]);
   const categories = useSelector((state: RootState) =>
     selectAllCategories(state),
   );
@@ -42,42 +45,61 @@ const page = () => {
     nom: "",
     categorie: "",
     prix: 0,
+    prixVente : 0,
     tva: 0,
   });
 
   const [newCategory, setNewCategory] = useState<Categorie | null>(null);
   useEffect(() => {
-    dispatch(fetchCategories()); //.then((resp) => {
-    //   console.log("categories : ", resp.payload);
-    // });
-    dispatch(fetchProduits());
+    dispatch(fetchCategories());
+    dispatch(fetchProduits()).then((resp) => {
+      setAllProduits(resp.payload); // garde la version complète
+      setProduits(resp.payload);    // version visible (filtrée ou pas)
+    });
   }, [dispatch]);
-  const filterProduitByCategorie = (categorie: Categorie) => {
-    const filtered = produits.filter((p) => p.categorie === categorie._id);
+
+  const filterProduitByCategorie = (categorie: Categorie | null) => {
+    if (!categorie) {
+      setProduits(allProduits); // réinitialise
+      return;
+    }
+  
+    const filtered = allProduits.filter(
+      (p) => p.categorie._id === categorie._id
+    );
+  
+    setProduits(filtered);
     console.log("Produits filtrés pour:", categorie.nom, filtered);
-    // Tu peux stocker ces produits dans un state ou les dispatcher
   };
-  console.log("categories : ", categories);
-  console.log("produits : ", produits);
+
 
   const handleAction = (action: string, rowData: any) => {
     setSelectedProduit(rowData);
     setDialogType(action);
   };
 
-  const handleCreate = () => {
-    dispatch(addProduit(newProduit));
+  const handleCreate = async () => {
+   await dispatch(addProduit(newProduit));
+   await dispatch(fetchProduits()).then((resp)=>{
+      setProduits(resp.payload)
+    });
     setDialogType(null);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (selectedProduit) {
-      dispatch(deleteProduit(selectedProduit._id));
+     await dispatch(deleteProduit(selectedProduit._id));
+    await  dispatch(fetchProduits()).then((resp)=>{
+        setProduits(resp.payload)
+      });
       setDialogType(null);
     }
   };
-  const handleUpdate = () => {
-    dispatch(deleteProduit(selectedPointVente));
+  const handleUpdate =async () => {
+    await dispatch(updateProduit(selectedProduit));
+    await dispatch(fetchProduits()).then((resp)=>{
+      setProduits(resp.payload)
+    });
     setDialogType(null);
   };
 
@@ -107,6 +129,7 @@ const page = () => {
     </div>
   );
 
+ 
   return (
     <div className="bg-gray-100 min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -170,7 +193,7 @@ const page = () => {
                 body={(_, options) => options.rowIndex + 1}
               />
               <Column field="nom" header="Nom" sortable />
-              <Column
+              {/* <Column
                 field="categorie"
                 header="Catégorie"
                 body={(rowData) =>
@@ -179,11 +202,26 @@ const page = () => {
                     : rowData.categorie?.nom || "N/A"
                 }
                 sortable
-              />
+              /> */}
+              <Column
+  field="categorie.nom"
+  header="Catégorie"
+  sortable
+  body={(rowData: Produit) =>
+    rowData.categorie?.nom ? (
+      <span className="inline-block px-2 py-1 bg-gray-100 text-gray-800 rounded-md text-sm font-medium">
+        {rowData?.categorie?.nom}
+      </span>
+    ) : (
+      "N/A"
+    )
+  }
+/>
+
               <Column field="prix" header="Prix" sortable />
               <Column field="tva" header="TVA (%)" sortable />
-              <Column field="numeroSerie" header="Numéro de Série" sortable />
-              <Column field="codeBar" header="Code Barre" sortable />
+              <Column field="prixVente" header="Prix de vente" sortable />
+              
               <Column
                 body={actionBodyTemplate}
                 header="Actions"
@@ -251,24 +289,43 @@ const page = () => {
           </div>
 
           {/* Sélecteur de catégorie */}
-          <div>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+            <label className="block mb-1 text-sm font-medium">Categorie</label>
             <Dropdown
-              value={
-                typeof newProduit.categorie === "string"
-                  ? newProduit.categorie
-                  : newProduit.categorie?._id
-              }
-              options={categories.map((cat) => ({
-                label: cat.nom,
-                value: cat._id,
-              }))}
-              onChange={(e) =>
-                setNewProduit({ ...newProduit, categorie: e.value })
-              }
-              placeholder="Sélectionner une catégorie"
-              className="w-full p-2 border rounded"
-            />
-          </div>
+    value={
+      typeof newProduit.categorie === "string"
+        ? newProduit.categorie
+        : newProduit.categorie?._id
+    }
+    options={categories.map((cat) => ({
+      label: cat.nom,
+      value: cat._id,
+    }))}
+    onChange={(e) =>
+      setNewProduit({ ...newProduit, categorie: e.value })
+    }
+    placeholder="Sélectionner une catégorie"
+    className="w-full border rounded"
+  />
+            </div>
+         
+ 
+   <div className="flex-1">
+   <label className="block mb-1 text-sm font-medium">Prix de vente</label>
+  <InputText
+  type="number"
+    value={newProduit.prixVente}
+    onChange={(e) =>
+      setNewProduit({ ...newProduit, prixVente:parseFloat(e.target.value) || 0, })
+    }
+    placeholder="Prix de vente"
+    className="w-full p-2 border rounded"
+  />
+   </div>
+ 
+</div>
+
 
           {/* Bouton d'ajout */}
           <div className="flex justify-end">

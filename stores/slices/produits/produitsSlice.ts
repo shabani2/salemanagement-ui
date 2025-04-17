@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import {
@@ -8,7 +9,7 @@ import {
 } from "@reduxjs/toolkit";
 import { RootState } from "../../store";
 import { apiClient } from "../../../lib/apiConfig";
-import { Produit } from "@/Models/produitsType";
+import { Produit, ProduitModel } from "@/Models/produitsType";
 
 interface ProduitState {
   status: "idle" | "loading" | "succeeded" | "failed";
@@ -51,7 +52,7 @@ export const fetchProduits = createAsyncThunk(
 
 export const addProduit = createAsyncThunk(
   "produits/addProduit",
-  async (produit: Omit<Produit, "_id">, { rejectWithValue }) => {
+  async (produit: Omit<ProduitModel, "_id">, { rejectWithValue }) => {
     try {
       const response = await apiClient.post("/produits", produit, {
         headers: getAuthHeaders(),
@@ -98,6 +99,23 @@ export const fetchProduitById = createAsyncThunk(
       return rejectWithValue("Erreur lors de la récupération du produit");
     }
   },
+);
+
+export const updateProduit = createAsyncThunk(
+  "produits/updateProduit",
+  async (produit: { _id: string; [key: string]: any }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.put(`/produits/${produit._id}`, produit, {
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Erreur lors de la mise à jour du produit");
+    }
+  }
 );
 
 const produitSlice = createSlice({

@@ -5,13 +5,17 @@ import { PrimeIcons } from "primereact/api";
 const Pointventes = dynamic(() => import("@/app/generals/point-vente/page"), {
   ssr: false,
 });
-const Profile = dynamic(() => import("@/app/generals/profile/page"), {
+
+const Operations = dynamic(() => import("@/app/generals/operations/page"), {
   ssr: false,
 });
+// const Profile = dynamic(() => import("@/app/generals/profile/page"), {
+//   ssr: false,
+// });
 const zone = dynamic(() => import("@/app/generals/zones/page"), { ssr: false });
-const produits = dynamic(() => import("@/app/generals/produits/page"), {
-  ssr: false,
-});
+// const produits = dynamic(() => import("@/app/generals/produits/page"), {
+//   ssr: false,
+// });
 
 // 📌 AdminPV
 const AdminPVDashboard = dynamic(
@@ -218,6 +222,12 @@ const superAdminRoutes = [
     title: "Produits",
     icon: PrimeIcons.TAG, // Représente une étiquette de prix
     component: zone,
+  },
+  {
+    path: "/generals/operations",
+    title: "Operations",
+    icon: PrimeIcons.SYNC,
+    component: Operations,
   },
   {
     path: "/superAdmin/Ventes",

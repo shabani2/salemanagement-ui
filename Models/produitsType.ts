@@ -12,19 +12,17 @@ export interface Categorie {
 export interface Produit {
   _id: string; // optionnel si l'objet est nouveau
   nom: string;
-  categorie: string | Categorie; // peut être une référence ou un objet peuplé
+  categorie: Categorie
   prix: number;
-  tva: number;
-  numeroSerie: string;
-  codeBar: string;
-  // image?: string; // décommenter si tu veux le rajouter plus tard
-  createdAt?: Date;
+  prixVente: number;
+  tva: number; 
   updatedAt?: Date;
 }
 export interface ProduitModel {
   nom: string;
   categorie: string | Categorie; // peut être une référence ou un objet peuplé
   prix: number;
+  prixVente : number,
   tva: number;
   createdAt?: Date;
   updatedAt?: Date;
