@@ -1,4 +1,4 @@
-import { Region } from "./regionTypes";
+import { Region } from './regionTypes';
 
 export interface PointVente {
   _id: string;

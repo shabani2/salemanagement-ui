@@ -1,21 +1,16 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  adminPVRoutes,
-  adminZoneRoutes,
-  superAdminRoutes,
-  vendeurRoutes,
-} from "@/lib/route";
-import { useSelector } from "react-redux";
-import { selectAuthUser } from "@/stores/slices/auth/authSlice";
-import { ClipLoader } from "react-spinners";
-import { RootState } from "@/stores/store";
-import { PrimeIcons } from "primereact/api";
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { X } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { adminPVRoutes, adminZoneRoutes, superAdminRoutes, vendeurRoutes } from '@/lib/route';
+import { useSelector } from 'react-redux';
+import { selectAuthUser } from '@/stores/slices/auth/authSlice';
+import { ClipLoader } from 'react-spinners';
+import { RootState } from '@/stores/store';
+import { PrimeIcons } from 'primereact/api';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -32,16 +27,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   useEffect(() => {
     if (authUser?.role) {
       switch (authUser.role.toLowerCase()) {
-        case "vendeur":
+        case 'vendeur':
           setMenuItems(vendeurRoutes);
           break;
-        case "adminpv":
+        case 'adminpv':
           setMenuItems(adminPVRoutes);
           break;
-        case "adminzone":
+        case 'adminzone':
           setMenuItems(adminZoneRoutes);
           break;
-        case "superadmin":
+        case 'superadmin':
           setMenuItems(superAdminRoutes);
           break;
         default:
@@ -59,7 +54,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <aside
       className={`fixed top-0 left-0 h-full w-64 bg-gray-900 text-green-500 text-white flex flex-col transition-transform ${
-        isOpen ? "translate-x-0" : "-translate-x-64"
+        isOpen ? 'translate-x-0' : '-translate-x-64'
       }`}
     >
       {/* Header */}
@@ -85,9 +80,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <button
                 onClick={() => handleNavigation(path)}
                 className={`flex cursor-pointer items-center px-4 py-2 rounded w-full text-left ${
-                  pathname === path
-                    ? "bg-green-900 text-gray-100"
-                    : "hover:bg-green-500"
+                  pathname === path ? 'bg-green-900 text-gray-100' : 'hover:bg-green-500'
                 }`}
               >
                 <i className={`pi mr-2 ${icon} text-lg`} />

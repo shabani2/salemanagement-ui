@@ -1,24 +1,20 @@
-"use client"; // Assurez-vous que ce fichier est bien un composant client
+'use client'; // Assurez-vous que ce fichier est bien un composant client
 // eslint-disable-next-line react-hooks/exhaustive-deps
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function ProtectedRoute({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    if (typeof window === "undefined") return; // Évite les erreurs côté serveur
+    if (typeof window === 'undefined') return; // Évite les erreurs côté serveur
 
-    const token = localStorage.getItem("token-agricap");
+    const token = localStorage.getItem('token-agricap');
 
     if (!token) {
       // console.log(loading)
-      router.replace("/login");
+      router.replace('/login');
     }
     // console.log("user token =", token);
   }, [router]); // Ajout de `router` dans les dépendances

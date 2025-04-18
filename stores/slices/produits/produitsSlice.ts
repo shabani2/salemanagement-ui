@@ -1,43 +1,40 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-"use client";
+'use client';
 
 import {
   createSlice,
   createAsyncThunk,
   createEntityAdapter,
   EntityAdapter,
-} from "@reduxjs/toolkit";
-import { RootState } from "../../store";
-import { apiClient } from "../../../lib/apiConfig";
-import { Produit, ProduitModel } from "@/Models/produitsType";
+} from '@reduxjs/toolkit';
+import { RootState } from '../../store';
+import { apiClient } from '../../../lib/apiConfig';
+import { Produit, ProduitModel } from '@/Models/produitsType';
 
 interface ProduitState {
-  status: "idle" | "loading" | "succeeded" | "failed";
+  status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 }
 
-const produitAdapter: EntityAdapter<Produit, string> = createEntityAdapter<
-  Produit,
-  string
->({
+const produitAdapter: EntityAdapter<Produit, string> = createEntityAdapter<Produit, string>({
   selectId: (produit) => produit._id,
 });
 
 const initialState = produitAdapter.getInitialState<ProduitState>({
-  status: "idle",
+  status: 'idle',
   error: null,
 });
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem("token-agricap");
+  const token = localStorage.getItem('token-agricap');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
 export const fetchProduits = createAsyncThunk(
-  "produits/fetchProduits",
+  'produits/fetchProduits',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get("/produits", {
+      const response = await apiClient.get('/produits', {
         headers: getAuthHeaders(),
       });
       return response.data;
@@ -45,16 +42,16 @@ export const fetchProduits = createAsyncThunk(
       if (error instanceof Error) {
         return rejectWithValue(error.message);
       }
-      return rejectWithValue("Erreur lors de la récupération des produits");
+      return rejectWithValue('Erreur lors de la récupération des produits');
     }
-  },
+  }
 );
 
 export const addProduit = createAsyncThunk(
-  "produits/addProduit",
-  async (produit: Omit<ProduitModel, "_id">, { rejectWithValue }) => {
+  'produits/addProduit',
+  async (produit: Omit<ProduitModel, '_id'>, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post("/produits", produit, {
+      const response = await apiClient.post('/produits', produit, {
         headers: getAuthHeaders(),
       });
       return response.data;
@@ -62,13 +59,13 @@ export const addProduit = createAsyncThunk(
       if (error instanceof Error) {
         return rejectWithValue(error.message);
       }
-      return rejectWithValue("Erreur lors de la création du produit");
+      return rejectWithValue('Erreur lors de la création du produit');
     }
-  },
+  }
 );
 
 export const deleteProduit = createAsyncThunk(
-  "produits/deleteProduit",
+  'produits/deleteProduit',
   async (produitId: string, { rejectWithValue }) => {
     try {
       await apiClient.delete(`/produits/${produitId}`, {
@@ -79,13 +76,13 @@ export const deleteProduit = createAsyncThunk(
       if (error instanceof Error) {
         return rejectWithValue(error.message);
       }
-      return rejectWithValue("Erreur lors de la suppression du produit");
+      return rejectWithValue('Erreur lors de la suppression du produit');
     }
-  },
+  }
 );
 
 export const fetchProduitById = createAsyncThunk(
-  "produits/fetchProduitById",
+  'produits/fetchProduitById',
   async (id: string, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(`/produit/${id}`, {
@@ -96,13 +93,13 @@ export const fetchProduitById = createAsyncThunk(
       if (error instanceof Error) {
         return rejectWithValue(error.message);
       }
-      return rejectWithValue("Erreur lors de la récupération du produit");
+      return rejectWithValue('Erreur lors de la récupération du produit');
     }
-  },
+  }
 );
 
 export const updateProduit = createAsyncThunk(
-  "produits/updateProduit",
+  'produits/updateProduit',
   async (produit: { _id: string; [key: string]: any }, { rejectWithValue }) => {
     try {
       const response = await apiClient.put(`/produits/${produit._id}`, produit, {
@@ -113,23 +110,23 @@ export const updateProduit = createAsyncThunk(
       if (error instanceof Error) {
         return rejectWithValue(error.message);
       }
-      return rejectWithValue("Erreur lors de la mise à jour du produit");
+      return rejectWithValue('Erreur lors de la mise à jour du produit');
     }
   }
 );
 
 const produitSlice = createSlice({
-  name: "produits",
+  name: 'produits',
   initialState,
   reducers: {},
   extraReducers: (builder) => {
     builder
       .addCase(fetchProduits.fulfilled, (state, action) => {
-        state.status = "succeeded";
+        state.status = 'succeeded';
         produitAdapter.setAll(state, action.payload);
       })
       .addCase(fetchProduits.rejected, (state, action) => {
-        state.status = "failed";
+        state.status = 'failed';
         state.error = action.payload as string;
       })
       .addCase(addProduit.fulfilled, (state, action) => {

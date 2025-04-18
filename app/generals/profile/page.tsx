@@ -1,35 +1,35 @@
-"use client";
-import React from "react";
-import { BreadCrumb } from "primereact/breadcrumb";
+'use client';
+import React from 'react';
+import { BreadCrumb } from 'primereact/breadcrumb';
 //import Image from "next/image";
-import { useState, useEffect, SetStateAction, useRef } from "react";
-import { Card } from "primereact/card";
-import { Button } from "primereact/button";
-import { Avatar } from "primereact/avatar";
-import { InputText } from "primereact/inputtext";
-import { Dropdown } from "primereact/dropdown";
-import { Dialog } from "primereact/dialog";
-import { fetchUsers, updateUser } from "@/stores/slices/users/userSlice";
-import { User, UserModel } from "@/Models/UserType";
-import { UserRoleModel } from "@/lib/utils";
-import { FileUpload } from "primereact/fileupload";
+import { useState, useEffect, SetStateAction, useRef } from 'react';
+import { Card } from 'primereact/card';
+import { Button } from 'primereact/button';
+import { Avatar } from 'primereact/avatar';
+import { InputText } from 'primereact/inputtext';
+import { Dropdown } from 'primereact/dropdown';
+import { Dialog } from 'primereact/dialog';
+import { fetchUsers, updateUser } from '@/stores/slices/users/userSlice';
+import { User, UserModel } from '@/Models/UserType';
+import { UserRoleModel } from '@/lib/utils';
+import { FileUpload } from 'primereact/fileupload';
 //import { Menu } from 'lucide-react';
-import { Toast } from "primereact/toast";
-import { useDispatch } from "react-redux";
-import { AppDispatch } from "@/stores/store";
-import { Menu } from "primereact/menu";
+import { Toast } from 'primereact/toast';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '@/stores/store';
+import { Menu } from 'primereact/menu';
 
 const page = () => {
   const menu = useRef(null);
   const menuItems = [
     {
-      label: "Modifier",
-      icon: "pi pi-pencil",
-      command: () => setDialogType("edit"),
+      label: 'Modifier',
+      icon: 'pi pi-pencil',
+      command: () => setDialogType('edit'),
     },
     {
-      label: "Supprimer",
-      icon: "pi pi-trash",
+      label: 'Supprimer',
+      icon: 'pi pi-trash',
     },
   ];
   const [loading, setLoading] = useState(false);
@@ -37,11 +37,9 @@ const page = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const dispatch = useDispatch<AppDispatch>();
   const user =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("user-agricap") || "{}")
-      : null;
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
 
-  console.log("hello user => ", user);
+  console.log('hello user => ', user);
   const handleUpdate = async () => {
     if (!selectedUser) return;
     setLoading(true);
@@ -60,16 +58,13 @@ const page = () => {
       setSelectedUser(user);
     }
   }, []);
-  console.log("selected user : ", selectedUser);
+  console.log('selected user : ', selectedUser);
   return (
     <div className="bg-gray-100 min-h-screen ">
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
-          model={[
-            { label: "Accueil", url: "/" },
-            { label: "Gestion du profil" },
-          ]}
-          home={{ icon: "pi pi-home", url: "/" }}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion du profil' }]}
+          home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
         <h2 className="text-2xl font-bold">Profil</h2>
@@ -79,7 +74,7 @@ const page = () => {
         <div className="relative bg-gradient-to-r from-indigo-500 to-purple-600 h-40 md:h-56 lg:h-72 flex justify-center items-center">
           <div className="absolute -bottom-20 md:-bottom-24 z-10">
             <img
-              src={`http://localhost:8000/${user.image.replace("../", "")}`}
+              src={`http://localhost:8000/${user.image.replace('../', '')}`}
               alt="Avatar"
               className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-xl object-cover"
             />
@@ -102,7 +97,7 @@ const page = () => {
               label="Modifier"
               icon="pi pi-pencil"
               className="p-button-rounded p-button-primary p-button-sm"
-              onClick={() => setDialogType("edit")}
+              onClick={() => setDialogType('edit')}
             />
             <Button
               label="Supprimer"
@@ -126,10 +121,10 @@ const page = () => {
       </Card>
       {/* dialog of update */}
       <Dialog
-        visible={dialogType === "edit"}
+        visible={dialogType === 'edit'}
         header="Modifier l’utilisateur"
         onHide={() => setDialogType(null)}
-        style={{ width: "50vw", height: "70vh" }}
+        style={{ width: '50vw', height: '70vh' }}
         modal
       >
         <div className="flex flex-col h-full">
@@ -138,23 +133,20 @@ const page = () => {
             {/* Nom et Prénom */}
             <div className="flex space-x-4">
               {[
-                { name: "nom", placeholder: "Nom" },
-                { name: "prenom", placeholder: "Prénom" },
+                { name: 'nom', placeholder: 'Nom' },
+                { name: 'prenom', placeholder: 'Prénom' },
               ].map(({ name, placeholder }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
                     type="text"
                     placeholder={placeholder}
-                    value={
-                      selectedUser &&
-                      (selectedUser[name as keyof UserModel] as string)
-                    }
+                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
                     onChange={(e) =>
                       setSelectedUser(
                         selectedUser && {
                           ...selectedUser,
                           [name]: e.target.value,
-                        },
+                        }
                       )
                     }
                     required
@@ -169,26 +161,23 @@ const page = () => {
             <div className="flex space-x-4">
               {[
                 {
-                  name: "telephone",
-                  placeholder: "Téléphone",
-                  icon: "pi-phone",
+                  name: 'telephone',
+                  placeholder: 'Téléphone',
+                  icon: 'pi-phone',
                 },
-                { name: "email", placeholder: "Email", icon: "pi-envelope" },
+                { name: 'email', placeholder: 'Email', icon: 'pi-envelope' },
               ].map(({ name, placeholder, icon }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
                     type="text"
                     placeholder={placeholder}
-                    value={
-                      selectedUser &&
-                      (selectedUser[name as keyof UserModel] as string)
-                    }
+                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
                     onChange={(e) =>
                       setSelectedUser(
                         selectedUser && {
                           ...selectedUser,
                           [name]: e.target.value,
-                        },
+                        }
                       )
                     }
                     required
@@ -212,7 +201,7 @@ const page = () => {
                     selectedUser && {
                       ...selectedUser,
                       adresse: e.target.value,
-                    },
+                    }
                   )
                 }
                 required
@@ -231,9 +220,7 @@ const page = () => {
                 }))}
                 placeholder="Sélectionner un rôle"
                 onChange={(e) =>
-                  setSelectedUser(
-                    selectedUser && { ...selectedUser, role: e.value },
-                  )
+                  setSelectedUser(selectedUser && { ...selectedUser, role: e.value })
                 }
                 className="w-full mb-3"
               />
@@ -249,9 +236,7 @@ const page = () => {
                 const file = e.files[0];
                 if (file) {
                   const fileUrl = URL.createObjectURL(file); // Génère une URL temporaire
-                  setSelectedUser(
-                    selectedUser && { ...selectedUser, image: fileUrl },
-                  );
+                  setSelectedUser(selectedUser && { ...selectedUser, image: fileUrl });
                 }
               }}
               className="w-full mt-2"

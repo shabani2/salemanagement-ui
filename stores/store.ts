@@ -1,13 +1,14 @@
 // lib/store/store.ts
-"use client";
+'use client';
 
-import { configureStore } from "@reduxjs/toolkit";
-import { authReducer } from "./slices/auth/authSlice";
-import { userReducer } from "./slices/users/userSlice";
-import { regionReducer } from "./slices/regions/regionSlice";
-import { pointVenteReducer } from "./slices/pointvente/pointventeSlice";
-import { produitReducer } from "./slices/produits/produitsSlice";
-import { categorieReducer } from "./slices/produits/categoriesSlice";
+import { configureStore } from '@reduxjs/toolkit';
+import { authReducer } from './slices/auth/authSlice';
+import { userReducer } from './slices/users/userSlice';
+import { regionReducer } from './slices/regions/regionSlice';
+import { pointVenteReducer } from './slices/pointvente/pointventeSlice';
+import { produitReducer } from './slices/produits/produitsSlice';
+import { categorieReducer } from './slices/produits/categoriesSlice';
+import { mouvementStockReducer } from './slices/mvtStock/mvtStock';
 
 export const store = configureStore({
   reducer: {
@@ -17,6 +18,7 @@ export const store = configureStore({
     pointVentes: pointVenteReducer,
     produits: produitReducer,
     categories: categorieReducer,
+    mouvementStock : mouvementStockReducer
   },
 });
 

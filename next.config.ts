@@ -6,8 +6,7 @@ const nextConfig = {
   webpack: (config: { resolve: { alias: any } }) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      "react-server-dom-webpack/server.edge":
-        "react-server-dom-webpack/server.node",
+      'react-server-dom-webpack/server.edge': 'react-server-dom-webpack/server.node',
     };
     return config;
   },

@@ -1,98 +1,86 @@
-"use client";
+'use client';
 
-import { useState, useEffect, SetStateAction, useRef } from "react";
-import { DataTable } from "primereact/datatable";
-import { Column } from "primereact/column";
-import { InputText } from "primereact/inputtext";
-import { Button } from "primereact/button";
-import { Dropdown } from "primereact/dropdown";
-import { Dialog } from "primereact/dialog";
-import { apiClient } from "@/lib/apiConfig";
-import { BreadCrumb } from "primereact/breadcrumb";
-import { useRouter } from "next/navigation";
-import { useDispatch, useSelector } from "react-redux";
-import { AppDispatch, RootState } from "@/stores/store";
+import { useState, useEffect, SetStateAction, useRef } from 'react';
+import { DataTable } from 'primereact/datatable';
+import { Column } from 'primereact/column';
+import { InputText } from 'primereact/inputtext';
+import { Button } from 'primereact/button';
+import { Dropdown } from 'primereact/dropdown';
+import { Dialog } from 'primereact/dialog';
+import { apiClient } from '@/lib/apiConfig';
+import { BreadCrumb } from 'primereact/breadcrumb';
+import { useRouter } from 'next/navigation';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '@/stores/store';
 import {
   addUser,
   deleteUser,
   fetchUsers,
   selectAllUsers,
   updateUser,
-} from "@/stores/slices/users/userSlice";
-import { User, UserModel } from "@/Models/UserType";
-import { Menu } from "primereact/menu";
-import { UserRoleModel } from "@/lib/utils";
-import { FileUpload } from "primereact/fileupload";
+} from '@/stores/slices/users/userSlice';
+import { User, UserModel } from '@/Models/UserType';
+import { Menu } from 'primereact/menu';
+import { UserRoleModel } from '@/lib/utils';
+import { FileUpload } from 'primereact/fileupload';
 //import { Menu } from 'lucide-react';
-import { Toast } from "primereact/toast";
-import { registerUser } from "@/stores/slices/auth/authSlice";
-import {
-  fetchPointVentes,
-  selectAllPointVentes,
-} from "@/stores/slices/pointvente/pointventeSlice";
-import {
-  fetchRegions,
-  selectAllRegions,
-} from "@/stores/slices/regions/regionSlice";
+import { Toast } from 'primereact/toast';
+import { registerUser } from '@/stores/slices/auth/authSlice';
+import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
+import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 
-const breadcrumbItems = [{ label: "SuperAdmin" }, { label: "Users" }];
+const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 
 const Page = () => {
   const toastRef = useRef<Toast>(null);
   const [users, setUsers] = useState<User[] | null[]>([]); //useSelector((state: RootState) => selectAllUsers(state));
   const [loading, setLoading] = useState(false);
   const [loadingCreate, setLoadingCreate] = useState(false);
-  const pointsVente = useSelector((state: RootState) =>
-    selectAllPointVentes(state),
-  );
+  const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
   const regions = useSelector((state: RootState) => selectAllRegions(state));
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [dialogType, setDialogType] = useState<string | null>(null);
   const [first, setFirst] = useState(0);
   const [rows, setRows] = useState(10);
   const [newUser, setNewUser] = useState<UserModel>({
-    nom: "",
-    prenom: "",
-    email: "",
-    telephone: "",
-    adresse: "",
-    password: "",
-    role: "",
-    region: "",
-    pointVente: "",
+    nom: '',
+    prenom: '',
+    email: '',
+    telephone: '',
+    adresse: '',
+    password: '',
+    role: '',
+    region: '',
+    pointVente: '',
     image: null,
   });
   const initialUserState = {
-    nom: "",
-    prenom: "",
-    telephone: "",
-    email: "",
-    adresse: "",
-    password: "",
-    role: "",
-    region: "",
-    pointVente: "",
+    nom: '',
+    prenom: '',
+    telephone: '',
+    email: '',
+    adresse: '',
+    password: '',
+    role: '',
+    region: '',
+    pointVente: '',
     image: null as File | null, // Permet de stocker un fichier
   };
 
-  const [errors, setErrors] = useState<{ [key in keyof UserModel]?: string }>(
-    {},
-  );
+  const [errors, setErrors] = useState<{ [key in keyof UserModel]?: string }>({});
   const [rowIndexes, setRowIndexes] = useState<{ [key: string]: number }>({});
 
   useEffect(() => {
-    console.log("Row Index Map Updated:", rowIndexes);
+    console.log('Row Index Map Updated:', rowIndexes);
   }, [rowIndexes]);
 
   const validate = () => {
     const newErrors: { [key in keyof User]?: string } = {};
-    ["nom", "prenom", "email", "telephone", "adresse", "password"].forEach(
-      (field) => {
-        if (!newUser[field as keyof UserModel])
-          newErrors[field as keyof UserModel] = "Ce champ est obligatoire";
-      },
-    );
+    ['nom', 'prenom', 'email', 'telephone', 'adresse', 'password'].forEach((field) => {
+      if (!newUser[field as keyof UserModel])
+        newErrors[field as keyof UserModel] = 'Ce champ est obligatoire';
+    });
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -110,10 +98,7 @@ const Page = () => {
     });
   }, [dispatch]);
 
-  const onPageChange = (event: {
-    first: SetStateAction<number>;
-    rows: SetStateAction<number>;
-  }) => {
+  const onPageChange = (event: { first: SetStateAction<number>; rows: SetStateAction<number> }) => {
     setFirst(event.first);
     setRows(event.rows);
   };
@@ -123,8 +108,8 @@ const Page = () => {
     setDialogType(action);
   };
 
-  const showRegionField = newUser.role === "AdminRegion";
-  const showPointVenteField = newUser.role === "AdminPointVente";
+  const showRegionField = newUser.role === 'AdminRegion';
+  const showPointVenteField = newUser.role === 'AdminPointVente';
 
   const actionBodyTemplate = (rowData: any) => {
     const menuRef = useRef<any>(null);
@@ -134,13 +119,13 @@ const Page = () => {
         <Menu
           model={[
             {
-              label: "Détails",
-              command: () => handleAction("details", rowData),
+              label: 'Détails',
+              command: () => handleAction('details', rowData),
             },
-            { label: "Modifier", command: () => handleAction("edit", rowData) },
+            { label: 'Modifier', command: () => handleAction('edit', rowData) },
             {
-              label: "Supprimer",
-              command: () => handleAction("delete", rowData),
+              label: 'Supprimer',
+              command: () => handleAction('delete', rowData),
             },
           ]}
           popup
@@ -180,9 +165,9 @@ const Page = () => {
       dispatch(updateUser(selectedUser)).then(() => {
         dispatch(fetchUsers()).then((resp) => {
           toastRef.current?.show({
-            severity: "success",
-            summary: "Succès",
-            detail: "Utilisateur ajouté avec succès !",
+            severity: 'success',
+            summary: 'Succès',
+            detail: 'Utilisateur ajouté avec succès !',
             life: 3000,
           });
           setUsers(resp.payload);
@@ -195,17 +180,12 @@ const Page = () => {
     setLoading(false);
   };
 
-  const home = { icon: "pi pi-home", url: "/" };
+  const home = { icon: 'pi pi-home', url: '/' };
   const handleCreate = async () => {
-    if (
-      !newUser.nom ||
-      !newUser.prenom ||
-      !newUser.email ||
-      !newUser.password
-    ) {
+    if (!newUser.nom || !newUser.prenom || !newUser.email || !newUser.password) {
       setErrors({
         ...errors,
-        global: "Veuillez remplir tous les champs requis.",
+        global: 'Veuillez remplir tous les champs requis.',
       });
       return;
     }
@@ -215,37 +195,37 @@ const Page = () => {
 
       const formData = new FormData();
       if (newUser?._id) {
-        formData.append("_id", newUser?._id.toString()); // Cast en string si nécessaire
+        formData.append('_id', newUser?._id.toString()); // Cast en string si nécessaire
       }
-      formData.append("nom", newUser.nom);
-      formData.append("prenom", newUser.prenom);
-      formData.append("telephone", newUser.telephone);
-      formData.append("email", newUser.email);
-      formData.append("adresse", newUser.adresse);
-      formData.append("password", newUser.password);
-      formData.append("role", newUser.role);
+      formData.append('nom', newUser.nom);
+      formData.append('prenom', newUser.prenom);
+      formData.append('telephone', newUser.telephone);
+      formData.append('email', newUser.email);
+      formData.append('adresse', newUser.adresse);
+      formData.append('password', newUser.password);
+      formData.append('role', newUser.role);
 
       if (newUser.region) {
-        formData.append("region", newUser.region);
+        formData.append('region', newUser.region);
       }
       if (newUser.pointVente) {
-        formData.append("pointVente", newUser.pointVente);
+        formData.append('pointVente', newUser.pointVente);
       }
       if (newUser.image instanceof File) {
-        formData.append("image", newUser.image);
+        formData.append('image', newUser.image);
       }
 
       await dispatch(registerUser(formData)).then(async (response) => {
         await dispatch(fetchUsers()).then((resp) => {
           toastRef.current?.show({
-            severity: "success",
-            summary: "Succès",
-            detail: "Utilisateur ajouté avec succès !",
+            severity: 'success',
+            summary: 'Succès',
+            detail: 'Utilisateur ajouté avec succès !',
             life: 3000,
           });
           setUsers(resp.payload);
         });
-        console.log("user created : ", response.payload);
+        console.log('user created : ', response.payload);
       });
 
       setDialogType(null);
@@ -254,8 +234,8 @@ const Page = () => {
       console.error("Erreur lors de la création de l'utilisateur :", error);
       if (error instanceof Error) {
         toastRef.current?.show({
-          severity: "error",
-          summary: "Erreur",
+          severity: 'error',
+          summary: 'Erreur',
           detail: error.message || "Échec de l'inscription",
           life: 1000,
         });
@@ -273,7 +253,7 @@ const Page = () => {
     dispatch(fetchRegions());
   }, [dispatch]);
 
-  console.log("users heres => ", users);
+  console.log('users heres => ', users);
 
   return (
     <div className="bg-gray-100 h-screen-min">
@@ -291,16 +271,8 @@ const Page = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
             <div className="ml-3 flex gap-2 w-2/5">
-              <Button
-                icon="pi pi-upload"
-                label="Upload"
-                className="p-button-primary text-[16px]"
-              />
-              <Button
-                icon="pi pi-download"
-                label="download"
-                className="p-button-success"
-              />
+              <Button icon="pi pi-upload" label="Upload" className="p-button-primary text-[16px]" />
+              <Button icon="pi pi-download" label="download" className="p-button-success" />
             </div>
             {/* <i className="pi pi-search absolute -3 top-1/2 transform -translate-y-1/2 text-gray-400"></i> */}
           </div>
@@ -308,16 +280,12 @@ const Page = () => {
           <Button
             label="Créer un utilisateur"
             className="bg-blue-500 text-white p-2 rounded"
-            onClick={() => setDialogType("create")}
+            onClick={() => setDialogType('create')}
           />
         </div>
         <div className=" p-1 rounded-lg shadow-md ">
           <DataTable
-            value={
-              Array.isArray(users)
-                ? users.filter((user): user is User => user !== null)
-                : []
-            }
+            value={Array.isArray(users) ? users.filter((user): user is User => user !== null) : []}
             dataKey="_id"
             paginator
             loading={loading}
@@ -326,80 +294,42 @@ const Page = () => {
             first={first}
             onPage={onPageChange}
             className="rounded-lg  custom-datatable"
-            tableStyle={{ minWidth: "50rem" }}
+            tableStyle={{ minWidth: '50rem' }}
             rowClassName={(data, options) => {
               const index = options?.props.rows; //rowIndexes[data._id]; // 🔹 Récupérer l'index de l'état
-              console.log("Row Index in rowClassName:", index);
+              console.log('Row Index in rowClassName:', index);
               return index && index % 2 === 0
-                ? "bg-gray-300 text-gray-900"
-                : "bg-green-700 text-white";
+                ? 'bg-gray-300 text-gray-900'
+                : 'bg-green-700 text-white';
             }}
           >
-            <Column
-              field="_id"
-              header="#"
-              body={(_data, options) => options.rowIndex + 1}
-            />
+            <Column field="_id" header="#" body={(_data, options) => options.rowIndex + 1} />
             <Column
               header="Avatar"
               body={(data) => (
                 <img
-                  src={`http://localhost:8000/${data.image.replace("../", "")}`}
+                  src={`http://localhost:8000/${data.image.replace('../', '')}`}
                   alt="Avatar"
                   className="w-10 h-10 rounded-full object-cover border border-gray-300"
                 />
               )}
             />
-            <Column
-              field="nom"
-              header="Nom"
-              sortable
-              filter
-              className="px-4 py-1"
-            />
-            <Column
-              field="prenom"
-              header="Prénom"
-              sortable
-              filter
-              className="px-4 py-1"
-            />
-            <Column
-              field="email"
-              header="Email"
-              sortable
-              filter
-              className="px-4 py-1"
-            />
-            <Column
-              field="telephone"
-              header="Téléphone"
-              sortable
-              filter
-              className="px-4 py-1"
-            />
-            <Column
-              field="role"
-              header="Rôle"
-              sortable
-              filter
-              className="px-4 py-1"
-            />
-            <Column
-              body={actionBodyTemplate}
-              header="Actions"
-              className="px-4 py-1"
-            />
+            <Column field="nom" header="Nom" sortable filter className="px-4 py-1" />
+            <Column field="prenom" header="Prénom" sortable filter className="px-4 py-1" />
+            <Column field="email" header="Email" sortable filter className="px-4 py-1" />
+            <Column field="telephone" header="Téléphone" sortable filter className="px-4 py-1" />
+            <Column field="role" header="Rôle" sortable filter className="px-4 py-1" />
+            <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
           </DataTable>
         </div>
       </div>
 
       {/* Dialogs of create */}
       <Dialog
-        visible={dialogType === "create"}
+        visible={dialogType === 'create'}
         header="Ajouter un utilisateur"
         onHide={() => setDialogType(null)}
-        style={{ width: "50vw", height: "70vh" }}
+        style={{ width: '50vw', height: '70vh' }}
         modal
       >
         <div className="flex flex-col h-full">
@@ -408,25 +338,21 @@ const Page = () => {
             {/* Nom et Prénom */}
             <div className="flex space-x-4">
               {[
-                { name: "nom", placeholder: "Nom" },
-                { name: "prenom", placeholder: "Prénom" },
+                { name: 'nom', placeholder: 'Nom' },
+                { name: 'prenom', placeholder: 'Prénom' },
               ].map(({ name, placeholder }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
                     type="text"
                     placeholder={placeholder}
                     value={newUser[name as keyof UserModel] as string}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, [name]: e.target.value })
-                    }
+                    onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
                     required
                     className="w-full pr-10"
                   />
                   <i className="pi pi-user absolute right-2 text-gray-500 text-lg flex items-center" />
                   {errors[name as keyof UserModel] && (
-                    <small className="text-red-500">
-                      {errors[name as keyof UserModel]}
-                    </small>
+                    <small className="text-red-500">{errors[name as keyof UserModel]}</small>
                   )}
                 </div>
               ))}
@@ -436,20 +362,18 @@ const Page = () => {
             <div className="flex space-x-4">
               {[
                 {
-                  name: "telephone",
-                  placeholder: "Téléphone",
-                  icon: "pi-phone",
+                  name: 'telephone',
+                  placeholder: 'Téléphone',
+                  icon: 'pi-phone',
                 },
-                { name: "email", placeholder: "Email", icon: "pi-envelope" },
+                { name: 'email', placeholder: 'Email', icon: 'pi-envelope' },
               ].map(({ name, placeholder, icon }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
                     type="text"
                     placeholder={placeholder}
                     value={newUser[name as keyof UserModel] as string}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, [name]: e.target.value })
-                    }
+                    onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
                     required
                     className="w-full pr-10"
                   />
@@ -457,9 +381,7 @@ const Page = () => {
                     className={`pi ${icon} absolute right-2 text-gray-500 text-lg flex items-center`}
                   />
                   {errors[name as keyof UserModel] && (
-                    <small className="text-red-500">
-                      {errors[name as keyof UserModel]}
-                    </small>
+                    <small className="text-red-500">{errors[name as keyof UserModel]}</small>
                   )}
                 </div>
               ))}
@@ -468,25 +390,23 @@ const Page = () => {
             {/* Adresse et Mot de passe */}
             {[
               {
-                name: "adresse",
-                placeholder: "Adresse",
-                icon: "pi-map-marker",
+                name: 'adresse',
+                placeholder: 'Adresse',
+                icon: 'pi-map-marker',
               },
               {
-                name: "password",
-                placeholder: "Mot de passe",
-                icon: "pi-key",
-                type: "password",
+                name: 'password',
+                placeholder: 'Mot de passe',
+                icon: 'pi-key',
+                type: 'password',
               },
             ].map(({ name, placeholder, icon, type }) => (
               <div key={name} className="relative flex items-center">
                 <InputText
-                  type={type || "text"}
+                  type={type || 'text'}
                   placeholder={placeholder}
                   value={newUser[name as keyof UserModel] as string}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, [name]: e.target.value })
-                  }
+                  onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
                   required
                   className="w-full pr-10"
                 />
@@ -494,9 +414,7 @@ const Page = () => {
                   className={`pi ${icon} absolute right-2 text-gray-500 text-lg flex items-center`}
                 />
                 {errors[name as keyof UserModel] && (
-                  <small className="text-red-500">
-                    {errors[name as keyof UserModel]}
-                  </small>
+                  <small className="text-red-500">{errors[name as keyof UserModel]}</small>
                 )}
               </div>
             ))}
@@ -528,9 +446,7 @@ const Page = () => {
                 <Dropdown
                   value={newUser.pointVente}
                   options={pointsVente}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, pointVente: e.value })
-                  }
+                  onChange={(e) => setNewUser({ ...newUser, pointVente: e.value })}
                   optionLabel="nom"
                   optionValue="_id"
                   placeholder="Sélectionnez un point de vente"
@@ -564,10 +480,10 @@ const Page = () => {
 
       {/* dialog of detail */}
       <Dialog
-        visible={dialogType === "details"}
+        visible={dialogType === 'details'}
         header="Détails de l’utilisateur"
         onHide={() => setDialogType(null)}
-        style={{ width: "50vw", height: "70vh" }}
+        style={{ width: '50vw', height: '70vh' }}
         modal
       >
         <div className="flex flex-col h-full">
@@ -576,23 +492,20 @@ const Page = () => {
             {/* Nom et Prénom */}
             <div className="flex space-x-4">
               {[
-                { name: "nom", placeholder: "Nom" },
-                { name: "prenom", placeholder: "Prénom" },
+                { name: 'nom', placeholder: 'Nom' },
+                { name: 'prenom', placeholder: 'Prénom' },
               ].map(({ name, placeholder }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
                     type="text"
                     placeholder={placeholder}
-                    value={
-                      selectedUser &&
-                      (selectedUser[name as keyof UserModel] as string)
-                    }
+                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
                     onChange={(e) =>
                       setSelectedUser(
                         selectedUser && {
                           ...selectedUser,
                           [name]: e.target.value,
-                        },
+                        }
                       )
                     }
                     required
@@ -607,26 +520,23 @@ const Page = () => {
             <div className="flex space-x-4">
               {[
                 {
-                  name: "telephone",
-                  placeholder: "Téléphone",
-                  icon: "pi-phone",
+                  name: 'telephone',
+                  placeholder: 'Téléphone',
+                  icon: 'pi-phone',
                 },
-                { name: "email", placeholder: "Email", icon: "pi-envelope" },
+                { name: 'email', placeholder: 'Email', icon: 'pi-envelope' },
               ].map(({ name, placeholder, icon }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
                     type="text"
                     placeholder={placeholder}
-                    value={
-                      selectedUser &&
-                      (selectedUser[name as keyof UserModel] as string)
-                    }
+                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
                     onChange={(e) =>
                       setSelectedUser(
                         selectedUser && {
                           ...selectedUser,
                           [name]: e.target.value,
-                        },
+                        }
                       )
                     }
                     required
@@ -650,7 +560,7 @@ const Page = () => {
                     selectedUser && {
                       ...selectedUser,
                       adresse: e.target.value,
-                    },
+                    }
                   )
                 }
                 required
@@ -669,9 +579,7 @@ const Page = () => {
                 }))}
                 placeholder="Sélectionner un rôle"
                 onChange={(e) =>
-                  setSelectedUser(
-                    selectedUser && { ...selectedUser, role: e.value },
-                  )
+                  setSelectedUser(selectedUser && { ...selectedUser, role: e.value })
                 }
                 className="w-full mb-3"
               />
@@ -687,9 +595,7 @@ const Page = () => {
                 const file = e.files[0];
                 if (file) {
                   const fileUrl = URL.createObjectURL(file); // Génère une URL temporaire
-                  setSelectedUser(
-                    selectedUser && { ...selectedUser, image: fileUrl },
-                  );
+                  setSelectedUser(selectedUser && { ...selectedUser, image: fileUrl });
                 }
               }}
               className="w-full mt-2"
@@ -710,10 +616,10 @@ const Page = () => {
 
       {/* dialog of Edit */}
       <Dialog
-        visible={dialogType === "edit"}
+        visible={dialogType === 'edit'}
         header="Modifier l’utilisateur"
         onHide={() => setDialogType(null)}
-        style={{ width: "50vw", height: "70vh" }}
+        style={{ width: '50vw', height: '70vh' }}
         modal
       >
         <div className="flex flex-col h-full">
@@ -722,23 +628,20 @@ const Page = () => {
             {/* Nom et Prénom */}
             <div className="flex space-x-4">
               {[
-                { name: "nom", placeholder: "Nom" },
-                { name: "prenom", placeholder: "Prénom" },
+                { name: 'nom', placeholder: 'Nom' },
+                { name: 'prenom', placeholder: 'Prénom' },
               ].map(({ name, placeholder }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
                     type="text"
                     placeholder={placeholder}
-                    value={
-                      selectedUser &&
-                      (selectedUser[name as keyof UserModel] as string)
-                    }
+                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
                     onChange={(e) =>
                       setSelectedUser(
                         selectedUser && {
                           ...selectedUser,
                           [name]: e.target.value,
-                        },
+                        }
                       )
                     }
                     required
@@ -753,26 +656,23 @@ const Page = () => {
             <div className="flex space-x-4">
               {[
                 {
-                  name: "telephone",
-                  placeholder: "Téléphone",
-                  icon: "pi-phone",
+                  name: 'telephone',
+                  placeholder: 'Téléphone',
+                  icon: 'pi-phone',
                 },
-                { name: "email", placeholder: "Email", icon: "pi-envelope" },
+                { name: 'email', placeholder: 'Email', icon: 'pi-envelope' },
               ].map(({ name, placeholder, icon }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
                     type="text"
                     placeholder={placeholder}
-                    value={
-                      selectedUser &&
-                      (selectedUser[name as keyof UserModel] as string)
-                    }
+                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
                     onChange={(e) =>
                       setSelectedUser(
                         selectedUser && {
                           ...selectedUser,
                           [name]: e.target.value,
-                        },
+                        }
                       )
                     }
                     required
@@ -796,7 +696,7 @@ const Page = () => {
                     selectedUser && {
                       ...selectedUser,
                       adresse: e.target.value,
-                    },
+                    }
                   )
                 }
                 required
@@ -815,9 +715,7 @@ const Page = () => {
                 }))}
                 placeholder="Sélectionner un rôle"
                 onChange={(e) =>
-                  setSelectedUser(
-                    selectedUser && { ...selectedUser, role: e.value },
-                  )
+                  setSelectedUser(selectedUser && { ...selectedUser, role: e.value })
                 }
                 className="w-full mb-3"
               />
@@ -833,9 +731,7 @@ const Page = () => {
                 const file = e.files[0];
                 if (file) {
                   const fileUrl = URL.createObjectURL(file); // Génère une URL temporaire
-                  setSelectedUser(
-                    selectedUser && { ...selectedUser, image: fileUrl },
-                  );
+                  setSelectedUser(selectedUser && { ...selectedUser, image: fileUrl });
                 }
               }}
               className="w-full mt-2"
@@ -855,7 +751,7 @@ const Page = () => {
       </Dialog>
       {/* dialog of deletion */}
       <Dialog
-        visible={dialogType === "delete"}
+        visible={dialogType === 'delete'}
         header="Confirmation de suppression"
         onHide={() => setDialogType(null)}
       >
