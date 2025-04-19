@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -10,21 +8,22 @@ import { Dropdown } from 'primereact/dropdown';
 import { Button } from 'primereact/button';
 import { Toast } from 'primereact/toast';
 import { classNames } from 'primereact/utils';
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
 import { fetchCategories, selectAllCategories } from '@/stores/slices/produits/categoriesSlice';
 import { Produit } from '@/Models/produitsType';
 import { fetchProduits } from '@/stores/slices/produits/produitsSlice';
-import { MouvementStock, MouvementStockModel } from '@/Models/mouvementStockType';
+import { MouvementStockModel } from '@/Models/mouvementStockType';
 import { createMouvementStock } from '@/stores/slices/mvtStock/mvtStock';
+import { PointVente } from '@/Models/pointVenteType';
+import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
 
 
 interface FormValues {
   type: string;
   depotCentral?: boolean;
-  pointVente?: string;
+  pointVente?: PointVente;
   produits: {
     categorie: string;
     produit: string;
@@ -45,18 +44,20 @@ const typeOptions = [
 const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
   const categories = useSelector((state: RootState) => selectAllCategories(state));
+  const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
   const [allProduits, setAllProduits] = useState<Produit[]>([]);
   const [produits, setProduits] = useState<Produit[]>([]);
 
   const [selectedType, setSelectedType] = useState<string>('');
-  const { data: session } = useSession();
   const router = useRouter();
   const toast = React.useRef<Toast>(null);
+
+  const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
 
   const defaultValues: FormValues = {
     type: '',
     depotCentral: false,
-    pointVente: '',
+    pointVente: undefined,
     produits: [{ categorie: '', produit: '', quantite: 0 }],
     remise: 0,
     rabais: 0,
@@ -70,7 +71,11 @@ const Page = () => {
     watch,
     setValue,
     reset,
-  } = useForm<FormValues>({ defaultValues });
+   
+  } = useForm<FormValues>({
+    defaultValues,
+    mode: 'onChange',
+  });
 
   const { fields, append, remove } = useFieldArray({ control, name: 'produits' });
 
@@ -80,10 +85,11 @@ const Page = () => {
       setAllProduits(resp.payload);
       setProduits(resp.payload);
     });
+    dispatch(fetchPointVentes());
+  
   }, [dispatch]);
 
   const onSubmit = async (data: FormValues) => {
-    console.log('hello => ')
     const mouvements: MouvementStockModel[] = data.produits.map((item) => {
       const produitObj = allProduits.find((p) => p._id === item.produit);
       if (!produitObj) throw new Error('Produit introuvable');
@@ -98,16 +104,14 @@ const Page = () => {
         montant: prix * item.quantite,
         type: data.type,
         depotCentral: data.depotCentral ?? false,
-        pointVente: data.pointVente ? { _id: data.pointVente } : undefined,
+        pointVente: data.pointVente,
         statut: 'En Attente',
       };
     });
 
     try {
-      await Promise.all(mouvements.map((mouvement) =>
-        dispatch(createMouvementStock(mouvement))
-      ));
-
+      console.log('⏳ Form data:', data);
+      console.log('mouvements=> ', mouvements);
       toast.current?.show({
         severity: 'success',
         summary: 'Succès',
@@ -115,15 +119,20 @@ const Page = () => {
         life: 3000,
       });
       reset(defaultValues);
-    } catch (error) {
+    } catch (err) {
+      console.error('❌ Erreur submit:', err);
       toast.current?.show({
         severity: 'error',
         summary: 'Erreur',
-        detail: 'Une erreur est survenue lors de l\'enregistrement',
+        detail: "Une erreur est survenue lors de l'enregistrement",
         life: 4000,
       });
     }
   };
+
+  useEffect(() => {
+    console.log('🔥 Form errors:', errors);
+  }, [errors]);
 
   const totalMontant = watch('produits').reduce((acc, item) => {
     const produit = allProduits.find((p) => p._id === item.produit);
@@ -153,10 +162,10 @@ const Page = () => {
                   options={typeOptions}
                   onChange={(e) => {
                     setSelectedType(e.value);
-                    reset({ ...defaultValues, type: e.value });
+                    setValue('type', e.value, { shouldValidate: true });
                   }}
                   placeholder="Sélectionner un type"
-                  className={classNames({ 'p-invalid': errors.type })}
+                  className={classNames({ 'p-invalid': !!errors.type })}
                   style={{ width: '100%' }}
                 />
                 {errors.type && <small className="text-red-500">Champ requis</small>}
@@ -174,7 +183,14 @@ const Page = () => {
             {watch('type') !== 'Entrée' && (
               <div>
                 <label>Point de vente</label>
-                <InputText {...register('pointVente', { required: true })} className="w-full" />
+                <Dropdown
+                  value={watch('pointVente')}
+                  options={pointsVente}
+                  optionLabel="nom"
+                  onChange={(e) => setValue('pointVente', e.value)}
+                  placeholder="Sélectionner un point de vente"
+                  className="w-full"
+                />
                 {errors.pointVente && <small className="text-red-500">Champ requis</small>}
               </div>
             )}
@@ -228,7 +244,7 @@ const Page = () => {
             />
           </form>
         </div>
-{/* zone de recap */}
+
         <div className="bg-white p-4 rounded-lg shadow-md space-y-4">
           <h3 className="text-lg font-semibold">Récapitulatif</h3>
 
@@ -248,27 +264,31 @@ const Page = () => {
           <div>
             <h4 className="font-medium">Détails par produit</h4>
             <ul className="space-y-2">
-          {watch('produits').map((item, idx) => {
-            const produit = allProduits.find((p) => p._id === item.produit);
-            const type = watch('type');
-            const prix = produit ? (['Livraison', 'Entrée'].includes(type) ? produit.prix : produit.prixVente) : 0;
-            if (!produit) return null;
-            return (
-              <li key={idx} className="flex justify-between">
-                <span>{produit.nom}</span>
-                <span>
-                  {item.quantite} x {prix} = {item.quantite * prix} FC
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+              {watch('produits').map((item, idx) => {
+                const produit = allProduits.find((p) => p._id === item.produit);
+                const type = watch('type');
+                const prix = produit
+                  ? ['Livraison', 'Entrée'].includes(type)
+                    ? produit.prix
+                    : produit.prixVente
+                  : 0;
+                if (!produit) return null;
+                return (
+                  <li key={idx} className="flex justify-between">
+                    <span>{produit.nom}</span>
+                    <span>
+                      {item.quantite} x {prix} = {item.quantite * prix} FC
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
 
           <div className="font-bold text-right">Montant total : {totalMontant} FC</div>
 
           <div className="text-sm text-gray-600">
-            Opérateur : {session?.user?.name || 'Utilisateur inconnu'}
+            Opérateur : {user?.name || 'Utilisateur inconnu'}
           </div>
 
           <Button label="Valider l'opération" icon="pi pi-check" onClick={handleSubmit(onSubmit)} />

@@ -9,7 +9,7 @@ import {
 import { Menu } from 'lucide-react';
 import Image from 'next/image';
 import avatar1 from '@/assets/images/globals/avatar1.jpg';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { AppDispatch } from '@/stores/store';
 import { logoutUser } from '@/stores/slices/auth/authSlice';
 import { useRouter } from 'next/navigation';

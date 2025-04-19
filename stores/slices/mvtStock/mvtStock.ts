@@ -16,7 +16,10 @@ interface MouvementStockState {
   error: string | null;
 }
 
-const mouvementStockAdapter: EntityAdapter<MouvementStock, string> = createEntityAdapter<MouvementStock, string>({
+const mouvementStockAdapter: EntityAdapter<MouvementStock, string> = createEntityAdapter<
+  MouvementStock,
+  string
+>({
   selectId: (mouvement) => mouvement._id,
 });
 

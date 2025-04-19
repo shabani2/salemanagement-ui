@@ -18,7 +18,7 @@ export const store = configureStore({
     pointVentes: pointVenteReducer,
     produits: produitReducer,
     categories: categorieReducer,
-    mouvementStock : mouvementStockReducer
+    mouvementStock: mouvementStockReducer,
   },
 });
 
