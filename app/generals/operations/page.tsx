@@ -18,7 +18,7 @@ import { MouvementStockModel } from '@/Models/mouvementStockType';
 import { createMouvementStock } from '@/stores/slices/mvtStock/mvtStock';
 import { PointVente } from '@/Models/pointVenteType';
 import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
-
+import { Controller } from 'react-hook-form';
 
 interface FormValues {
   type: string;
@@ -52,7 +52,8 @@ const Page = () => {
   const router = useRouter();
   const toast = React.useRef<Toast>(null);
 
-  const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
 
   const defaultValues: FormValues = {
     type: '',
@@ -71,7 +72,6 @@ const Page = () => {
     watch,
     setValue,
     reset,
-   
   } = useForm<FormValues>({
     defaultValues,
     mode: 'onChange',
@@ -86,49 +86,48 @@ const Page = () => {
       setProduits(resp.payload);
     });
     dispatch(fetchPointVentes());
-  
   }, [dispatch]);
 
-  const onSubmit = async (data: FormValues) => {
-    const mouvements: MouvementStockModel[] = data.produits.map((item) => {
-      const produitObj = allProduits.find((p) => p._id === item.produit);
-      if (!produitObj) throw new Error('Produit introuvable');
+  // const onSubmit = async (data: FormValues) => {
+  //   const mouvements: MouvementStockModel[] = data.produits.map((item) => {
+  //     const produitObj = allProduits.find((p) => p._id === item.produit);
+  //     if (!produitObj) throw new Error('Produit introuvable');
 
-      const prix = ['Entrée', 'Livraison'].includes(data.type)
-        ? produitObj.prix
-        : produitObj.prixVente;
+  //     const prix = ['Entrée', 'Livraison'].includes(data.type)
+  //       ? produitObj.prix
+  //       : produitObj.prixVente;
 
-      return {
-        produit: produitObj,
-        quantite: item.quantite,
-        montant: prix * item.quantite,
-        type: data.type,
-        depotCentral: data.depotCentral ?? false,
-        pointVente: data.pointVente,
-        statut: 'En Attente',
-      };
-    });
+  //     return {
+  //       produit: produitObj,
+  //       quantite: item.quantite,
+  //       montant: prix * item.quantite,
+  //       type: data.type,
+  //       depotCentral: data.depotCentral ?? false,
+  //       pointVente: data.pointVente,
+  //       statut: 'En Attente',
+  //     };
+  //   });
 
-    try {
-      console.log('⏳ Form data:', data);
-      console.log('mouvements=> ', mouvements);
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Succès',
-        detail: 'Mouvements enregistrés avec succès',
-        life: 3000,
-      });
-      reset(defaultValues);
-    } catch (err) {
-      console.error('❌ Erreur submit:', err);
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Erreur',
-        detail: "Une erreur est survenue lors de l'enregistrement",
-        life: 4000,
-      });
-    }
-  };
+  //   try {
+  //     console.log('⏳ Form data:', data);
+  //     console.log('mouvements=> ', mouvements);
+  //     toast.current?.show({
+  //       severity: 'success',
+  //       summary: 'Succès',
+  //       detail: 'Mouvements enregistrés avec succès',
+  //       life: 3000,
+  //     });
+  //     reset(defaultValues);
+  //   } catch (err) {
+  //     console.error('❌ Erreur submit:', err);
+  //     toast.current?.show({
+  //       severity: 'error',
+  //       summary: 'Erreur',
+  //       detail: "Une erreur est survenue lors de l'enregistrement",
+  //       life: 4000,
+  //     });
+  //   }
+  // };
 
   useEffect(() => {
     console.log('🔥 Form errors:', errors);
@@ -138,6 +137,81 @@ const Page = () => {
     const produit = allProduits.find((p) => p._id === item.produit);
     return acc + (produit ? produit.prix * item.quantite : 0);
   }, 0);
+
+  // code source de la fonction onsubmit
+  const onSubmit = async (data: FormValues) => {
+    try {
+      const mouvements = data.produits.map((item) => {
+        const produitObj = allProduits.find((p) => p._id === item.produit);
+        if (!produitObj) throw new Error('Produit introuvable');
+  
+        const prix = ['Entrée', 'Livraison'].includes(data.type)
+          ? produitObj.prix
+          : produitObj.prixVente;
+  
+        return {
+          produit: produitObj._id,
+          produitNom: produitObj.nom,
+          quantite: item.quantite,
+          montant: prix * item.quantite,
+          type: data.type,
+          depotCentral: data.depotCentral ?? false,
+          pointVente: data.pointVente,
+          statut: 'En Attente',
+        };
+      });
+  
+      const results = await Promise.allSettled(
+        mouvements.map((m) =>
+          dispatch(
+            createMouvementStock({
+              produit: m.produit,
+              quantite: m.quantite,
+              montant: m.montant,
+              type: m.type,
+              depotCentral: m.depotCentral,
+              pointVente: m.pointVente,
+              statut: m.statut,
+            })
+          )
+        )
+      );
+  
+      results.forEach((res, i) => {
+        if (res.status === 'rejected') {
+          const produitNom = mouvements[i].produitNom;
+          toast.current?.show({
+            severity: 'error',
+            summary: `Erreur: ${produitNom}`,
+            detail: res.reason || 'Échec de l’enregistrement',
+            life: 5000,
+          });
+        }
+      });
+  
+      const allOk = results.every((res) => res.status === 'fulfilled');
+      console.log('resultat : ',results)
+  
+      if (allOk) {
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Succès',
+          detail: 'Tous les mouvements ont été enregistrés',
+          life: 3000,
+        });
+        reset(defaultValues);
+      }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (err) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur critique',
+        detail: "Une erreur globale est survenue",
+        life: 4000,
+      });
+    }
+  };
+  
 
   return (
     <div className="bg-gray-100 min-h-screen p-4">
@@ -155,28 +229,43 @@ const Page = () => {
         <div className="bg-white p-4 rounded-lg shadow-md">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="w-full flex items-center gap-2">
-              <label className="whitespace-nowrap">Type d’opération :</label>
-              <div className="flex-1">
-                <Dropdown
-                  value={watch('type')}
-                  options={typeOptions}
-                  onChange={(e) => {
-                    setSelectedType(e.value);
-                    setValue('type', e.value, { shouldValidate: true });
-                  }}
-                  placeholder="Sélectionner un type"
-                  className={classNames({ 'p-invalid': !!errors.type })}
-                  style={{ width: '100%' }}
-                />
-                {errors.type && <small className="text-red-500">Champ requis</small>}
-              </div>
+              <Controller
+                name="type"
+                control={control}
+                rules={{ required: 'Type est requis' }}
+                render={({ field }) => (
+                  <Dropdown
+                    {...field}
+                    options={typeOptions}
+                    onChange={(e) => {
+                      field.onChange(e.value);
+                      setSelectedType(e.value);
+                    }}
+                    placeholder="Sélectionner un type"
+                    className={classNames('w-full', { 'p-invalid': !!errors.type })}
+                  />
+                )}
+              />
+              {errors.type && <small className="text-red-500">{errors.type.message}</small>}
             </div>
 
             {watch('type') === 'Entrée' && (
               <div>
                 <label>
-                  <input type="checkbox" {...register('depotCentral')} /> Dépôt central
+                  <input
+                    type="checkbox"
+                    {...register('depotCentral', {
+                      validate: (value) =>
+                        watch('type') !== 'Entrée' ||
+                        value === true ||
+                        'Vous devez cocher "Dépôt central"',
+                    })}
+                  />{' '}
+                  Dépôt central
                 </label>
+                {errors.depotCentral && (
+                  <small className="text-red-500">{errors.depotCentral.message}</small>
+                )}
               </div>
             )}
 

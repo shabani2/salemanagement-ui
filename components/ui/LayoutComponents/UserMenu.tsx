@@ -1,6 +1,11 @@
 'use client';
 
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import Image from 'next/image';
 import avatar1 from '@/assets/images/globals/avatar1.jpg';
 import { useEffect, useState } from 'react';
@@ -33,7 +38,13 @@ export default function UserMenuClient() {
     <DropdownMenu>
       <DropdownMenuTrigger className="outline-none flex flex-row">
         <h3 className="mr-2">{`${user?.nom ?? ''} ${user?.prenom ?? ''}`}</h3>
-        <Image src={avatar1} width={32} height={32} className="rounded-full cursor-pointer" alt="User" />
+        <Image
+          src={avatar1}
+          width={32}
+          height={32}
+          className="rounded-full cursor-pointer"
+          alt="User"
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => router.push('/generals/profile')}>Profil</DropdownMenuItem>
