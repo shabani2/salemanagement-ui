@@ -9,9 +9,10 @@ const Pointventes = dynamic(() => import('@/app/generals/point-vente/page'), {
 const Operations = dynamic(() => import('@/app/generals/operations/page'), {
   ssr: false,
 });
-// const Profile = dynamic(() => import("@/app/generals/profile/page"), {
-//   ssr: false,
-// });
+const Rapport = dynamic(() => import('@/app/generals/rapports/page'), {
+  ssr: false,
+});
+
 const zone = dynamic(() => import('@/app/generals/zones/page'), { ssr: false });
 // const produits = dynamic(() => import("@/app/generals/produits/page"), {
 //   ssr: false,
@@ -39,7 +40,7 @@ const AdminZoneAdminsPV = dynamic(() => import('@/app/Admin_zone/AdminPvs/page')
 const AdminZoneVentes = dynamic(() => import('@/app/Admin_zone/ventes/page'), {
   ssr: false,
 });
-const AdminZoneStock = dynamic(() => import('@/app/Admin_zone/stock/page'), {
+const AdminZoneStock = dynamic(() => import('@/app/generals/stock/page'), {
   ssr: false,
 });
 const AdminZoneCommandes = dynamic(() => import('@/app/Admin_zone/commandes/page'), { ssr: false });
@@ -52,7 +53,7 @@ const SuperAdminDashboard = dynamic(() => import('@/app/superAdmin/Dashboard/pag
 const SuperAdminVentes = dynamic(() => import('@/app/superAdmin/Ventes/page'), {
   ssr: false,
 });
-const SuperAdminStock = dynamic(() => import('@/app/superAdmin/Stock/page'), {
+const SuperAdminStock = dynamic(() => import('@/app/generals/stock/page'), {
   ssr: false,
 });
 const SuperAdminUsers = dynamic(() => import('@/app/superAdmin/Users/page'), {
@@ -209,13 +210,13 @@ const superAdminRoutes = [
     component: Operations,
   },
   {
-    path: '/superAdmin/Ventes',
-    title: 'Ventes',
-    icon: PrimeIcons.MONEY_BILL,
-    component: SuperAdminVentes,
+    path: '/generals/rapports',
+    title: 'rapports',
+    icon: PrimeIcons.FILE,
+    component: Rapport,
   },
   {
-    path: '/superAdmin/Stock',
+    path: '/generals/stock',
     title: 'Stock',
     icon: PrimeIcons.BOX,
     component: SuperAdminStock,

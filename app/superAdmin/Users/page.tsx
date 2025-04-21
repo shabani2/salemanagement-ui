@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState, useEffect, SetStateAction, useRef } from 'react';
@@ -7,18 +8,10 @@ import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
 import { Dropdown } from 'primereact/dropdown';
 import { Dialog } from 'primereact/dialog';
-import { apiClient } from '@/lib/apiConfig';
 import { BreadCrumb } from 'primereact/breadcrumb';
-import { useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
-import {
-  addUser,
-  deleteUser,
-  fetchUsers,
-  selectAllUsers,
-  updateUser,
-} from '@/stores/slices/users/userSlice';
+import { deleteUser, fetchUsers, updateUser } from '@/stores/slices/users/userSlice';
 import { User, UserModel } from '@/Models/UserType';
 import { Menu } from 'primereact/menu';
 import { UserRoleModel } from '@/lib/utils';
@@ -89,7 +82,6 @@ const Page = () => {
   //   if (validate()) handleCreateUser();
   // };
 
-  const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
 
   useEffect(() => {

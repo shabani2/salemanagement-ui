@@ -13,6 +13,7 @@ export interface MouvementStock {
 }
 
 export interface MouvementStockModel {
+  _id: string;
   pointVente?: PointVente;
   depotCentral: boolean;
   produit: Produit;

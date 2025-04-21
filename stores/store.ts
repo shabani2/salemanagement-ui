@@ -9,6 +9,7 @@ import { pointVenteReducer } from './slices/pointvente/pointventeSlice';
 import { produitReducer } from './slices/produits/produitsSlice';
 import { categorieReducer } from './slices/produits/categoriesSlice';
 import { mouvementStockReducer } from './slices/mvtStock/mvtStock';
+import { stockReducer } from './slices/stock/stockSlice';
 
 export const store = configureStore({
   reducer: {
@@ -19,6 +20,7 @@ export const store = configureStore({
     produits: produitReducer,
     categories: categorieReducer,
     mouvementStock: mouvementStockReducer,
+    stocks: stockReducer,
   },
 });
 

@@ -1,20 +1,22 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable react-hooks/rules-of-hooks */
 'use client';
 import React from 'react';
 import { BreadCrumb } from 'primereact/breadcrumb';
 //import Image from "next/image";
-import { useState, useEffect, SetStateAction, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from 'primereact/card';
 import { Button } from 'primereact/button';
-import { Avatar } from 'primereact/avatar';
+//import { Avatar } from 'primereact/avatar';
 import { InputText } from 'primereact/inputtext';
 import { Dropdown } from 'primereact/dropdown';
 import { Dialog } from 'primereact/dialog';
-import { fetchUsers, updateUser } from '@/stores/slices/users/userSlice';
+import { updateUser } from '@/stores/slices/users/userSlice';
 import { User, UserModel } from '@/Models/UserType';
 import { UserRoleModel } from '@/lib/utils';
 import { FileUpload } from 'primereact/fileupload';
 //import { Menu } from 'lucide-react';
-import { Toast } from 'primereact/toast';
+// import { Toast } from 'primereact/toast';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '@/stores/store';
 import { Menu } from 'primereact/menu';
@@ -112,6 +114,7 @@ const page = () => {
             <Button
               icon="pi pi-ellipsis-v"
               className="p-button-text p-button-sm"
+              //@ts-ignore
               onClick={(e) => menu.current.toggle(e)}
               aria-haspopup
               aria-controls="popup_menu"

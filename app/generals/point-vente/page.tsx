@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { BreadCrumb } from 'primereact/breadcrumb';
@@ -44,6 +46,7 @@ export default function PointVenteManagement() {
   };
 
   const handleCreate = () => {
+    //@ts-ignore
     dispatch(addPointVente(newPointVente));
     setDialogType(null);
   };

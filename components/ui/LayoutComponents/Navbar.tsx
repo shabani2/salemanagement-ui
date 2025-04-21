@@ -13,6 +13,8 @@ import { useDispatch } from 'react-redux';
 import { AppDispatch } from '@/stores/store';
 import { logoutUser } from '@/stores/slices/auth/authSlice';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { User } from '../../../Models/UserType';
 
 interface NavbarProps {
   onMenuClick: () => void;
@@ -22,14 +24,31 @@ interface NavbarProps {
 export function Navbar({ onMenuClick, isOpen }: NavbarProps) {
   const dispatch = useDispatch<AppDispatch>();
   const router = useRouter();
-  // const user = localStorage.getItem('user-agricap');
-  const user =
-    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
+  const [user, setUser] = useState<User>(null);
+
   const handleLogout = () => {
     dispatch(logoutUser()).then(() => {
       router.push('/login');
     });
   };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('user-agricap');
+      console.log('localStorage[user-agricap] =', storedUser);
+
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser);
+          console.log('parsed user:', parsed);
+          setUser(parsed);
+        } catch (e) {
+          console.error('Erreur de parsing localStorage:', e);
+        }
+      }
+    }
+  }, []);
+
   return (
     <nav
       className={`fixed top-0 bg-white shadow flex justify-between items-center p-4 z-50 transition-all duration-300`}

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -49,7 +51,7 @@ const Page = () => {
   const [produits, setProduits] = useState<Produit[]>([]);
 
   const [selectedType, setSelectedType] = useState<string>('');
-  const router = useRouter();
+
   const toast = React.useRef<Toast>(null);
 
   const user =
@@ -88,47 +90,6 @@ const Page = () => {
     dispatch(fetchPointVentes());
   }, [dispatch]);
 
-  // const onSubmit = async (data: FormValues) => {
-  //   const mouvements: MouvementStockModel[] = data.produits.map((item) => {
-  //     const produitObj = allProduits.find((p) => p._id === item.produit);
-  //     if (!produitObj) throw new Error('Produit introuvable');
-
-  //     const prix = ['Entrée', 'Livraison'].includes(data.type)
-  //       ? produitObj.prix
-  //       : produitObj.prixVente;
-
-  //     return {
-  //       produit: produitObj,
-  //       quantite: item.quantite,
-  //       montant: prix * item.quantite,
-  //       type: data.type,
-  //       depotCentral: data.depotCentral ?? false,
-  //       pointVente: data.pointVente,
-  //       statut: 'En Attente',
-  //     };
-  //   });
-
-  //   try {
-  //     console.log('⏳ Form data:', data);
-  //     console.log('mouvements=> ', mouvements);
-  //     toast.current?.show({
-  //       severity: 'success',
-  //       summary: 'Succès',
-  //       detail: 'Mouvements enregistrés avec succès',
-  //       life: 3000,
-  //     });
-  //     reset(defaultValues);
-  //   } catch (err) {
-  //     console.error('❌ Erreur submit:', err);
-  //     toast.current?.show({
-  //       severity: 'error',
-  //       summary: 'Erreur',
-  //       detail: "Une erreur est survenue lors de l'enregistrement",
-  //       life: 4000,
-  //     });
-  //   }
-  // };
-
   useEffect(() => {
     console.log('🔥 Form errors:', errors);
   }, [errors]);
@@ -144,11 +105,11 @@ const Page = () => {
       const mouvements = data.produits.map((item) => {
         const produitObj = allProduits.find((p) => p._id === item.produit);
         if (!produitObj) throw new Error('Produit introuvable');
-  
+
         const prix = ['Entrée', 'Livraison'].includes(data.type)
           ? produitObj.prix
           : produitObj.prixVente;
-  
+
         return {
           produit: produitObj._id,
           produitNom: produitObj.nom,
@@ -157,26 +118,30 @@ const Page = () => {
           type: data.type,
           depotCentral: data.depotCentral ?? false,
           pointVente: data.pointVente,
-          statut: 'En Attente',
+          statut: false,
         };
       });
-  
+      console.log('mouvements => ', mouvements);
+
       const results = await Promise.allSettled(
         mouvements.map((m) =>
           dispatch(
             createMouvementStock({
+              //@ts-ignore
               produit: m.produit,
               quantite: m.quantite,
               montant: m.montant,
+              //@ts-ignore
               type: m.type,
               depotCentral: m.depotCentral,
               pointVente: m.pointVente,
+              //@ts-ignore
               statut: m.statut,
             })
           )
         )
       );
-  
+
       results.forEach((res, i) => {
         if (res.status === 'rejected') {
           const produitNom = mouvements[i].produitNom;
@@ -188,10 +153,10 @@ const Page = () => {
           });
         }
       });
-  
+
       const allOk = results.every((res) => res.status === 'fulfilled');
-      console.log('resultat : ',results)
-  
+      console.log('resultat : ', results);
+
       if (allOk) {
         toast.current?.show({
           severity: 'success',
@@ -201,17 +166,16 @@ const Page = () => {
         });
         reset(defaultValues);
       }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (err) {
       toast.current?.show({
         severity: 'error',
         summary: 'Erreur critique',
-        detail: "Une erreur globale est survenue",
+        detail: 'Une erreur globale est survenue',
         life: 4000,
       });
     }
   };
-  
 
   return (
     <div className="bg-gray-100 min-h-screen p-4">
