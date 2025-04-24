@@ -109,9 +109,9 @@ export default function PointVenteManagement() {
               onChange={(e) => setSearch(e.target.value)}
             />
             <div className="ml-3 flex gap-2 w-2/5">
-              <Button label="upload" icon="pi pi-upload" className="p-button-primary text-[16px]" />
+              <Button label="import" icon="pi pi-upload" className="p-button-primary text-[16px]" />
               <Button
-                label="download"
+                label="export"
                 icon="pi pi-download"
                 className="p-button-success text-[16px]"
               />

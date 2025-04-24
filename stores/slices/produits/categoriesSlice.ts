@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import {
@@ -80,6 +81,23 @@ export const deleteCategorie = createAsyncThunk(
   }
 );
 
+export const updateCategorie = createAsyncThunk(
+  'categories/updateCategorie',
+  async ({ id, data }: { id: string; data: any }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.put(`/categories/${id}`, data, {
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la mise à jour de la catégorie');
+    }
+  }
+);
+
 const categorieSlice = createSlice({
   name: 'categories',
   initialState,
@@ -99,6 +117,12 @@ const categorieSlice = createSlice({
       })
       .addCase(deleteCategorie.fulfilled, (state, action) => {
         categorieAdapter.removeOne(state, action.payload);
+      })
+      .addCase(updateCategorie.fulfilled, (state, action) => {
+        categorieAdapter.updateOne(state, {
+          id: action.payload._id,
+          changes: action.payload,
+        });
       });
   },
 });

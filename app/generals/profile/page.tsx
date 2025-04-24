@@ -101,11 +101,6 @@ const page = () => {
               className="p-button-rounded p-button-primary p-button-sm"
               onClick={() => setDialogType('edit')}
             />
-            <Button
-              label="Supprimer"
-              icon="pi pi-trash"
-              className="p-button-rounded p-button-danger p-button-sm"
-            />
           </div>
 
           {/* Mobile menu */}

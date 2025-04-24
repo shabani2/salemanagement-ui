@@ -17,7 +17,7 @@ interface ProduitState {
 }
 
 const produitAdapter: EntityAdapter<Produit, string> = createEntityAdapter<Produit, string>({
-  selectId: (produit) => produit._id,
+  selectId: (produit) => produit?._id,
 });
 
 const initialState = produitAdapter.getInitialState<ProduitState>({
@@ -85,7 +85,7 @@ export const fetchProduitById = createAsyncThunk(
   'produits/fetchProduitById',
   async (id: string, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/produit/${id}`, {
+      const response = await apiClient.get(`/produits/${id}`, {
         headers: getAuthHeaders(),
       });
       return response.data;
@@ -100,9 +100,23 @@ export const fetchProduitById = createAsyncThunk(
 
 export const updateProduit = createAsyncThunk(
   'produits/updateProduit',
-  async (produit: { _id: string; [key: string]: any }, { rejectWithValue }) => {
+  async (
+    produit: {
+      _id: string;
+      nom: string;
+      categorie: string;
+      prix: number;
+      tva: number;
+      prixVente: number;
+      marge?: number;
+      netTopay?: number;
+      unite?: string;
+    },
+    { rejectWithValue }
+  ) => {
     try {
-      const response = await apiClient.put(`/produits/${produit._id}`, produit, {
+      const { _id, ...data } = produit;
+      const response = await apiClient.put(`/produits/${_id}`, data, {
         headers: getAuthHeaders(),
       });
       return response.data;
@@ -121,6 +135,9 @@ const produitSlice = createSlice({
   reducers: {},
   extraReducers: (builder) => {
     builder
+      .addCase(fetchProduits.pending, (state) => {
+        state.status = 'loading';
+      })
       .addCase(fetchProduits.fulfilled, (state, action) => {
         state.status = 'succeeded';
         produitAdapter.setAll(state, action.payload);
@@ -136,6 +153,9 @@ const produitSlice = createSlice({
         produitAdapter.removeOne(state, action.payload);
       })
       .addCase(fetchProduitById.fulfilled, (state, action) => {
+        produitAdapter.upsertOne(state, action.payload);
+      })
+      .addCase(updateProduit.fulfilled, (state, action) => {
         produitAdapter.upsertOne(state, action.payload);
       });
   },

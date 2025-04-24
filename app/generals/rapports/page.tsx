@@ -56,7 +56,7 @@ const page = () => {
             },
             { label: 'Modifier', command: () => handleAction('edit', rowData) },
             {
-              label: 'Supprimer',
+              label: 'Annuler',
               command: () => handleAction('delete', rowData),
             },
           ]}

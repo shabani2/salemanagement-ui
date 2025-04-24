@@ -1,29 +1,48 @@
+// types/produitsType.ts
+
 // Interface pour la catégorie
 export interface Categorie {
-  _id: string; // optionnel si l'objet est nouveau
+  _id?: string;
   nom: string;
   type: string;
-  image?: string;
+  image?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface CategorieModel {
+  _id?: string;
+  nom: string;
+  type: string;
+  image?: string | File | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 // Interface pour le produit
 export interface Produit {
-  _id: string; // optionnel si l'objet est nouveau
+  _id?: string;
   nom: string;
-  categorie: Categorie;
+  categorie: Categorie | string;
   prix: number;
   prixVente: number;
   tva: number;
+  marge?: number;
+  netTopay?: number;
+  unite?: string;
+  createdAt?: Date;
   updatedAt?: Date;
 }
+
 export interface ProduitModel {
   nom: string;
-  categorie: string | Categorie; // peut être une référence ou un objet peuplé
+  categorie: string | Categorie;
   prix: number;
   prixVente: number;
   tva: number;
+  marge?: number;
+  netTopay?: number;
+  unite?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
