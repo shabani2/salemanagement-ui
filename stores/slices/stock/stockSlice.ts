@@ -10,6 +10,7 @@ import {
 import { RootState } from '../../store';
 import { apiClient } from '../../../lib/apiConfig';
 import { Stock } from '@/Models/stock';
+import { PointVente } from '@/Models/pointVenteType';
 
 interface StockState {
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -98,6 +99,26 @@ export const deleteStock = createAsyncThunk(
     } catch (error: unknown) {
       if (error instanceof Error) return rejectWithValue(error.message);
       return rejectWithValue('Erreur lors de la suppression du stock');
+    }
+  }
+);
+
+export const checkStock = createAsyncThunk(
+  'stock/checkStock',
+  async (
+    params: { type: string; produitId: string; quantite: number; pointVenteId?: string|undefined|PointVente },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await apiClient.post(
+        '/stock/check',
+        { ...params },
+        { headers: getAuthHeaders() }
+      );
+      return response.data; // { success: true, disponible: number }
+    } catch (error: unknown) {
+      if (error instanceof Error) return rejectWithValue(error.message);
+      return rejectWithValue('Erreur lors de la vérification du stock');
     }
   }
 );

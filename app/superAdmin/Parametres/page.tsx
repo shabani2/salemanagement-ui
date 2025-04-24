@@ -1,7 +1,157 @@
-import React from 'react';
+"use client";
+import React, { useState, useEffect } from 'react';
+import { InputText } from 'primereact/inputtext';
+import { Button } from 'primereact/button';
+import { FileUpload } from 'primereact/fileupload';
+import { BreadCrumb } from 'primereact/breadcrumb';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  addOrganisation,
+  selectCurrentOrganisation,
+  updateOrganisation,
+} from '@/stores/slices/organisation/organisationSlice';
+import { AppDispatch, RootState } from '@/stores/store';
 
-const page = () => {
-  return <div>parametre</div>;
+export const page = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const org = useSelector((state: RootState) => selectCurrentOrganisation(state));
+
+  const [formData, setFormData] = useState({
+    nom: '',
+    rccm: '',
+    contact: '',
+    siegeSocial: '',
+    devise: '',
+    pays: '',
+    emailEntreprise: '',
+    logo: null as File | string | null,
+  });
+
+  const [uploadKey, setUploadKey] = useState(0);
+
+  useEffect(() => {
+    if (org) {
+      setFormData({
+        nom: org.nom,
+        rccm: org.rccm,
+        contact: org.contact,
+        siegeSocial: org.siegeSocial,
+        devise: org.devise,
+        pays: org.pays,
+        emailEntreprise: org.emailEntreprise,
+        logo: org.logo || null,
+      });
+    }
+  }, [org]);
+
+  const handleSubmit = async () => {
+    const data = new FormData();
+    Object.entries(formData).forEach(([key, value]) => {
+      if (value) data.append(key, value);
+    });
+
+    if (org?._id) {
+      dispatch(updateOrganisation({ id: org._id, data }));
+    } else {
+      dispatch(addOrganisation(data));
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+  };
+
+  const handleFileSelect = (e: any) => {
+    const file = e.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      setFormData((prev) => ({ ...prev, logo: file }));
+      setUploadKey((prev) => prev + 1);
+    }
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <BreadCrumb
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Organisation' }]}
+          home={{ icon: 'pi pi-home', url: '/' }}
+        />
+        <h2 className="text-2xl font-bold">Organisation</h2>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4">
+            {['nom', 'rccm', 'contact', 'siegeSocial'].map((field) => (
+              <span className="p-float-label" key={field}>
+                <InputText
+                  id={field}
+                  name={field}
+                  value={formData[field as keyof typeof formData] as string}
+                  onChange={handleInputChange}
+                  className="w-full"
+                />
+                <label htmlFor={field}>{field.charAt(0).toUpperCase() + field.slice(1)}</label>
+              </span>
+            ))}
+          </div>
+
+          <div className="space-y-4">
+            {['devise', 'pays', 'emailEntreprise'].map((field) => (
+              <span className="p-float-label" key={field}>
+                <InputText
+                  id={field}
+                  name={field}
+                  value={formData[field as keyof typeof formData] as string}
+                  onChange={handleInputChange}
+                  className="w-full"
+                />
+                <label htmlFor={field}>{field.charAt(0).toUpperCase() + field.slice(1)}</label>
+              </span>
+            ))}
+
+            <FileUpload
+              key={uploadKey}
+              mode="basic"
+              accept="image/*"
+              maxFileSize={1000000}
+              chooseLabel="Choisir une image"
+              className="w-full mt-2"
+              customUpload
+              uploadHandler={() => {}}
+              onSelect={handleFileSelect}
+            />
+
+            {formData.logo instanceof File ? (
+              <img
+                src={URL.createObjectURL(formData.logo)}
+                alt="Aperçu sélectionné"
+                className="h-24 w-auto object-contain border rounded"
+              />
+            ) : org?.logo ? (
+              <img
+                src={`http://localhost:8000/${org.logo.replace('../', '')}`}
+                alt="Image actuelle"
+                className="h-24 w-auto object-contain border rounded"
+              />
+            ) : (
+              <span className="text-sm text-gray-500">Aucune image</span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <Button
+            label={org ? 'Mettre à jour' : 'Créer'}
+            icon={org ? 'pi pi-refresh' : 'pi pi-plus'}
+            className="w-full sm:w-auto"
+            onClick={handleSubmit}
+          />
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default page;

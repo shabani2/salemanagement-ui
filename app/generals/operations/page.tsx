@@ -21,6 +21,7 @@ import { createMouvementStock } from '@/stores/slices/mvtStock/mvtStock';
 import { PointVente } from '@/Models/pointVenteType';
 import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
 import { Controller } from 'react-hook-form';
+import { checkStock } from '@/stores/slices/stock/stockSlice';
 
 interface FormValues {
   type: string;
@@ -49,6 +50,8 @@ const Page = () => {
   const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
   const [allProduits, setAllProduits] = useState<Produit[]>([]);
   const [produits, setProduits] = useState<Produit[]>([]);
+  const [stockRestant, setStockRestant] = useState<{ [index: number]: number }>({});
+  const [disableAdd, setDisableAdd] = useState(false);
 
   const [selectedType, setSelectedType] = useState<string>('');
 
@@ -74,6 +77,8 @@ const Page = () => {
     watch,
     setValue,
     reset,
+    setError,
+    clearErrors,
   } = useForm<FormValues>({
     defaultValues,
     mode: 'onChange',
@@ -177,6 +182,66 @@ const Page = () => {
     }
   };
 
+  // checking stock management
+
+  const watchProduits = watch('produits'); 
+  const selectedPointVente = watch('pointVente');
+
+ 
+
+  useEffect(() => {
+    watchProduits.forEach((prod, index) => {
+      if (!prod.produit || !prod.quantite || prod.quantite <= 0) return;
+      console.log("selectedPoinvente : ",selectedPointVente);
+      dispatch(
+        checkStock({
+          type: selectedType,
+          produitId: prod.produit,
+          quantite: Number(prod.quantite),
+          pointVenteId: selectedType !== 'Entrée' ? selectedPointVente?._id : undefined,
+        })
+      ).then((res) => {
+        console.log("check quantite : ",res.payload.quantiteDisponible)
+        const result = res.payload;
+        if (!result?.suffisant && result.quantiteDisponible < prod.quantite) {
+          setError(`produits.${index}.quantite`, {
+            type: 'manual',
+            message: `Stock insuffisant : ${result.quantiteDisponible} disponible`,
+          });
+        } else {
+          clearErrors(`produits.${index}.quantite`);
+        }
+      });
+    });
+  }, [watchProduits, selectedType, selectedPointVente]);
+
+
+  const validateStock = async (value, index) => {
+    const produitId = watch(`produits.${index}.produit`);
+    if (!produitId || !value || value <= 0) {
+      setDisableAdd(true);
+      return 'Quantité invalide';
+    }
+    const result = await dispatch(
+      checkStock({
+        type: selectedType,
+        produitId,
+        quantite: Number(value),
+        pointVenteId: selectedType !== 'Entrée' ? selectedPointVente?._id : undefined,
+      })
+    ).unwrap();
+
+    const isValid = result.suffisant && result.quantiteDisponible >= value;
+    if (!isValid) {
+      setDisableAdd(true);
+      setValue(`produits.${index}.quantite`, undefined);
+    } else {
+      setDisableAdd(false);
+    }
+    return isValid ? true : `Stock insuffisant : ${result.quantiteDisponible} disponible`;
+  };
+
+
   return (
     <div className="bg-gray-100 min-h-screen p-4">
       <Toast ref={toast} />
@@ -248,52 +313,66 @@ const Page = () => {
               </div>
             )}
 
-            {fields.map((field, index) => {
-              const selectedCatId = watch(`produits.${index}.categorie`);
-              const filteredProduits = allProduits.filter((p) => p.categorie._id === selectedCatId);
-              return (
-                <div key={field.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                  <div>
-                    <label>Catégorie</label>
-                    <Dropdown
-                      value={watch(`produits.${index}.categorie`)}
-                      options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
-                      onChange={(e) => setValue(`produits.${index}.categorie`, e.value)}
-                      placeholder="Choisir une catégorie"
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label>Produit</label>
-                    <Dropdown
-                      value={watch(`produits.${index}.produit`)}
-                      options={filteredProduits.map((p) => ({ label: p.nom, value: p._id }))}
-                      onChange={(e) => setValue(`produits.${index}.produit`, e.value)}
-                      placeholder="Choisir un produit"
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label>Quantité</label>
-                    <InputText
-                      type="number"
-                      {...register(`produits.${index}.quantite`, { required: true, min: 1 })}
-                      className="w-full"
-                    />
-                    {errors.produits?.[index]?.quantite && (
-                      <small className="text-red-500">Quantité requise</small>
-                    )}
-                  </div>
-                  <Button icon="pi pi-trash" severity="danger" text onClick={() => remove(index)} />
-                </div>
-              );
-            })}
+{fields.map((field, index) => {
+        const selectedCatId = watch(`produits.${index}.categorie`);
+        const selectedProduitId = watch(`produits.${index}.produit`);
+        const filteredProduits = allProduits.filter((p) => p.categorie._id === selectedCatId);
+
+        return (
+          <div key={field.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+              <label>Catégorie</label>
+              <Dropdown
+                value={selectedCatId}
+                options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
+                onChange={(e) => setValue(`produits.${index}.categorie`, e.value)}
+                placeholder="Choisir une catégorie"
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label>Produit</label>
+              <Dropdown
+                value={selectedProduitId}
+                options={filteredProduits.map((p) => ({ label: p.nom, value: p._id }))}
+                onChange={(e) => setValue(`produits.${index}.produit`, e.value)}
+                placeholder="Choisir un produit"
+                className="w-full"
+              />
+            </div>
+            <div>
+             
+              <label>Quantité</label>
+              <InputText
+                type="number"
+                {...register(`produits.${index}.quantite`, {
+                  required: 'Quantité requise',
+                  min: { value: 1, message: 'Minimum 1' },
+                  validate: async (value) => await validateStock(value, index),
+                })}
+                onBlur={async () => {
+                  const value = watch(`produits.${index}.quantite`);
+                  await validateStock(value, index);
+                }}
+                className="w-full"
+              />
+              {errors.produits?.[index]?.quantite && (
+                <small className="text-red-500">
+                  {errors.produits[index].quantite.message || 'Quantité requise'}
+                </small>
+              )}
+            </div>
+            <Button icon="pi pi-trash" severity="danger" text onClick={() => remove(index)} />
+          </div>
+        );
+      })}
 
             <Button
               type="button"
               icon="pi pi-plus"
               label="Ajouter un produit"
               onClick={() => append({ categorie: '', produit: '', quantite: 0 })}
+              disabled={disableAdd}
             />
           </form>
         </div>
