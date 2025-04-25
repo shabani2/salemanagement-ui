@@ -22,7 +22,7 @@ export const store = configureStore({
     categories: categorieReducer,
     mouvementStock: mouvementStockReducer,
     stocks: stockReducer,
-    organisations : organisationReducer,
+    organisations: organisationReducer,
   },
 });
 

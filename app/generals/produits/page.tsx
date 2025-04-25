@@ -43,7 +43,7 @@ const page = () => {
   const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
   const [selectedCategorie, setSelectedCategorie] = useState<Categorie | null>(null);
   const selectedRowDataRef = useRef<any>(null);
-  const [isDeleteProduit,setIsDeleteProduit] = useState<boolean>(false)
+  const [isDeleteProduit, setIsDeleteProduit] = useState<boolean>(false);
 
   const [newProduit, setNewProduit] = useState<Produit>({
     nom: '',
@@ -55,7 +55,7 @@ const page = () => {
     netTopay: 0,
     unite: '',
   });
-  
+
   //@ts-ignore
   // const [newCategory, setNewCategory] = useState<Categorie | null>(null);
   useEffect(() => {
@@ -79,16 +79,15 @@ const page = () => {
   };
 
   const handleAction = (action: string, rowData: Produit) => {
-    console.log("Produit cliqué :", rowData);
+    console.log('Produit cliqué :', rowData);
     setSelectedProduit(rowData);
     setDialogType(action);
-    if(action==='delete'){
-      setIsDeleteProduit(true)
+    if (action === 'delete') {
+      setIsDeleteProduit(true);
     }
   };
 
   //@ts-ignore
- 
 
   const actionBodyTemplate = (rowData: Produit) => (
     <div>
@@ -121,32 +120,30 @@ const page = () => {
       />
     </div>
   );
-  
-
 
   const handleSubmitProduit = async () => {
     if (newProduit._id) {
       // Cas modification
-      await dispatch(updateProduit(newProduit)).then((resp)=>{
-        console.log("resp ",resp.payload)
+      await dispatch(updateProduit(newProduit)).then((resp) => {
+        console.log('resp ', resp.payload);
       }); // updateProduit doit prendre l'objet complet
     } else {
       // Cas création
       await dispatch(addProduit(newProduit));
     }
-  
+
     await dispatch(fetchProduits()).then((resp) => {
       setProduits(resp.payload);
     });
-  
-    setNewProduit({      
+
+    setNewProduit({
       nom: '',
       categorie: '',
       prix: 0,
       prixVente: 0,
       tva: 0,
     }); // reset le form
-  
+
     setDialogType(null);
   };
 
@@ -162,7 +159,7 @@ const page = () => {
       });
     }
   }, [dialogType, selectedProduit]);
-  
+
   const handleInputChange = (field: keyof Produit, value: number | string) => {
     const updated = { ...newProduit, [field]: value };
     if (typeof updated.prix === 'number' && typeof updated.marge === 'number') {
@@ -182,8 +179,7 @@ const page = () => {
     image: null,
   });
   const [formState, setFormState] = useState<Categorie>(newCategorie);
-  const [isDeleteCat,setIsDeleteCat] = useState<boolean>(false)
- 
+  const [isDeleteCat, setIsDeleteCat] = useState<boolean>(false);
 
   const handleOpenCreate = () => {
     setNewCategorie({ nom: '', type: '', image: null });
@@ -196,10 +192,10 @@ const page = () => {
     if (action === 'edit') {
       setActionMade('update');
       setSelectedCategorie(categorie);
-      console.log('selected categorie => ',selectedCategorie)
+      console.log('selected categorie => ', selectedCategorie);
     } else if (action === 'delete') {
       setActionMade('delete');
-      setIsDeleteCat(true)
+      setIsDeleteCat(true);
       setSelectedCategorie(categorie);
     }
   };
@@ -224,29 +220,29 @@ const page = () => {
     if (formState.image) {
       formData.append('image', formState.image);
     }
-    if(actionMade==='create'){
-      console.log('categorie created : ', formData,formState);
-      dispatch(addCategorie(formState)).then((resp)=>{
-        console.log('resp ',resp.payload)
-      })
-    }else if(actionMade==="update"){
-      if(formState.image==null){
-        console.log('image',selectedCategorie?.image)
-        setFormState({...formState,image:selectedCategorie?.image})
+    if (actionMade === 'create') {
+      console.log('categorie created : ', formData, formState);
+      dispatch(addCategorie(formState)).then((resp) => {
+        console.log('resp ', resp.payload);
+      });
+    } else if (actionMade === 'update') {
+      if (formState.image == null) {
+        console.log('image', selectedCategorie?.image);
+        setFormState({ ...formState, image: selectedCategorie?.image });
       }
       dispatch(updateCategorie({ id: selectedCategorie?._id, data: formState }));
       console.log('categorie updated : ', formState);
     }
-   
+
     setActionMade(null);
   };
   useEffect(() => {
     if (!formState.image && selectedCategorie?.image) {
-      console.log('Image injectée dans formState:', selectedCategorie.image)
-      setFormState(prev => ({...prev, image: selectedCategorie.image}))
+      console.log('Image injectée dans formState:', selectedCategorie.image);
+      setFormState((prev) => ({ ...prev, image: selectedCategorie.image }));
     }
-  }, [selectedCategorie, formState.image])
-  
+  }, [selectedCategorie, formState.image]);
+
   return (
     <div className="bg-gray-100 min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -306,275 +302,295 @@ const page = () => {
             />
           </div>
           <div>
-          <DataTable
-  value={produits}
-  paginator
-  rows={5}
-  className="rounded-lg"
-  tableStyle={{ minWidth: '70rem' }}
->
-  <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
-  <Column field="nom" header="Nom" sortable />  
-  <Column field="prix" header="Prix d'acquisition/ production" sortable />
-  <Column field="marge" header="Marge (%)" body={(rowData: Produit) => rowData.marge ?? 'N/A'} sortable />
-  <Column
-    header="Valeur Marge"
-    body={(rowData: Produit) =>
-      rowData.prix && rowData.marge !== undefined
-        ? ((rowData.prix * rowData.marge) / 100).toFixed(2)
-        : 'N/A'
-    }
-  />
-   <Column
-    field="netTopay"
-    header="Net à Payer"
-    body={(rowData: Produit) => rowData.netTopay?.toFixed(2) ?? 'N/A'}
-  />
-  <Column field="tva" header="TVA (%)" sortable />
-  <Column
-    header="Valeur TVA"
-    body={(rowData: Produit) =>
-      rowData.netTopay && rowData.tva !== undefined
-        ? ((rowData.netTopay * rowData.tva) / 100).toFixed(2)
-        : 'N/A'
-    }
-  /> 
-  <Column
-    field="prixVente"
-    header="Prix de Vente"
-    body={(rowData: Produit) => rowData.prixVente?.toFixed(2) ?? 'N/A'}
-  />
-  <Column field="unite" header="Unité" body={(rowData: Produit) => rowData.unite || 'N/A'} />
+            <DataTable
+              value={produits}
+              paginator
+              rows={5}
+              className="rounded-lg"
+              tableStyle={{ minWidth: '70rem' }}
+            >
+              <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
+              <Column field="nom" header="Nom" sortable />
+              <Column field="prix" header="Prix d'acquisition/ production" sortable />
+              <Column
+                field="marge"
+                header="Marge (%)"
+                body={(rowData: Produit) => rowData.marge ?? 'N/A'}
+                sortable
+              />
+              <Column
+                header="Valeur Marge"
+                body={(rowData: Produit) =>
+                  rowData.prix && rowData.marge !== undefined
+                    ? ((rowData.prix * rowData.marge) / 100).toFixed(2)
+                    : 'N/A'
+                }
+              />
+              <Column
+                field="netTopay"
+                header="Net à Payer"
+                body={(rowData: Produit) => rowData.netTopay?.toFixed(2) ?? 'N/A'}
+              />
+              <Column field="tva" header="TVA (%)" sortable />
+              <Column
+                header="Valeur TVA"
+                body={(rowData: Produit) =>
+                  rowData.netTopay && rowData.tva !== undefined
+                    ? ((rowData.netTopay * rowData.tva) / 100).toFixed(2)
+                    : 'N/A'
+                }
+              />
+              <Column
+                field="prixVente"
+                header="Prix de Vente"
+                body={(rowData: Produit) => rowData.prixVente?.toFixed(2) ?? 'N/A'}
+              />
+              <Column
+                field="unite"
+                header="Unité"
+                body={(rowData: Produit) => rowData.unite || 'N/A'}
+              />
 
-  <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
-</DataTable>
-
+              <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
+            </DataTable>
           </div>
         </div>
       </div>
       {/* dialog pour la creation d'un produit */}
       <Dialog
-  visible={dialogType === 'create' || dialogType === 'edit'}
-  header={dialogType === 'edit' ? 'Modifier le produit' : 'Ajouter un produit'}
-  onHide={() => setDialogType(null)}
-  style={{ width: '50vw' }}
-  modal
->
-  <div className="p-4 space-y-4">
-    {/* Ligne 1: nom et catégorie */}
-    <div className="flex gap-4">
-      <div className="flex-1">
-        <label className="block mb-1 text-sm font-medium">Nom</label>
-        <InputText
-          type="text"
-          value={newProduit.nom}
-          onChange={(e) => handleInputChange('nom', e.target.value)}
-          required
-          className="w-full p-2 border rounded"
-        />
-      </div>
-      <div className="flex-1">
-        <label className="block mb-1 text-sm font-medium">Catégorie</label>
-        <Dropdown
-          value={typeof newProduit.categorie === 'string' ? newProduit.categorie : newProduit.categorie?._id}
-          options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
-          onChange={(e) => handleInputChange('categorie', e.value)}
-          placeholder="Sélectionner une catégorie"
-          className="w-full border rounded"
-        />
-      </div>
-    </div>
+        visible={dialogType === 'create' || dialogType === 'edit'}
+        header={dialogType === 'edit' ? 'Modifier le produit' : 'Ajouter un produit'}
+        onHide={() => setDialogType(null)}
+        style={{ width: '50vw' }}
+        modal
+      >
+        <div className="p-4 space-y-4">
+          {/* Ligne 1: nom et catégorie */}
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Nom</label>
+              <InputText
+                type="text"
+                value={newProduit.nom}
+                onChange={(e) => handleInputChange('nom', e.target.value)}
+                required
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Catégorie</label>
+              <Dropdown
+                value={
+                  typeof newProduit.categorie === 'string'
+                    ? newProduit.categorie
+                    : newProduit.categorie?._id
+                }
+                options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
+                onChange={(e) => handleInputChange('categorie', e.value)}
+                placeholder="Sélectionner une catégorie"
+                className="w-full border rounded"
+              />
+            </div>
+          </div>
 
-    {/* Ligne 2: prix, marge, tva */}
-    <div className="flex gap-4">
-      <div className="flex-1">
-        <label className="block mb-1 text-sm font-medium">Prix d&apos;acquisition/ production</label>
-        <InputText
-          type="number"
-          value={newProduit.prix}
-          onChange={(e) => handleInputChange('prix', parseFloat(e.target.value) || 0)}
-          className="w-full p-2 border rounded"
-        />
-      </div>
-      <div className="flex-1">
-        <label className="block mb-1 text-sm font-medium">Marge (%)</label>
-        <InputText
-          type="number"
-          value={newProduit.marge}
-          onChange={(e) => handleInputChange('marge', parseFloat(e.target.value) || 0)}
-          className="w-full p-2 border rounded"
-        />
-      </div>
-      <div className="flex-1">
-        <label className="block mb-1 text-sm font-medium">TVA (%)</label>
-        <InputText
-          type="number"
-          value={newProduit.tva}
-          onChange={(e) => handleInputChange('tva', parseFloat(e.target.value) || 0)}
-          className="w-full p-2 border rounded"
-        />
-      </div>
-    </div>
+          {/* Ligne 2: prix, marge, tva */}
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">
+                Prix d&apos;acquisition/ production
+              </label>
+              <InputText
+                type="number"
+                value={newProduit.prix}
+                onChange={(e) => handleInputChange('prix', parseFloat(e.target.value) || 0)}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Marge (%)</label>
+              <InputText
+                type="number"
+                value={newProduit.marge}
+                onChange={(e) => handleInputChange('marge', parseFloat(e.target.value) || 0)}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">TVA (%)</label>
+              <InputText
+                type="number"
+                value={newProduit.tva}
+                onChange={(e) => handleInputChange('tva', parseFloat(e.target.value) || 0)}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+          </div>
 
-    {/* Ligne 3: unité */}
-    <div>
-      <label className="block mb-1 text-sm font-medium">Unité</label>
-      <InputText
-        type="text"
-        value={newProduit.unite}
-        onChange={(e) => handleInputChange('unite', e.target.value)}
-        placeholder="Unité (ex: kg, l, pièce)"
-        className="w-full p-2 border rounded"
-      />
-    </div>
+          {/* Ligne 3: unité */}
+          <div>
+            <label className="block mb-1 text-sm font-medium">Unité</label>
+            <InputText
+              type="text"
+              value={newProduit.unite}
+              onChange={(e) => handleInputChange('unite', e.target.value)}
+              placeholder="Unité (ex: kg, l, pièce)"
+              className="w-full p-2 border rounded"
+            />
+          </div>
 
-    {/* Ligne 4: valeurs calculées */}
-    <div className="flex gap-4">
-      <div className="flex-1">
-        <label className="block text-sm">Valeur Marge: {((newProduit.prix * (newProduit.marge || 0)) / 100).toFixed(2)} </label>
-        <label className="block text-sm">Valeur TVA: {(((newProduit.netTopay || 0) * (newProduit.tva || 0)) / 100).toFixed(2)}</label>
-      </div>
-      <div className="flex-1 text-right">
-        <label className="block text-sm font-medium">Net à payer: {newProduit.netTopay?.toFixed(2)}</label>
-        <label className="block text-sm font-medium">Prix de vente: {newProduit.prixVente?.toFixed(2)}</label>
-      </div>
-    </div>
+          {/* Ligne 4: valeurs calculées */}
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-sm">
+                Valeur Marge: {((newProduit.prix * (newProduit.marge || 0)) / 100).toFixed(2)}{' '}
+              </label>
+              <label className="block text-sm">
+                Valeur TVA:{' '}
+                {(((newProduit.netTopay || 0) * (newProduit.tva || 0)) / 100).toFixed(2)}
+              </label>
+            </div>
+            <div className="flex-1 text-right">
+              <label className="block text-sm font-medium">
+                Net à payer: {newProduit.netTopay?.toFixed(2)}
+              </label>
+              <label className="block text-sm font-medium">
+                Prix de vente: {newProduit.prixVente?.toFixed(2)}
+              </label>
+            </div>
+          </div>
 
-    {/* Bouton action */}
-    <div className="flex justify-end">
-      <Button
-        label={dialogType === 'edit' ? 'Modifier' : 'Ajouter'}
-        className="bg-green-500 text-white"
-        onClick={handleSubmitProduit}
-      />
-    </div>
-  </div>
-</Dialog>
+          {/* Bouton action */}
+          <div className="flex justify-end">
+            <Button
+              label={dialogType === 'edit' ? 'Modifier' : 'Ajouter'}
+              className="bg-green-500 text-white"
+              onClick={handleSubmitProduit}
+            />
+          </div>
+        </div>
+      </Dialog>
 
       {/* dialog cote categorie */}
       <Dialog
-  visible={actionMade === 'create' || actionMade === 'update'}
-  header={actionMade === 'create' ? 'Ajouter une catégorie' : 'Modifier la catégorie'}
-  onHide={() => setActionMade(null)}
-  style={{ width: '40vw' }}
-  modal
->
-  <div className="p-4 space-y-4">
-    {/* Ligne Nom + Type */}
-    <div className="flex gap-4">
-      <div className="flex-1">
-        <label className="block mb-1 text-sm font-medium">Nom</label>
-        <InputText
-          type="text"
-          value={formState.nom}
-          onChange={(e) => setFormState({ ...formState, nom: e.target.value })}
-          required
-          className="w-full p-2 border rounded"
-          placeholder="Nom de la catégorie"
-        />
-      </div>
+        visible={actionMade === 'create' || actionMade === 'update'}
+        header={actionMade === 'create' ? 'Ajouter une catégorie' : 'Modifier la catégorie'}
+        onHide={() => setActionMade(null)}
+        style={{ width: '40vw' }}
+        modal
+      >
+        <div className="p-4 space-y-4">
+          {/* Ligne Nom + Type */}
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Nom</label>
+              <InputText
+                type="text"
+                value={formState.nom}
+                onChange={(e) => setFormState({ ...formState, nom: e.target.value })}
+                required
+                className="w-full p-2 border rounded"
+                placeholder="Nom de la catégorie"
+              />
+            </div>
 
-      <div className="flex-1">
-        <label className="block mb-1 text-sm font-medium">Type</label>
-        <InputText
-          type="text"
-          value={formState.type}
-          onChange={(e) => setFormState({ ...formState, type: e.target.value })}
-          required
-          className="w-full p-2 border rounded"
-          placeholder="Type de la catégorie"
-        />
-      </div>
-    </div>
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Type</label>
+              <InputText
+                type="text"
+                value={formState.type}
+                onChange={(e) => setFormState({ ...formState, type: e.target.value })}
+                required
+                className="w-full p-2 border rounded"
+                placeholder="Type de la catégorie"
+              />
+            </div>
+          </div>
 
-    {/* Champ FileUpload + image preview côte à côte */}
-    <div className="flex items-center gap-4">
-      <div className="flex-1">
-        <label className="block mb-1 text-sm font-medium">Sélectionner une image</label>
-        <FileUpload
-          mode="basic"
-          accept="image/*"
-          maxFileSize={1000000}
-          chooseLabel="Choisir une image"
-          className="w-full mt-2"
-          customUpload
-          uploadHandler={() => {}}
-          onSelect={(e) => {
-            const file = e.files?.[0];
-            if (file) {
-              setFormState({ ...formState, image: file });
-            }
-          }}
-        />
-      </div>
+          {/* Champ FileUpload + image preview côte à côte */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Sélectionner une image</label>
+              <FileUpload
+                mode="basic"
+                accept="image/*"
+                maxFileSize={1000000}
+                chooseLabel="Choisir une image"
+                className="w-full mt-2"
+                customUpload
+                uploadHandler={() => {}}
+                onSelect={(e) => {
+                  const file = e.files?.[0];
+                  if (file) {
+                    setFormState({ ...formState, image: file });
+                  }
+                }}
+              />
+            </div>
 
-      {/* Image sélectionnée (preview) ou image actuelle */}
-      {formState.image instanceof File ? (
-        <img
-          src={URL.createObjectURL(formState.image)}
-          alt="Aperçu sélectionné"
-          className="h-24 w-auto object-contain border rounded"
-        />
-      ) : (
-        actionMade === 'update' &&
-        selectedCategorie?.image && (
-          <img
-            src={`http://localhost:8000/${selectedCategorie.image}`}
-            alt="Image actuelle"
-            className="h-24 w-auto object-contain border rounded"
-          />
-        )
-      )}
-    </div>
+            {/* Image sélectionnée (preview) ou image actuelle */}
+            {formState.image instanceof File ? (
+              <img
+                src={URL.createObjectURL(formState.image)}
+                alt="Aperçu sélectionné"
+                className="h-24 w-auto object-contain border rounded"
+              />
+            ) : (
+              actionMade === 'update' &&
+              selectedCategorie?.image && (
+                <img
+                  src={`http://localhost:8000/${selectedCategorie.image}`}
+                  alt="Image actuelle"
+                  className="h-24 w-auto object-contain border rounded"
+                />
+              )
+            )}
+          </div>
 
-    {/* Bouton Ajouter/Modifier */}
-    <div className="flex justify-end">
-      <Button
-        label={actionMade === 'create' ? 'Ajouter' : 'Modifier'}
-        className="bg-blue-600 text-white"
-        onClick={handleSubmit}
+          {/* Bouton Ajouter/Modifier */}
+          <div className="flex justify-end">
+            <Button
+              label={actionMade === 'create' ? 'Ajouter' : 'Modifier'}
+              className="bg-blue-600 text-white"
+              onClick={handleSubmit}
+            />
+          </div>
+        </div>
+      </Dialog>
+
+      {/* delete categorie Dialogue */}
+
+      <ConfirmDeleteDialog
+        visible={isDeleteCat}
+        onHide={() => setIsDeleteCat(false)}
+        onConfirm={(item) => {
+          dispatch(deleteCategorie(item._id)).then(() => {
+            dispatch(fetchCategories());
+            setIsDeleteCat(false);
+          });
+        }}
+        item={selectedCategorie}
+        objectLabel="la catégorie"
+        displayField="nom"
       />
-    </div>
-  </div>
-</Dialog>
 
-{/* delete categorie Dialogue */}
+      {/* delete dialog pour produit */}
 
-<ConfirmDeleteDialog
-  visible={isDeleteCat}
-  onHide={() => setIsDeleteCat(false)}
-  onConfirm={(item) => {
-    dispatch(deleteCategorie(item._id)).then(() => {
-      dispatch(fetchCategories());
-      setIsDeleteCat(false);
-    });
-  }}
-  item={selectedCategorie}
-  objectLabel="la catégorie"
-  displayField="nom"
-/>
-
-{/* delete dialog pour produit */}
-
-<ConfirmDeleteDialog
-  visible={isDeleteProduit}
-  onHide={() => setIsDeleteProduit(false)}
-  onConfirm={(item) => {
-    dispatch(deleteProduit(item._id)).then(() => {
-      dispatch(fetchProduits()).then((resp) => {
-        setAllProduits(resp.payload); // garde la version complète
-        setProduits(resp.payload); // version visible (filtrée ou pas)
-      });;
-      setIsDeleteProduit(false);
-    });
-  }}
-  item={selectedProduit}
-  objectLabel="le produit"
-  displayField="nom"
-/>
-
-
-
+      <ConfirmDeleteDialog
+        visible={isDeleteProduit}
+        onHide={() => setIsDeleteProduit(false)}
+        onConfirm={(item) => {
+          dispatch(deleteProduit(item._id)).then(() => {
+            dispatch(fetchProduits()).then((resp) => {
+              setAllProduits(resp.payload); // garde la version complète
+              setProduits(resp.payload); // version visible (filtrée ou pas)
+            });
+            setIsDeleteProduit(false);
+          });
+        }}
+        item={selectedProduit}
+        objectLabel="le produit"
+        displayField="nom"
+      />
     </div>
   );
 };

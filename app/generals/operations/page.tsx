@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
@@ -23,10 +24,27 @@ import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointven
 import { Controller } from 'react-hook-form';
 import { checkStock } from '@/stores/slices/stock/stockSlice';
 
-interface FormValues {
+// interface FormValues {
+//   type: string;
+//   depotCentral?: boolean;
+//   pointVente?: PointVente;
+//   produits: {
+//     categorie: string;
+//     produit: string;
+//     quantite: number;
+//   }[];
+//   remise?: number;
+//   rabais?: number;
+// }
+type FormValues = {
   type: string;
   depotCentral?: boolean;
-  pointVente?: PointVente;
+  pointVente?: {
+    _id: string;
+    nom: string;
+    adresse: string;
+    region: { _id: string; nom: string; ville: string };
+  };
   produits: {
     categorie: string;
     produit: string;
@@ -34,7 +52,12 @@ interface FormValues {
   }[];
   remise?: number;
   rabais?: number;
-}
+  montantRecu?: number;
+  montantDollar?: number;
+  montantFranc?: number;
+  tauxFranc?: number;
+  tauxDollar?: number;
+};
 
 const typeOptions = [
   { label: 'Entrée', value: 'Entrée' },
@@ -123,7 +146,7 @@ const Page = () => {
           type: data.type,
           depotCentral: data.depotCentral ?? false,
           pointVente: data.pointVente,
-          statut: false,
+          statut: data.type === 'Entrée',
         };
       });
       console.log('mouvements => ', mouvements);
@@ -184,29 +207,28 @@ const Page = () => {
 
   // checking stock management
 
-  const watchProduits = watch('produits'); 
+  const watchProduits = watch('produits');
   const selectedPointVente = watch('pointVente');
 
- 
-
   useEffect(() => {
+    if (selectedType === 'Entrée') return; // 🚫 Ne pas vérifier le stock en cas d'entrée
+
     watchProduits.forEach((prod, index) => {
       if (!prod.produit || !prod.quantite || prod.quantite <= 0) return;
-      console.log("selectedPoinvente : ",selectedPointVente);
+
       dispatch(
         checkStock({
           type: selectedType,
           produitId: prod.produit,
           quantite: Number(prod.quantite),
-          pointVenteId: selectedType !== 'Entrée' ? selectedPointVente?._id : undefined,
+          pointVenteId: selectedPointVente?._id,
         })
       ).then((res) => {
-        console.log("check quantite : ",res.payload.quantiteDisponible)
         const result = res.payload;
         if (!result?.suffisant && result.quantiteDisponible < prod.quantite) {
           setError(`produits.${index}.quantite`, {
             type: 'manual',
-            message: `Stock insuffisant : ${result.quantiteDisponible} disponible`,
+            message: `Stock disponible : ${result.quantiteDisponible} `,
           });
         } else {
           clearErrors(`produits.${index}.quantite`);
@@ -215,32 +237,71 @@ const Page = () => {
     });
   }, [watchProduits, selectedType, selectedPointVente]);
 
-
   const validateStock = async (value, index) => {
     const produitId = watch(`produits.${index}.produit`);
+    const type = watch('type');
+
     if (!produitId || !value || value <= 0) {
       setDisableAdd(true);
       return 'Quantité invalide';
     }
+
+    // ✅ Si Entrée, on ne valide pas le stock
+    if (type === 'Entrée') {
+      setDisableAdd(false);
+      return true;
+    }
+
     const result = await dispatch(
       checkStock({
-        type: selectedType,
+        type,
         produitId,
         quantite: Number(value),
-        pointVenteId: selectedType !== 'Entrée' ? selectedPointVente?._id : undefined,
+        pointVenteId: type !== 'Entrée' ? selectedPointVente?._id : undefined,
       })
     ).unwrap();
 
     const isValid = result.suffisant && result.quantiteDisponible >= value;
+
     if (!isValid) {
       setDisableAdd(true);
       setValue(`produits.${index}.quantite`, undefined);
     } else {
       setDisableAdd(false);
     }
-    return isValid ? true : `Stock insuffisant : ${result.quantiteDisponible} disponible`;
+
+    return isValid ? true : `Stock disponible : ${result.quantiteDisponible}`;
   };
 
+  const tauxFranc = watch('tauxFranc') || 0;
+  const tauxDollar = watch('tauxDollar') || 0;
+  const montantDollar = watch('montantDollar') || 0;
+  const montantRecu = watch('montantRecu') || 0;
+  const rabais = watch('rabais') || 0;
+  const remise = watch('remise') || 0;
+  const type = watch('type');
+  const montantFranc = montantDollar * tauxFranc;
+  const valeurRabais = (totalMontant * rabais) / 100;
+  const valeurRemise = ((totalMontant - valeurRabais) * remise) / 100;
+  const netAPayer = totalMontant - valeurRabais - valeurRemise;
+  const reste = montantRecu - netAPayer;
+  const pointVente = watch('pointVente');
+
+  const getQuantiteValidationRules = (type: string, index: number) => ({
+    required: 'Quantité requise',
+    min: { value: 1, message: 'Minimum 1' },
+    validate: async (value: any) => {
+      if (type === 'Entrée') return true;
+      return await validateStock(value, index);
+    },
+  });
+
+  useEffect(() => {
+    const savedTauxDollar = localStorage.getItem('tauxDollar');
+    const savedTauxFranc = localStorage.getItem('tauxFranc');
+    if (savedTauxDollar) setValue('tauxDollar', parseFloat(savedTauxDollar));
+    if (savedTauxFranc) setValue('tauxFranc', parseFloat(savedTauxFranc));
+  }, [setValue]);
 
   return (
     <div className="bg-gray-100 min-h-screen p-4">
@@ -289,6 +350,7 @@ const Page = () => {
                         value === true ||
                         'Vous devez cocher "Dépôt central"',
                     })}
+                    disabled={!watch('type')}
                   />{' '}
                   Dépôt central
                 </label>
@@ -308,122 +370,285 @@ const Page = () => {
                   onChange={(e) => setValue('pointVente', e.value)}
                   placeholder="Sélectionner un point de vente"
                   className="w-full"
+                  disabled={!watch('type')}
                 />
                 {errors.pointVente && <small className="text-red-500">Champ requis</small>}
               </div>
             )}
 
-{fields.map((field, index) => {
-        const selectedCatId = watch(`produits.${index}.categorie`);
-        const selectedProduitId = watch(`produits.${index}.produit`);
-        const filteredProduits = allProduits.filter((p) => p.categorie._id === selectedCatId);
+            {fields.map((field, index) => {
+              const selectedCatId = watch(`produits.${index}.categorie`);
+              const selectedProduitId = watch(`produits.${index}.produit`);
+              const filteredProduits = allProduits.filter((p) => p.categorie._id === selectedCatId);
 
-        return (
-          <div key={field.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div>
-              <label>Catégorie</label>
-              <Dropdown
-                value={selectedCatId}
-                options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
-                onChange={(e) => setValue(`produits.${index}.categorie`, e.value)}
-                placeholder="Choisir une catégorie"
-                className="w-full"
-              />
-            </div>
-            <div>
-              <label>Produit</label>
-              <Dropdown
-                value={selectedProduitId}
-                options={filteredProduits.map((p) => ({ label: p.nom, value: p._id }))}
-                onChange={(e) => setValue(`produits.${index}.produit`, e.value)}
-                placeholder="Choisir un produit"
-                className="w-full"
-              />
-            </div>
-            <div>
-             
-              <label>Quantité</label>
-              <InputText
-                type="number"
-                {...register(`produits.${index}.quantite`, {
-                  required: 'Quantité requise',
-                  min: { value: 1, message: 'Minimum 1' },
-                  validate: async (value) => await validateStock(value, index),
-                })}
-                onBlur={async () => {
-                  const value = watch(`produits.${index}.quantite`);
-                  await validateStock(value, index);
-                }}
-                className="w-full"
-              />
-              {errors.produits?.[index]?.quantite && (
-                <small className="text-red-500">
-                  {errors.produits[index].quantite.message || 'Quantité requise'}
-                </small>
-              )}
-            </div>
-            <Button icon="pi pi-trash" severity="danger" text onClick={() => remove(index)} />
-          </div>
-        );
-      })}
+              return (
+                <div key={field.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                  <div>
+                    <label>Catégorie</label>
+                    <Dropdown
+                      value={selectedCatId}
+                      options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
+                      onChange={(e) => setValue(`produits.${index}.categorie`, e.value)}
+                      placeholder="Choisir une catégorie"
+                      className="w-full"
+                      disabled={!watch('type')}
+                    />
+                  </div>
+                  <div>
+                    <label>Produit</label>
+                    <Dropdown
+                      value={selectedProduitId}
+                      options={filteredProduits.map((p) => ({ label: p.nom, value: p._id }))}
+                      onChange={(e) => setValue(`produits.${index}.produit`, e.value)}
+                      placeholder="Choisir un produit"
+                      className="w-full"
+                      disabled={!watch('type')}
+                    />
+                  </div>
+                  <div>
+                    <label>Quantité</label>
+                    <InputText
+                      type="number"
+                      {...register(
+                        `produits.${index}.quantite`,
+                        getQuantiteValidationRules(watch('type'), index)
+                      )}
+                      onBlur={async () => {
+                        if (watch('type') !== 'Entrée') {
+                          const value = watch(`produits.${index}.quantite`);
+                          await validateStock(value, index);
+                        }
+                      }}
+                      className="w-full"
+                      disabled={!watch('type')}
+                    />
+
+                    {errors.produits?.[index]?.quantite && (
+                      <small className="text-red-500">
+                        {errors.produits[index].quantite.message || 'Quantité requise'}
+                      </small>
+                    )}
+                  </div>
+                  <Button
+                    icon="pi pi-trash"
+                    severity="danger"
+                    text
+                    onClick={() => remove(index)}
+                    disabled={!watch('type')}
+                  />
+                </div>
+              );
+            })}
 
             <Button
               type="button"
               icon="pi pi-plus"
               label="Ajouter un produit"
               onClick={() => append({ categorie: '', produit: '', quantite: 0 })}
-              disabled={disableAdd}
+              disabled={!watch('type') || disableAdd}
             />
           </form>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-md space-y-4">
-          <h3 className="text-lg font-semibold">Récapitulatif</h3>
+        {/* zone de recapitulation */}
+        <div className="bg-white p-6 rounded-2xl shadow-xl space-y-6">
+          <h3 className="text-xl font-bold text-gray-800">Récapitulatif</h3>
 
-          {watch('type') === 'Vente' && (
-            <>
-              <div>
-                <label>Remise</label>
-                <InputText type="number" {...register('remise')} className="w-full" />
-              </div>
-              <div>
-                <label>Rabais</label>
-                <InputText type="number" {...register('rabais')} className="w-full" />
-              </div>
-            </>
-          )}
+          {(() => {
+            const montantFranc = montantDollar * tauxFranc;
+            const produits = watch('produits') || [];
+            const totalMontant = produits.reduce((acc, item) => {
+              const produit = allProduits.find((p) => p._id === item.produit);
+              const prix = produit
+                ? ['Livraison', 'Entrée'].includes(type)
+                  ? produit.prix
+                  : produit.prixVente
+                : 0;
+              return acc + item.quantite * prix;
+            }, 0);
 
-          <div>
-            <h4 className="font-medium">Détails par produit</h4>
-            <ul className="space-y-2">
-              {watch('produits').map((item, idx) => {
-                const produit = allProduits.find((p) => p._id === item.produit);
-                const type = watch('type');
-                const prix = produit
-                  ? ['Livraison', 'Entrée'].includes(type)
-                    ? produit.prix
-                    : produit.prixVente
-                  : 0;
-                if (!produit) return null;
-                return (
-                  <li key={idx} className="flex justify-between">
-                    <span>{produit.nom}</span>
-                    <span>
-                      {item.quantite} x {prix} = {item.quantite * prix} FC
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+            const valeurRabais = (totalMontant * rabais) / 100;
+            const valeurRemise = ((totalMontant - valeurRabais) * remise) / 100;
+            const netAPayer = totalMontant - valeurRabais - valeurRemise;
+            const reste = montantRecu - netAPayer;
 
-          <div className="font-bold text-right">Montant total : {totalMontant} FC</div>
+            return (
+              <>
+                {type !== 'Entrée' && (
+                  <>
+                    {/* Ligne 1: Taux et conversion */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Taux du jour en dollar
+                        </label>
+                        <InputText
+                          type="number"
+                          value={watch('tauxDollar')}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            setValue('tauxDollar', value);
+                            localStorage.setItem('tauxDollar', value.toString());
+                          }}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Taux en franc
+                        </label>
+                        <InputText
+                          type="number"
+                          value={watch('tauxFranc')}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            setValue('tauxFranc', value);
+                            localStorage.setItem('tauxFranc', value.toString());
+                          }}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Montant en dollar
+                        </label>
+                        <InputText
+                          type="number"
+                          {...register('montantDollar')}
+                          className="w-full"
+                          onBlur={() => setValue('montantFranc', montantFranc)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') setValue('montantFranc', montantFranc);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Montant en francs
+                        </label>
+                        <div className="w-full border rounded-md p-2 bg-gray-100 text-gray-800">
+                          {montantFranc} FC
+                        </div>
+                      </div>
+                    </div>
 
-          <div className="text-sm text-gray-600">
-            Opérateur : {user?.name || 'Utilisateur inconnu'}
-          </div>
+                    {/* Ligne Infos point de vente (Livraison) */}
+                    {type === 'Livraison' && pointVente && (
+                      <div className="border p-3 rounded-lg bg-gray-50 text-gray-700">
+                        <div className="font-semibold">Point de vente sélectionné :</div>
+                        <div>Nom : {pointVente.nom}</div>
+                        <div>Adresse : {pointVente.adresse}</div>
+                        <div>Région : {pointVente.region?.nom}</div>
+                        <div>Ville : {pointVente.region?.ville}</div>
+                      </div>
+                    )}
+                  </>
+                )}
 
-          <Button label="Valider l'opération" icon="pi pi-check" onClick={handleSubmit(onSubmit)} />
+                {/* Détails produits (visible aussi pour Entrée) */}
+                <div>
+                  <h4 className="font-semibold text-gray-700">Détails par produit</h4>
+                  <ul className="space-y-2">
+                    {produits.map((item, idx) => {
+                      const produit = allProduits.find((p) => p._id === item.produit);
+                      const prix = produit
+                        ? ['Livraison', 'Entrée'].includes(type)
+                          ? produit.prix
+                          : produit.prixVente
+                        : 0;
+                      if (!produit) return null;
+                      return (
+                        <li key={idx} className="flex justify-between text-gray-700">
+                          <span>{produit.nom}</span>
+                          <span>
+                            {item.quantite} x {prix} = {item.quantite * prix} FC
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+
+                {/* Ligne 3: Total */}
+                <div className="text-right text-lg font-semibold text-gray-800">
+                  Total : {totalMontant} FC
+                </div>
+
+                {/* Ligne 4: Rabais et remise (caché si Livraison ou Entrée) */}
+                {type !== 'Livraison' && type !== 'Entrée' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-2 items-end">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Rabais (%)
+                        </label>
+                        <InputText type="number" {...register('rabais')} className="w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Valeur rabais
+                        </label>
+                        <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
+                          {valeurRabais} FC
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 items-end">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Remise (%)
+                        </label>
+                        <InputText type="number" {...register('remise')} className="w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Valeur remise
+                        </label>
+                        <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
+                          {valeurRemise} FC
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ligne 5: Net à payer (caché si Livraison ou Entrée) */}
+                {type !== 'Livraison' && type !== 'Entrée' && (
+                  <div className="text-right text-lg font-bold text-green-700">
+                    Net à payer : {netAPayer} FC
+                  </div>
+                )}
+
+                {/* Ligne 6: Paiement (caché si Livraison ou Entrée) */}
+                {type !== 'Livraison' && type !== 'Entrée' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Montant reçu
+                      </label>
+                      <InputText type="number" {...register('montantRecu')} className="w-full" />
+                    </div>
+                    <div className="text-right">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Reste / à retourner
+                      </label>
+                      <div className="w-full border rounded-md p-2 bg-gray-100">{reste} FC</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bouton de validation toujours visible */}
+                <div className="flex justify-end pt-4 border-t mt-4">
+                  <Button
+                    className="mt-4"
+                    label="Valider l'opération"
+                    icon="pi pi-check"
+                    onClick={handleSubmit(onSubmit)}
+                  />
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

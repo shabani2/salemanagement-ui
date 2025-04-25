@@ -31,7 +31,10 @@ interface OrganisationState {
   currentOrganisation: Organisation | null;
 }
 
-const organisationAdapter: EntityAdapter<Organisation, string> = createEntityAdapter<Organisation, string>({
+const organisationAdapter: EntityAdapter<Organisation, string> = createEntityAdapter<
+  Organisation,
+  string
+>({
   selectId: (org) => org._id,
 });
 
@@ -78,7 +81,7 @@ export const addOrganisation = createAsyncThunk(
       if (error instanceof Error) {
         return rejectWithValue(error.message);
       }
-      return rejectWithValue('Erreur lors de la création de l\'organisation');
+      return rejectWithValue("Erreur lors de la création de l'organisation");
     }
   }
 );
@@ -172,9 +175,7 @@ const organisationSlice = createSlice({
 
 export const organisationReducer = organisationSlice.reducer;
 
-export const {
-  setCurrentOrganisation,
-} = organisationSlice.actions;
+export const { setCurrentOrganisation } = organisationSlice.actions;
 
 export const {
   selectAll: selectAllOrganisations,
@@ -186,4 +187,5 @@ export const {
 
 export const selectOrganisationStatus = (state: RootState) => state.organisations.status;
 export const selectOrganisationError = (state: RootState) => state.organisations.error;
-export const selectCurrentOrganisation = (state: RootState) => state.organisations.currentOrganisation;
+export const selectCurrentOrganisation = (state: RootState) =>
+  state.organisations.currentOrganisation;

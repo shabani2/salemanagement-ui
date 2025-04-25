@@ -106,7 +106,12 @@ export const deleteStock = createAsyncThunk(
 export const checkStock = createAsyncThunk(
   'stock/checkStock',
   async (
-    params: { type: string; produitId: string; quantite: number; pointVenteId?: string|undefined|PointVente },
+    params: {
+      type: string;
+      produitId: string;
+      quantite: number;
+      pointVenteId?: string | undefined | PointVente;
+    },
     { rejectWithValue }
   ) => {
     try {
