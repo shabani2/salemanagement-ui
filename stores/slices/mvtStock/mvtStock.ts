@@ -118,6 +118,27 @@ export const deleteMouvementStock = createAsyncThunk(
   }
 );
 
+export const validateMouvementStock = createAsyncThunk(
+  'mouvementStock/validate',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.put(
+        `/mouvementStock/validate/${id}`,
+        {},
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la validation du mouvement de stock');
+    }
+  }
+);
+
 const mouvementStockSlice = createSlice({
   name: 'mouvementStock',
   initialState,
@@ -139,6 +160,9 @@ const mouvementStockSlice = createSlice({
         mouvementStockAdapter.upsertOne(state, action.payload);
       })
       .addCase(updateMouvementStock.fulfilled, (state, action) => {
+        mouvementStockAdapter.upsertOne(state, action.payload);
+      })
+      .addCase(validateMouvementStock.fulfilled, (state, action) => {
         mouvementStockAdapter.upsertOne(state, action.payload);
       })
       .addCase(deleteMouvementStock.fulfilled, (state, action) => {

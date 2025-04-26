@@ -3,7 +3,11 @@
 'use client';
 /* eslint-disable react-hooks/rules-of-hooks */
 import { OperationType } from '@/lib/operationType';
-import { fetchMouvementsStock, selectAllMouvementsStock } from '@/stores/slices/mvtStock/mvtStock';
+import {
+  fetchMouvementsStock,
+  selectAllMouvementsStock,
+  validateMouvementStock,
+} from '@/stores/slices/mvtStock/mvtStock';
 import { AppDispatch, RootState } from '@/stores/store';
 //import error from 'next/error';
 
@@ -18,6 +22,8 @@ import { useDispatch, useSelector } from 'react-redux';
 
 import { MouvementStock } from '@/Models/mouvementStockType';
 import { Badge } from 'primereact/badge';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { ValidationDialog } from '@/components/ui/ValidationDialog';
 
 const typeOptions = Object.values(OperationType).map((op) => ({
   label: op,
@@ -27,6 +33,10 @@ const page = () => {
   const [selectedType, setSelectedType] = useState(null);
   const dispatch = useDispatch<AppDispatch>();
   const mvtStocks = useSelector((state: RootState) => selectAllMouvementsStock(state));
+  const [selectedMvt, setSelectedMvt] = useState<MouvementStock | null>(null);
+  const [isValidateMvt, setIsValidateMvt] = useState<boolean>(false);
+  const selectedRowDataRef = useRef<any>(null);
+  const menuRef = useRef<any>(null);
   //@ts-ignore
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState(10);
@@ -38,40 +48,45 @@ const page = () => {
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleAction = (action: string) => {
-    console.log();
-    // setDialogType(action);
+  const handleAction = (action: string, rowData: MouvementStock) => {
+    setSelectedMvt(rowData);
+    console.log('selected row data : ', rowData);
+    if (action == 'valider') {
+      setIsValidateMvt(true);
+    }
   };
 
-  const actionBodyTemplate = (rowData: any) => {
-    const menuRef = useRef<any>(null);
-    console.log('mvtStock = ', mvtStocks);
-    return (
-      <div>
-        <Menu
-          model={[
-            {
-              label: 'Détails',
-              command: () => handleAction('details', rowData),
-            },
-            { label: 'Modifier', command: () => handleAction('edit', rowData) },
-            {
-              label: 'Annuler',
-              command: () => handleAction('delete', rowData),
-            },
-          ]}
-          popup
-          ref={menuRef}
-        />
-        <Button
-          icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
-          onClick={(event) => menuRef.current.toggle(event)}
-          aria-haspopup
-        />
-      </div>
-    );
-  };
+  const actionBodyTemplate = (rowData: MouvementStock) => (
+    <div>
+      <Menu
+        model={[
+          {
+            label: 'valider',
+            command: () => handleAction('valider', selectedRowDataRef.current),
+          },
+          {
+            label: 'Modifier',
+            command: () => handleAction('edit', selectedRowDataRef.current),
+          },
+          {
+            label: 'Supprimer',
+            command: () => handleAction('delete', selectedRowDataRef.current),
+          },
+        ]}
+        popup
+        ref={menuRef}
+      />
+      <Button
+        icon="pi pi-bars"
+        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
+        onClick={(event) => {
+          selectedRowDataRef.current = rowData; // 👈 on stocke ici le bon rowData
+          menuRef.current.toggle(event);
+        }}
+        aria-haspopup
+      />
+    </div>
+  );
 
   useEffect(() => {
     dispatch(fetchMouvementsStock());
@@ -218,6 +233,23 @@ const page = () => {
           <Column header="Actions" body={actionBodyTemplate} className="px-4 py-1" />
         </DataTable>
       </div>
+
+      {/* dialog de validation */}
+
+      <ValidationDialog
+        visible={isValidateMvt}
+        onHide={() => setIsValidateMvt(false)}
+        onConfirm={(item) => {
+          dispatch(validateMouvementStock(item?._id)).then((resp) => {
+            console.log('mvt updated', resp.payload);
+            dispatch(fetchMouvementsStock());
+            setIsValidateMvt(false);
+          });
+        }}
+        item={selectedMvt}
+        objectLabel="l'operation "
+        displayField="nom"
+      />
     </div>
   );
 };

@@ -1,3 +1,4 @@
+/* eslint-disable react/jsx-no-undef */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
@@ -23,6 +24,10 @@ import { PointVente } from '@/Models/pointVenteType';
 import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
 import { Controller } from 'react-hook-form';
 import { checkStock } from '@/stores/slices/stock/stockSlice';
+import { User } from '@/Models/UserType';
+import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
+import { downloadPdfFile, generateStockPdf } from '@/stores/slices/document/pdfGenerator';
+import { destinateur, organisation, serie } from '@/lib/Constants';
 
 // interface FormValues {
 //   type: string;
@@ -127,7 +132,109 @@ const Page = () => {
     return acc + (produit ? produit.prix * item.quantite : 0);
   }, 0);
 
+  // useEffect(() => {
+  //   if (typeof window !== 'undefined') {
+  //     const storedUser = localStorage.getItem('user-agricap');
+  //     console.log('localStorage[user-agricap] =', storedUser);
+
+  //     if (storedUser) {
+  //       try {
+  //         const parsed = JSON.parse(storedUser);
+  //         console.log('parsed user:', parsed);
+  //         setUser(parsed);
+  //       } catch (e) {
+  //         console.error('Erreur de parsing localStorage:', e);
+  //       }
+  //     }
+  //   }
+  // }, [user]);
+  // useEffect(() => {
+  //   if (user?._id) {
+  //     setFormData((prev) => ({
+  //       ...prev,
+  //       superAdmin: user._id,
+  //     }));
+  //   }
+  // }, [user]);
+
   // code source de la fonction onsubmit
+  // const onSubmit = async (data: FormValues) => {
+  //   try {
+  //     const mouvements = data.produits.map((item) => {
+  //       const produitObj = allProduits.find((p) => p._id === item.produit);
+  //       if (!produitObj) throw new Error('Produit introuvable');
+
+  //       const prix = ['Entrée', 'Livraison'].includes(data.type)
+  //         ? produitObj.prix
+  //         : produitObj.prixVente;
+
+  //       return {
+  //         produit: produitObj._id,
+  //         produitNom: produitObj.nom,
+  //         quantite: item.quantite,
+  //         montant: prix * item.quantite,
+  //         type: data.type,
+  //         depotCentral: data.depotCentral ?? false,
+  //         pointVente: data.pointVente,
+  //         statut: data.type === 'Entrée',
+  //       };
+  //     });
+  //     console.log('mouvements => ', mouvements);
+
+  //     const results = await Promise.allSettled(
+  //       mouvements.map((m) =>
+  //         dispatch(
+  //           createMouvementStock({
+  //             //@ts-ignore
+  //             produit: m.produit,
+  //             quantite: m.quantite,
+  //             montant: m.montant,
+  //             //@ts-ignore
+  //             type: m.type,
+  //             depotCentral: m.depotCentral,
+  //             pointVente: m.pointVente,
+  //             //@ts-ignore
+  //             statut: m.statut,
+  //           })
+  //         )
+  //       )
+  //     );
+
+  //     results.forEach((res, i) => {
+  //       if (res.status === 'rejected') {
+  //         const produitNom = mouvements[i].produitNom;
+  //         toast.current?.show({
+  //           severity: 'error',
+  //           summary: `Erreur: ${produitNom}`,
+  //           detail: res.reason || 'Échec de l’enregistrement',
+  //           life: 5000,
+  //         });
+  //       }
+  //     });
+
+  //     const allOk = results.every((res) => res.status === 'fulfilled');
+  //     console.log('resultat : ', results);
+
+  //     if (allOk) {
+  //       toast.current?.show({
+  //         severity: 'success',
+  //         summary: 'Succès',
+  //         detail: 'Tous les mouvements ont été enregistrés',
+  //         life: 3000,
+  //       });
+  //       reset(defaultValues);
+  //     }
+  //     // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  //   } catch (err) {
+  //     toast.current?.show({
+  //       severity: 'error',
+  //       summary: 'Erreur critique',
+  //       detail: 'Une erreur globale est survenue',
+  //       life: 4000,
+  //     });
+  //   }
+  // };
+
   const onSubmit = async (data: FormValues) => {
     try {
       const mouvements = data.produits.map((item) => {
@@ -149,21 +256,17 @@ const Page = () => {
           statut: data.type === 'Entrée',
         };
       });
-      console.log('mouvements => ', mouvements);
 
       const results = await Promise.allSettled(
         mouvements.map((m) =>
           dispatch(
             createMouvementStock({
-              //@ts-ignore
               produit: m.produit,
               quantite: m.quantite,
               montant: m.montant,
-              //@ts-ignore
               type: m.type,
               depotCentral: m.depotCentral,
               pointVente: m.pointVente,
-              //@ts-ignore
               statut: m.statut,
             })
           )
@@ -183,7 +286,6 @@ const Page = () => {
       });
 
       const allOk = results.every((res) => res.status === 'fulfilled');
-      console.log('resultat : ', results);
 
       if (allOk) {
         toast.current?.show({
@@ -192,9 +294,41 @@ const Page = () => {
           detail: 'Tous les mouvements ont été enregistrés',
           life: 3000,
         });
+
+        // ✅ Ouverture du Dialog pour PDF
+        confirmDialog({
+          message: 'Voulez-vous télécharger le document PDF ?',
+          header: 'Téléchargement',
+          icon: 'pi pi-file-pdf',
+          acceptLabel: 'Oui',
+          rejectLabel: 'Non',
+          accept: async () => {
+            const result = await dispatch(
+              generateStockPdf({
+                organisation,
+                user,
+                mouvements,
+                type: data.type,
+                destinateur,
+                serie,
+              })
+            );
+
+            if (generateStockPdf.fulfilled.match(result)) {
+              downloadPdfFile(result.payload, `${data.type}-${serie}.pdf`);
+            } else {
+              toast.current?.show({
+                severity: 'error',
+                summary: 'Erreur PDF',
+                detail: 'Erreur lors de la génération du fichier PDF',
+                life: 4000,
+              });
+            }
+          },
+        });
+
         reset(defaultValues);
       }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (err) {
       toast.current?.show({
         severity: 'error',
@@ -651,6 +785,7 @@ const Page = () => {
           })()}
         </div>
       </div>
+      <ConfirmDialog />
     </div>
   );
 };

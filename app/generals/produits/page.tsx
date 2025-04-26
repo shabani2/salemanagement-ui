@@ -155,6 +155,9 @@ const page = () => {
         prix: selectedProduit.prix || 0,
         prixVente: selectedProduit.prixVente || 0,
         tva: selectedProduit.tva || 0,
+        marge: selectedProduit.marge || 0,
+        unite: selectedProduit.unite || '',
+
         _id: selectedProduit._id, // si tu en as besoin pour l'update
       });
     }
@@ -396,9 +399,7 @@ const page = () => {
           {/* Ligne 2: prix, marge, tva */}
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="block mb-1 text-sm font-medium">
-                Prix d&apos;acquisition/ production
-              </label>
+              <label className="block mb-1 text-sm font-medium">Prix d&apos;acquisition/Prod</label>
               <InputText
                 type="number"
                 value={newProduit.prix}

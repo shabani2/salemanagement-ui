@@ -51,9 +51,20 @@ export const addCategorie = createAsyncThunk(
   'categories/addCategorie',
   async (categorie: Omit<Categorie, '_id'>, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post('/categories', categorie, {
-        headers: getAuthHeaders(),
+      const formData = new FormData();
+      formData.append('nom', categorie.nom);
+      formData.append('type', categorie.type);
+      if (categorie?.image instanceof File) {
+        formData.append('image', categorie.image);
+      }
+
+      const response = await apiClient.post('/categories', formData, {
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'multipart/form-data',
+        },
       });
+
       return response.data;
     } catch (error: unknown) {
       if (error instanceof Error) {

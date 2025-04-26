@@ -68,8 +68,22 @@ export const fetchOrganisations = createAsyncThunk(
 
 export const addOrganisation = createAsyncThunk(
   'organisations/addOrganisation',
-  async (formData: FormData, { rejectWithValue }) => {
+  async (formDataInput: FormData | Record<string, any>, { rejectWithValue }) => {
     try {
+      let formData = new FormData();
+
+      if (!(formDataInput instanceof FormData)) {
+        for (const key in formDataInput) {
+          if (key === 'logo' && formDataInput[key] instanceof File) {
+            formData.append('logo', formDataInput[key]);
+          } else {
+            formData.append(key, formDataInput[key]);
+          }
+        }
+      } else {
+        formData = formDataInput;
+      }
+
       const response = await apiClient.post('/organisations', formData, {
         headers: {
           ...getAuthHeaders(),
@@ -105,10 +119,32 @@ export const deleteOrganisation = createAsyncThunk(
 
 export const updateOrganisation = createAsyncThunk(
   'organisations/updateOrganisation',
-  async ({ id, data }: { id: string; data: any }, { rejectWithValue }) => {
+  async (
+    { id, data }: { id: string; data: Partial<Organisation> & { logo?: File } },
+    { rejectWithValue }
+  ) => {
     try {
-      const response = await apiClient.put(`/organisations/${id}`, data, {
-        headers: getAuthHeaders(),
+      let body: FormData | Partial<Organisation> = data;
+
+      // si nouveau logo (File), alors multipart/form-data
+      const hasFile = data.logo instanceof File;
+      if (hasFile) {
+        const formData = new FormData();
+        for (const key in data) {
+          if (key === 'logo' && data.logo instanceof File) {
+            formData.append('logo', data.logo);
+          } else {
+            formData.append(key, (data as any)[key]);
+          }
+        }
+        body = formData;
+      }
+
+      const response = await apiClient.put(`/organisations/${id}`, body, {
+        headers: {
+          ...getAuthHeaders(),
+          ...(hasFile && { 'Content-Type': 'multipart/form-data' }),
+        },
       });
       return response.data;
     } catch (error: unknown) {

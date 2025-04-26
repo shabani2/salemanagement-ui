@@ -21,6 +21,7 @@ import { Toast } from 'primereact/toast';
 import { registerUser } from '@/stores/slices/auth/authSlice';
 import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 
@@ -34,6 +35,7 @@ const Page = () => {
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [dialogType, setDialogType] = useState<string | null>(null);
+  const [deleteDialogType, setDeleteDialogType] = useState<boolean | null>(null);
   const [first, setFirst] = useState(0);
   const [rows, setRows] = useState(10);
   const [newUser, setNewUser] = useState<UserModel>({
@@ -98,10 +100,13 @@ const Page = () => {
   const handleAction = (action: string, user: any) => {
     setSelectedUser(user);
     setDialogType(action);
+    if (action == 'delete') {
+      setDeleteDialogType(true);
+    }
   };
 
   const showRegionField = newUser.role === 'AdminRegion';
-  const showPointVenteField = newUser.role === 'AdminPointVente';
+  const showPointVenteField = newUser.role === 'AdminPointVente' || newUser.role === 'Vendeur';
 
   const actionBodyTemplate = (rowData: any) => {
     const menuRef = useRef<any>(null);
@@ -247,6 +252,16 @@ const Page = () => {
 
   console.log('users heres => ', users);
 
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (newUser.image) {
+      const url = URL.createObjectURL(newUser.image);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+  }, [newUser.image]);
+
   return (
     <div className="bg-gray-100 h-screen-min">
       <div className="flex items-center justify-between mb-4">
@@ -325,7 +340,6 @@ const Page = () => {
         modal
       >
         <div className="flex flex-col h-full">
-          {/* Scrollable fields */}
           <div className="overflow-y-auto flex-grow px-4 py-2 space-y-4">
             {/* Nom et Prénom */}
             <div className="flex space-x-4">
@@ -337,15 +351,13 @@ const Page = () => {
                   <InputText
                     type="text"
                     placeholder={placeholder}
-                    value={newUser[name as keyof UserModel] as string}
+                    value={newUser[name] as string}
                     onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
                     required
                     className="w-full pr-10"
                   />
                   <i className="pi pi-user absolute right-2 text-gray-500 text-lg flex items-center" />
-                  {errors[name as keyof UserModel] && (
-                    <small className="text-red-500">{errors[name as keyof UserModel]}</small>
-                  )}
+                  {errors[name] && <small className="text-red-500">{errors[name]}</small>}
                 </div>
               ))}
             </div>
@@ -353,18 +365,14 @@ const Page = () => {
             {/* Téléphone et Email */}
             <div className="flex space-x-4">
               {[
-                {
-                  name: 'telephone',
-                  placeholder: 'Téléphone',
-                  icon: 'pi-phone',
-                },
+                { name: 'telephone', placeholder: 'Téléphone', icon: 'pi-phone' },
                 { name: 'email', placeholder: 'Email', icon: 'pi-envelope' },
               ].map(({ name, placeholder, icon }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
                     type="text"
                     placeholder={placeholder}
-                    value={newUser[name as keyof UserModel] as string}
+                    value={newUser[name] as string}
                     onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
                     required
                     className="w-full pr-10"
@@ -372,32 +380,21 @@ const Page = () => {
                   <i
                     className={`pi ${icon} absolute right-2 text-gray-500 text-lg flex items-center`}
                   />
-                  {errors[name as keyof UserModel] && (
-                    <small className="text-red-500">{errors[name as keyof UserModel]}</small>
-                  )}
+                  {errors[name] && <small className="text-red-500">{errors[name]}</small>}
                 </div>
               ))}
             </div>
 
             {/* Adresse et Mot de passe */}
             {[
-              {
-                name: 'adresse',
-                placeholder: 'Adresse',
-                icon: 'pi-map-marker',
-              },
-              {
-                name: 'password',
-                placeholder: 'Mot de passe',
-                icon: 'pi-key',
-                type: 'password',
-              },
+              { name: 'adresse', placeholder: 'Adresse', icon: 'pi-map-marker' },
+              { name: 'password', placeholder: 'Mot de passe', icon: 'pi-key', type: 'password' },
             ].map(({ name, placeholder, icon, type }) => (
               <div key={name} className="relative flex items-center">
                 <InputText
                   type={type || 'text'}
                   placeholder={placeholder}
-                  value={newUser[name as keyof UserModel] as string}
+                  value={newUser[name] as string}
                   onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
                   required
                   className="w-full pr-10"
@@ -405,9 +402,7 @@ const Page = () => {
                 <i
                   className={`pi ${icon} absolute right-2 text-gray-500 text-lg flex items-center`}
                 />
-                {errors[name as keyof UserModel] && (
-                  <small className="text-red-500">{errors[name as keyof UserModel]}</small>
-                )}
+                {errors[name] && <small className="text-red-500">{errors[name]}</small>}
               </div>
             ))}
 
@@ -415,10 +410,7 @@ const Page = () => {
             <div className="mb-2">
               <Dropdown
                 value={newUser.role}
-                options={UserRoleModel.map((role: string) => ({
-                  label: role,
-                  value: role,
-                }))}
+                options={UserRoleModel.map((role) => ({ label: role, value: role }))}
                 placeholder="Sélectionner un rôle"
                 onChange={(e) => setNewUser({ ...newUser, role: e.value })}
                 className="w-full mb-3"
@@ -447,18 +439,27 @@ const Page = () => {
               )}
             </div>
 
-            {/* Upload d'image */}
-            <FileUpload
-              mode="basic"
-              accept="image/*"
-              maxFileSize={1000000}
-              chooseLabel="Choisir une image"
-              onSelect={(e) => setNewUser({ ...newUser, image: e.files[0] })}
-              className="w-full mt-2"
-            />
+            {/* Upload + Preview */}
+            <div className="flex items-center space-x-4">
+              <FileUpload
+                mode="basic"
+                accept="image/*"
+                maxFileSize={1000000}
+                chooseLabel="Choisir une image"
+                onSelect={(e) => setNewUser({ ...newUser, image: e.files[0] })}
+                className="w-full"
+              />
+              {previewUrl && (
+                <img
+                  src={previewUrl}
+                  alt="Preview"
+                  className="w-20 h-20 object-cover rounded shadow"
+                />
+              )}
+            </div>
           </div>
 
-          {/* Fixed Submit Button */}
+          {/* Submit */}
           <div className="p-2 border-t flex justify-end bg-white">
             <Button
               label="Ajouter"
@@ -469,7 +470,6 @@ const Page = () => {
           </div>
         </div>
       </Dialog>
-
       {/* dialog of detail */}
       <Dialog
         visible={dialogType === 'details'}
@@ -742,26 +742,18 @@ const Page = () => {
         </div>
       </Dialog>
       {/* dialog of deletion */}
-      <Dialog
-        visible={dialogType === 'delete'}
-        header="Confirmation de suppression"
-        onHide={() => setDialogType(null)}
-      >
-        <p>Êtes-vous sûr de vouloir supprimer cet utilisateur ?</p>
-        <div className="flex justify-end gap-2 mt-4">
-          <Button
-            label="Annuler"
-            className="bg-gray-400 text-white p-2 rounded"
-            onClick={() => setDialogType(null)}
-          />
-          <Button
-            label="Supprimer"
-            className="bg-red-500 text-white p-2 rounded"
-            onClick={handleDeleteUser}
-            loading={loading}
-          />
-        </div>
-      </Dialog>
+      <ConfirmDeleteDialog
+        visible={deleteDialogType}
+        onHide={() => setDeleteDialogType(false)}
+        onConfirm={(item) => {
+          handleDeleteUser();
+          setDeleteDialogType(false);
+        }}
+        item={selectedUser}
+        objectLabel="l'utilisateur "
+        displayField="nom"
+      />
+
       <Toast ref={toastRef} />
     </div>
   );
