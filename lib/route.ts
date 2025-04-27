@@ -50,9 +50,7 @@ const SuperAdminDashboard = dynamic(() => import('@/app/superAdmin/Dashboard/pag
   ssr: false,
 });
 
-const SuperAdminVentes = dynamic(() => import('@/app/superAdmin/Ventes/page'), {
-  ssr: false,
-});
+
 const SuperAdminStock = dynamic(() => import('@/app/generals/stock/page'), {
   ssr: false,
 });

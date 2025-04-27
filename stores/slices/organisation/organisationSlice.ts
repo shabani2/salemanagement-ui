@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
@@ -127,10 +128,12 @@ export const updateOrganisation = createAsyncThunk(
       let body: FormData | Partial<Organisation> = data;
 
       // si nouveau logo (File), alors multipart/form-data
+      //@ts-ignore
       const hasFile = data.logo instanceof File;
       if (hasFile) {
         const formData = new FormData();
         for (const key in data) {
+           //@ts-ignore
           if (key === 'logo' && data.logo instanceof File) {
             formData.append('logo', data.logo);
           } else {

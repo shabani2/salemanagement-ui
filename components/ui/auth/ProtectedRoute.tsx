@@ -1,5 +1,5 @@
 'use client'; // Assurez-vous que ce fichier est bien un composant client
-// eslint-disable-next-line react-hooks/exhaustive-deps
+ 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 

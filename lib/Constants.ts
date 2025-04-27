@@ -4,8 +4,8 @@ export const organisation = {
   nom: 'Agricap SARL',
   adresse: '123 Rue des Champs, Dakar',
   email: 'contact@agricap.sn',
-  siege: 'Dakar Plateau',
-  pays: 'Sénégal',
+  siege: 'Kinshasa',
+  pays: 'R.D.Congo',
 };
 
 // ✅ Simulation de l'utilisateur connecté

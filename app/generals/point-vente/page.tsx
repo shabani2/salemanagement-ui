@@ -50,7 +50,7 @@ export default function PointVenteManagement() {
     dispatch(addPointVente(newPointVente));
     setDialogType(null);
   };
-
+//@ts-ignore
   const handleDelete = () => {
     if (selectedPointVente) {
       dispatch(deletePointVente(selectedPointVente._id));

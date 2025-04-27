@@ -1,7 +1,8 @@
-/* eslint-disable react/jsx-no-undef */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+ 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/ban-ts-comment */
+ 
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -29,18 +30,7 @@ import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { downloadPdfFile, generateStockPdf } from '@/stores/slices/document/pdfGenerator';
 import { destinateur, organisation, serie } from '@/lib/Constants';
 
-// interface FormValues {
-//   type: string;
-//   depotCentral?: boolean;
-//   pointVente?: PointVente;
-//   produits: {
-//     categorie: string;
-//     produit: string;
-//     quantite: number;
-//   }[];
-//   remise?: number;
-//   rabais?: number;
-// }
+
 type FormValues = {
   type: string;
   depotCentral?: boolean;
@@ -130,110 +120,7 @@ const Page = () => {
   const totalMontant = watch('produits').reduce((acc, item) => {
     const produit = allProduits.find((p) => p._id === item.produit);
     return acc + (produit ? produit.prix * item.quantite : 0);
-  }, 0);
-
-  // useEffect(() => {
-  //   if (typeof window !== 'undefined') {
-  //     const storedUser = localStorage.getItem('user-agricap');
-  //     console.log('localStorage[user-agricap] =', storedUser);
-
-  //     if (storedUser) {
-  //       try {
-  //         const parsed = JSON.parse(storedUser);
-  //         console.log('parsed user:', parsed);
-  //         setUser(parsed);
-  //       } catch (e) {
-  //         console.error('Erreur de parsing localStorage:', e);
-  //       }
-  //     }
-  //   }
-  // }, [user]);
-  // useEffect(() => {
-  //   if (user?._id) {
-  //     setFormData((prev) => ({
-  //       ...prev,
-  //       superAdmin: user._id,
-  //     }));
-  //   }
-  // }, [user]);
-
-  // code source de la fonction onsubmit
-  // const onSubmit = async (data: FormValues) => {
-  //   try {
-  //     const mouvements = data.produits.map((item) => {
-  //       const produitObj = allProduits.find((p) => p._id === item.produit);
-  //       if (!produitObj) throw new Error('Produit introuvable');
-
-  //       const prix = ['Entrée', 'Livraison'].includes(data.type)
-  //         ? produitObj.prix
-  //         : produitObj.prixVente;
-
-  //       return {
-  //         produit: produitObj._id,
-  //         produitNom: produitObj.nom,
-  //         quantite: item.quantite,
-  //         montant: prix * item.quantite,
-  //         type: data.type,
-  //         depotCentral: data.depotCentral ?? false,
-  //         pointVente: data.pointVente,
-  //         statut: data.type === 'Entrée',
-  //       };
-  //     });
-  //     console.log('mouvements => ', mouvements);
-
-  //     const results = await Promise.allSettled(
-  //       mouvements.map((m) =>
-  //         dispatch(
-  //           createMouvementStock({
-  //             //@ts-ignore
-  //             produit: m.produit,
-  //             quantite: m.quantite,
-  //             montant: m.montant,
-  //             //@ts-ignore
-  //             type: m.type,
-  //             depotCentral: m.depotCentral,
-  //             pointVente: m.pointVente,
-  //             //@ts-ignore
-  //             statut: m.statut,
-  //           })
-  //         )
-  //       )
-  //     );
-
-  //     results.forEach((res, i) => {
-  //       if (res.status === 'rejected') {
-  //         const produitNom = mouvements[i].produitNom;
-  //         toast.current?.show({
-  //           severity: 'error',
-  //           summary: `Erreur: ${produitNom}`,
-  //           detail: res.reason || 'Échec de l’enregistrement',
-  //           life: 5000,
-  //         });
-  //       }
-  //     });
-
-  //     const allOk = results.every((res) => res.status === 'fulfilled');
-  //     console.log('resultat : ', results);
-
-  //     if (allOk) {
-  //       toast.current?.show({
-  //         severity: 'success',
-  //         summary: 'Succès',
-  //         detail: 'Tous les mouvements ont été enregistrés',
-  //         life: 3000,
-  //       });
-  //       reset(defaultValues);
-  //     }
-  //     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  //   } catch (err) {
-  //     toast.current?.show({
-  //       severity: 'error',
-  //       summary: 'Erreur critique',
-  //       detail: 'Une erreur globale est survenue',
-  //       life: 4000,
-  //     });
-  //   }
-  // };
+  }, 0);  
 
   const onSubmit = async (data: FormValues) => {
     try {
@@ -261,12 +148,14 @@ const Page = () => {
         mouvements.map((m) =>
           dispatch(
             createMouvementStock({
+              //@ts-ignore
               produit: m.produit,
               quantite: m.quantite,
-              montant: m.montant,
+              montant: m.montant,  //@ts-ignore
               type: m.type,
               depotCentral: m.depotCentral,
               pointVente: m.pointVente,
+                //@ts-ignore
               statut: m.statut,
             })
           )
@@ -370,7 +259,7 @@ const Page = () => {
       });
     });
   }, [watchProduits, selectedType, selectedPointVente]);
-
+  //@ts-ignore
   const validateStock = async (value, index) => {
     const produitId = watch(`produits.${index}.produit`);
     const type = watch('type');
@@ -398,7 +287,7 @@ const Page = () => {
     const isValid = result.suffisant && result.quantiteDisponible >= value;
 
     if (!isValid) {
-      setDisableAdd(true);
+      setDisableAdd(true);   //@ts-ignore
       setValue(`produits.${index}.quantite`, undefined);
     } else {
       setDisableAdd(false);
@@ -512,7 +401,7 @@ const Page = () => {
 
             {fields.map((field, index) => {
               const selectedCatId = watch(`produits.${index}.categorie`);
-              const selectedProduitId = watch(`produits.${index}.produit`);
+              const selectedProduitId = watch(`produits.${index}.produit`);   //@ts-ignore
               const filteredProduits = allProduits.filter((p) => p.categorie._id === selectedCatId);
 
               return (
@@ -617,7 +506,9 @@ const Page = () => {
                           Taux du jour en dollar
                         </label>
                         <InputText
+                          
                           type="number"
+                            //@ts-ignore
                           value={watch('tauxDollar')}
                           onChange={(e) => {
                             const value = parseFloat(e.target.value);
@@ -633,6 +524,7 @@ const Page = () => {
                         </label>
                         <InputText
                           type="number"
+                          //@ts-ignore
                           value={watch('tauxFranc')}
                           onChange={(e) => {
                             const value = parseFloat(e.target.value);

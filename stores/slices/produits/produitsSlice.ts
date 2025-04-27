@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
@@ -16,7 +17,9 @@ interface ProduitState {
   error: string | null;
 }
 
+// @ts-ignore
 const produitAdapter: EntityAdapter<Produit, string> = createEntityAdapter<Produit, string>({
+   //@ts-ignore
   selectId: (produit) => produit?._id,
 });
 

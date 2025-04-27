@@ -4,7 +4,7 @@ import {
   createSlice,
   createAsyncThunk,
   createEntityAdapter,
-  EntityId,
+ 
   EntityAdapter,
 } from '@reduxjs/toolkit';
 import { RootState } from '../../store'; // Assure-toi que RootState est correctement importé

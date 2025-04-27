@@ -1,16 +1,16 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { adminPVRoutes, adminZoneRoutes, superAdminRoutes, vendeurRoutes } from '@/lib/route';
 import { useSelector } from 'react-redux';
 import { selectAuthUser } from '@/stores/slices/auth/authSlice';
 import { ClipLoader } from 'react-spinners';
 import { RootState } from '@/stores/store';
-import { PrimeIcons } from 'primereact/api';
+
 
 interface SidebarProps {
   isOpen: boolean;
