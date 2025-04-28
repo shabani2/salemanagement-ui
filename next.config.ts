@@ -1,7 +1,7 @@
 // next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
- // output: 'export', // Permet de faire next export
+  output: 'export', // Permet de faire next export
   skipExportErrors: true, // Ignore les erreurs bloquantes
   experimental: {
     skipMiddlewareUrlNormalize: true,
