@@ -16,8 +16,10 @@ import {
   fetchRegions,
   selectAllRegions,
 } from '@/stores/slices/regions/regionSlice';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
 export default function RegionManagement() {
+  const [deleteDialogType, setDeleteDialogType] = useState<boolean | null>(null);
   const dispatch = useDispatch<AppDispatch>();
   const regions = useSelector((state: RootState) => selectAllRegions(state));
   const [search, setSearch] = useState('');
@@ -36,7 +38,11 @@ export default function RegionManagement() {
 
   const handleAction = (action: string, rowData: any) => {
     setSelectedRegion(rowData);
-    setDialogType(action);
+    if (action == 'delete') {
+      setDeleteDialogType(true);
+    } else {
+      setDialogType(action);
+    }
   };
 
   const handleCreate = () => {
@@ -59,31 +65,35 @@ export default function RegionManagement() {
     }
   };
 
-  const actionBodyTemplate = (rowData: any) => (
-    <div>
-      <Menu
-        model={[
-          {
-            label: 'Détails',
-            command: () => handleAction('details', rowData),
-          },
-          { label: 'Modifier', command: () => handleAction('edit', rowData) },
-          {
-            label: 'Supprimer',
-            command: () => handleAction('delete', rowData),
-          },
-        ]}
-        popup
-        ref={menuRef}
-      />
-      <Button
-        icon="pi pi-bars"
-        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
-        onClick={(event) => menuRef.current.toggle(event)}
-        aria-haspopup
-      />
-    </div>
-  );
+  const actionBodyTemplate = (rowData: any) => {
+    const menuRef = useRef<any>(null);
+
+    return (
+      <div>
+        <Menu
+          model={[
+            {
+              label: 'Détails',
+              command: () => handleAction('details', rowData),
+            },
+            { label: 'Modifier', command: () => handleAction('edit', rowData) },
+            {
+              label: 'Supprimer',
+              command: () => handleAction('delete', rowData),
+            },
+          ]}
+          popup
+          ref={menuRef}
+        />
+        <Button
+          icon="pi pi-bars"
+          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
+          onClick={(event) => menuRef.current.toggle(event)}
+          aria-haspopup
+        />
+      </div>
+    );
+  };
 
   return (
     <div className="bg-gray-100 min-h-screen ">
@@ -120,12 +130,14 @@ export default function RegionManagement() {
           <DataTable
             value={regions}
             paginator
+            stripedRows
             rows={5}
             className="rounded-lg"
             tableStyle={{ minWidth: '50rem' }}
           >
             <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
             <Column field="nom" header="Nom" sortable />
+            <Column field="pointVenteCount" header="Points de vente" />
             <Column field="ville" header="Ville" sortable />
             <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
           </DataTable>
@@ -165,25 +177,19 @@ export default function RegionManagement() {
           </div>
         </div>
       </Dialog>
-      <Dialog
-        visible={dialogType === 'delete'}
-        header="Confirmation"
-        onHide={() => setDialogType(null)}
-        style={{ width: '30vw' }}
-        modal
-      >
-        <div className="p-4">
-          <p>Voulez-vous vraiment supprimer cette région ?</p>
-          <div className="flex justify-end mt-4 gap-2">
-            <Button
-              label="Annuler"
-              className="p-button-secondary"
-              onClick={() => setDialogType(null)}
-            />
-            <Button label="Supprimer" className="bg-red-500 text-white" onClick={handleDelete} />
-          </div>
-        </div>
-      </Dialog>
+      <ConfirmDeleteDialog
+        // @ts-ignore
+        visible={deleteDialogType}
+        onHide={() => setDeleteDialogType(false)}
+        onConfirm={(item) => {
+          handleDelete();
+          setDeleteDialogType(false);
+        }}
+        item={selectedRegion}
+        objectLabel="la region  "
+        displayField="nom"
+      />
+
       {/* Dialog for Creating Region */}
       <Dialog
         visible={dialogType === 'create'}

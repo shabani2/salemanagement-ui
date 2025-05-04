@@ -19,7 +19,7 @@ interface CategorieState {
 
 // @ts-ignore
 const categorieAdapter: EntityAdapter<Categorie, string> = createEntityAdapter<Categorie, string>({
-   //@ts-ignore
+  //@ts-ignore
   selectId: (categorie) => categorie?._id,
 });
 
@@ -57,7 +57,7 @@ export const addCategorie = createAsyncThunk(
       const formData = new FormData();
       formData.append('nom', categorie.nom);
       formData.append('type', categorie.type);
-       //@ts-ignore
+      //@ts-ignore
       if (categorie?.image instanceof File) {
         formData.append('image', categorie.image);
       }

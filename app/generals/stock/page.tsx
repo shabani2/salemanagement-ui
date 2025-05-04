@@ -131,7 +131,7 @@ const page = () => {
           onPage={onPageChange}
           stripedRows
           className="rounded-lg custom-datatable"
-// @ts-ignore
+          // @ts-ignore
           tableStyle={{ minWidth: '60rem' }}
           // @ts-ignore
           rowClassName={(_, index: number) =>
@@ -147,7 +147,7 @@ const page = () => {
             body={(rowData: Stock) => {
               const categorie = rowData.produit?.categorie;
               if (!categorie) return '—';
-// @ts-ignore
+              // @ts-ignore
               const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
 
               return (
@@ -155,16 +155,20 @@ const page = () => {
                   {
                     // @ts-ignore
                     categorie.image && (
-                    <img
+                      <img
                         src={imageUrl}
                         // @ts-ignore
-                      alt={categorie.nom}
-                      className="w-8 h-8 rounded-full object-cover border border-gray-300"
-                    />
-                  )}
-                  <span>{
-                    // @ts-ignore
-                    categorie.nom}</span>
+                        alt={categorie.nom}
+                        className="w-8 h-8 rounded-full object-cover border border-gray-300"
+                      />
+                    )
+                  }
+                  <span>
+                    {
+                      // @ts-ignore
+                      categorie.nom
+                    }
+                  </span>
                 </div>
               );
             }}

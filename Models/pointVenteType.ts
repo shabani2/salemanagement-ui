@@ -4,7 +4,7 @@ export interface PointVente {
   _id: string;
   nom: string;
   adresse: string;
-  region: Region;
+  region: Region | string;
 }
 
 export interface PointVenteModel {

@@ -32,7 +32,6 @@ import { FileUpload } from 'primereact/fileupload';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
 const page = () => {
-   
   const menuRef = useRef<any>(null);
   const dispatch = useDispatch<AppDispatch>();
   const [produits, setProduits] = useState<Produit[]>([]); //useSelector((state: RootState) => selectAllProduits(state));
@@ -71,7 +70,7 @@ const page = () => {
       setProduits(allProduits); // réinitialise
       return;
     }
-  //@ts-ignore
+    //@ts-ignore
     const filtered = allProduits.filter((p) => p.categorie._id === categorie._id);
 
     setProduits(filtered);
@@ -311,6 +310,7 @@ const page = () => {
             <DataTable
               value={produits}
               paginator
+              stripedRows
               rows={5}
               className="rounded-lg"
               tableStyle={{ minWidth: '70rem' }}
@@ -405,7 +405,7 @@ const page = () => {
               <label className="block mb-1 text-sm font-medium">Prix d&apos;acquisition/Prod</label>
               <InputText
                 type="number"
-                 //@ts-ignore
+                //@ts-ignore
                 value={newProduit.prix}
                 onChange={(e) => handleInputChange('prix', parseFloat(e.target.value) || 0)}
                 className="w-full p-2 border rounded"
@@ -425,7 +425,7 @@ const page = () => {
               <label className="block mb-1 text-sm font-medium">TVA (%)</label>
               <InputText
                 type="number"
-                 //@ts-ignore
+                //@ts-ignore
                 value={newProduit.tva}
                 onChange={(e) => handleInputChange('tva', parseFloat(e.target.value) || 0)}
                 className="w-full p-2 border rounded"
@@ -527,7 +527,7 @@ const page = () => {
                 uploadHandler={() => {}}
                 onSelect={(e) => {
                   const file = e.files?.[0];
-// @ts-ignore
+                  // @ts-ignore
                   if (file) {
                     // @ts-ignore
                     setFormState({ ...formState, image: file });
@@ -541,21 +541,22 @@ const page = () => {
               // @ts-ignore
               formState.image instanceof File ? (
                 // @ts-ignore
-              <img
-                src={URL.createObjectURL(formState.image)}
-                alt="Aperçu sélectionné"
-                className="h-24 w-auto object-contain border rounded"
-              />
-            ) : (
-              actionMade === 'update' &&
-              selectedCategorie?.image && (
                 <img
-                  src={`http://localhost:8000/${selectedCategorie.image}`}
-                  alt="Image actuelle"
+                  src={URL.createObjectURL(formState.image)}
+                  alt="Aperçu sélectionné"
                   className="h-24 w-auto object-contain border rounded"
                 />
+              ) : (
+                actionMade === 'update' &&
+                selectedCategorie?.image && (
+                  <img
+                    src={`http://localhost:8000/${selectedCategorie.image}`}
+                    alt="Image actuelle"
+                    className="h-24 w-auto object-contain border rounded"
+                  />
+                )
               )
-            )}
+            }
           </div>
 
           {/* Bouton Ajouter/Modifier */}

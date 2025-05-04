@@ -133,7 +133,7 @@ export const updateOrganisation = createAsyncThunk(
       if (hasFile) {
         const formData = new FormData();
         for (const key in data) {
-           //@ts-ignore
+          //@ts-ignore
           if (key === 'logo' && data.logo instanceof File) {
             formData.append('logo', data.logo);
           } else {
@@ -189,6 +189,7 @@ const organisationSlice = createSlice({
       .addCase(fetchOrganisations.fulfilled, (state, action) => {
         state.status = 'succeeded';
         organisationAdapter.setAll(state, action.payload);
+        state.currentOrganisation = action.payload[0] || null; // Set the first organisation as current if available
       })
       .addCase(fetchOrganisations.rejected, (state, action) => {
         state.status = 'failed';

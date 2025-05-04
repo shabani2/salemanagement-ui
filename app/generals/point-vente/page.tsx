@@ -50,7 +50,7 @@ export default function PointVenteManagement() {
     dispatch(addPointVente(newPointVente));
     setDialogType(null);
   };
-//@ts-ignore
+  //@ts-ignore
   const handleDelete = () => {
     if (selectedPointVente) {
       dispatch(deletePointVente(selectedPointVente._id));
@@ -126,19 +126,21 @@ export default function PointVenteManagement() {
         <DataTable
           value={pointsVente}
           paginator
+          stripedRows
           rows={5}
           className="rounded-lg"
           tableStyle={{ minWidth: '50rem' }}
         >
           <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
-          <Column field="nom" header="Nom" sortable />
-          <Column field="adresse" header="Adresse" sortable />
           <Column
             field="region"
             header="Région"
             body={(rowData) => rowData.region?.nom || 'N/A'}
             sortable
           />
+          <Column field="nom" header="Nom" sortable />
+          <Column field="adresse" header="Adresse" sortable />
+
           <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
         </DataTable>
       </div>

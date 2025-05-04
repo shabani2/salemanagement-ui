@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
- 
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
- 
+
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -29,7 +29,6 @@ import { User } from '@/Models/UserType';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { downloadPdfFile, generateStockPdf } from '@/stores/slices/document/pdfGenerator';
 import { destinateur, organisation, serie } from '@/lib/Constants';
-
 
 type FormValues = {
   type: string;
@@ -107,8 +106,9 @@ const Page = () => {
   useEffect(() => {
     dispatch(fetchCategories());
     dispatch(fetchProduits()).then((resp) => {
-      setAllProduits(resp.payload);
-      setProduits(resp.payload);
+      const produits = Array.isArray(resp.payload) ? resp.payload : [];
+      setAllProduits(produits);
+      setProduits(produits);
     });
     dispatch(fetchPointVentes());
   }, [dispatch]);
@@ -120,7 +120,7 @@ const Page = () => {
   const totalMontant = watch('produits').reduce((acc, item) => {
     const produit = allProduits.find((p) => p._id === item.produit);
     return acc + (produit ? produit.prix * item.quantite : 0);
-  }, 0);  
+  }, 0);
 
   const onSubmit = async (data: FormValues) => {
     try {
@@ -151,11 +151,11 @@ const Page = () => {
               //@ts-ignore
               produit: m.produit,
               quantite: m.quantite,
-              montant: m.montant,  //@ts-ignore
+              montant: m.montant, //@ts-ignore
               type: m.type,
               depotCentral: m.depotCentral,
               pointVente: m.pointVente,
-                //@ts-ignore
+              //@ts-ignore
               statut: m.statut,
             })
           )
@@ -287,7 +287,7 @@ const Page = () => {
     const isValid = result.suffisant && result.quantiteDisponible >= value;
 
     if (!isValid) {
-      setDisableAdd(true);   //@ts-ignore
+      setDisableAdd(true); //@ts-ignore
       setValue(`produits.${index}.quantite`, undefined);
     } else {
       setDisableAdd(false);
@@ -401,7 +401,7 @@ const Page = () => {
 
             {fields.map((field, index) => {
               const selectedCatId = watch(`produits.${index}.categorie`);
-              const selectedProduitId = watch(`produits.${index}.produit`);   //@ts-ignore
+              const selectedProduitId = watch(`produits.${index}.produit`); //@ts-ignore
               const filteredProduits = allProduits.filter((p) => p.categorie._id === selectedCatId);
 
               return (
@@ -506,14 +506,19 @@ const Page = () => {
                           Taux du jour en dollar
                         </label>
                         <InputText
-                          
                           type="number"
-                            //@ts-ignore
-                          value={watch('tauxDollar')}
+                          // @ts-ignore
+                          value={watch('tauxDollar') ?? ''}
                           onChange={(e) => {
                             const value = parseFloat(e.target.value);
-                            setValue('tauxDollar', value);
-                            localStorage.setItem('tauxDollar', value.toString());
+                            if (!isNaN(value)) {
+                              setValue('tauxDollar', value);
+                              localStorage.setItem('tauxDollar', value.toString());
+                            } else {
+                              // @ts-ignore
+                              setValue('tauxDollar', '');
+                              localStorage.removeItem('tauxDollar');
+                            }
                           }}
                           className="w-full"
                         />
@@ -522,14 +527,21 @@ const Page = () => {
                         <label className="block text-sm font-medium text-gray-700">
                           Taux en franc
                         </label>
+// @ts-ignore
                         <InputText
                           type="number"
-                          //@ts-ignore
-                          value={watch('tauxFranc')}
+                          // @ts-ignore
+                          value={watch('tauxFranc') ?? ''}
                           onChange={(e) => {
                             const value = parseFloat(e.target.value);
-                            setValue('tauxFranc', value);
-                            localStorage.setItem('tauxFranc', value.toString());
+                            if (!isNaN(value)) {
+                              setValue('tauxFranc', value);
+                              localStorage.setItem('tauxFranc', value.toString());
+                            } else {
+                              // @ts-ignore
+                              setValue('tauxFranc', '');
+                              localStorage.removeItem('tauxFranc');
+                            }
                           }}
                           className="w-full"
                         />

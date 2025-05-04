@@ -1,14 +1,12 @@
-/* Path: components/layout/Sidebar.tsx */
-'use client';
-
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { adminPVRoutes, adminZoneRoutes, superAdminRoutes, vendeurRoutes } from '@/lib/route';
 import { useSelector } from 'react-redux';
 import { selectAuthUser } from '@/stores/slices/auth/authSlice';
 import { RootState } from '@/stores/store';
+import { filterRoutesByRole } from '@/lib/roleFilter';
+import { selectCurrentOrganisation } from '@/stores/slices/organisation/organisationSlice';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -21,25 +19,11 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
   const router = useRouter();
   const authUser = useSelector((state: RootState) => selectAuthUser(state));
   const [menuItems, setMenuItems] = useState<any[]>([]);
+  const org = useSelector((state: RootState) => selectCurrentOrganisation(state));
 
   useEffect(() => {
     if (authUser?.role) {
-      switch (authUser.role.toLowerCase()) {
-        case 'vendeur':
-          setMenuItems(vendeurRoutes);
-          break;
-        case 'adminpv':
-          setMenuItems(adminPVRoutes);
-          break;
-        case 'adminzone':
-          setMenuItems(adminZoneRoutes);
-          break;
-        case 'superadmin':
-          setMenuItems(superAdminRoutes);
-          break;
-        default:
-          setMenuItems([]);
-      }
+      setMenuItems(filterRoutesByRole(authUser.role));
     }
   }, [authUser]);
 
@@ -60,6 +44,15 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
     >
       <div className="flex justify-between items-center p-4 border-b border-gray-700">
         <span className="text-lg font-bold">AgriCap</span>
+// @ts-ignore
+        <img
+          // @ts-ignore
+          src={org && `http://localhost:8000/${org?.logo.replace('../', '')}`}
+          width={64}
+          height={64}
+          className="rounded-full cursor-pointer"
+          alt="User"
+        />
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X className="w-5 h-5" />
         </Button>

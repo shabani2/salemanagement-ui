@@ -1,5 +1,5 @@
 'use client'; // Assurez-vous que ce fichier est bien un composant client
- 
+
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 

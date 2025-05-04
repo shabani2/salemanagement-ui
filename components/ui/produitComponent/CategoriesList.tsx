@@ -66,7 +66,7 @@ const CategorieList: React.FC<Props> = ({ categories, filterProduitByCategorie, 
           >
             <div className="flex items-center gap-4">
               <InputSwitch
-                  //@ts-ignore
+                //@ts-ignore
                 checked={!!activeSwitches[categorie._id]}
                 onChange={() => handleSwitchChange(categorie)}
               />
@@ -75,8 +75,9 @@ const CategorieList: React.FC<Props> = ({ categories, filterProduitByCategorie, 
                 {categorie.image && (
                   <img
                     src={
-                        //@ts-ignore
-                      `http://localhost:8000/${categorie.image.replace('../', '')}`}
+                      //@ts-ignore
+                      `http://localhost:8000/${categorie.image.replace('../', '')}`
+                    }
                     alt={categorie.nom}
                     className="object-cover w-full h-full"
                   />
@@ -90,7 +91,7 @@ const CategorieList: React.FC<Props> = ({ categories, filterProduitByCategorie, 
               model={menuItems}
               popup
               ref={(el) => {
-                  //@ts-ignore
+                //@ts-ignore
                 menuRefs.current[categorie?._id] = el;
               }}
             />
@@ -99,8 +100,9 @@ const CategorieList: React.FC<Props> = ({ categories, filterProduitByCategorie, 
               icon="pi pi-ellipsis-h"
               className="p-button-text"
               onClick={(e) =>
-                  //@ts-ignore
-                menuRefs.current[categorie._id]?.toggle?.(e)}
+                //@ts-ignore
+                menuRefs.current[categorie._id]?.toggle?.(e)
+              }
             />
           </div>
         );

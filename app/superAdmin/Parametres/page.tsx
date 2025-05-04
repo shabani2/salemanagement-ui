@@ -66,32 +66,20 @@ const page = () => {
   useEffect(() => {
     if (org) {
       setFormData(
-      // @ts-ignore
+        // @ts-ignore
         {
-        nom: org.nom,
-        rccm: org.rccm,
-        contact: org.contact,
-        siegeSocial: org.siegeSocial,
-        devise: org.devise,
-        pays: org.pays,
-        emailEntreprise: org.emailEntreprise,
-        logo: org.logo || null,
-      });
+          nom: org.nom,
+          rccm: org.rccm,
+          contact: org.contact,
+          siegeSocial: org.siegeSocial,
+          devise: org.devise,
+          pays: org.pays,
+          emailEntreprise: org.emailEntreprise,
+          logo: org.logo || null,
+        }
+      );
     }
   }, [org]);
-
-  // const handleSubmit = async () => {
-  //   const data = new FormData();
-  //   Object.entries(formData).forEach(([key, value]) => {
-  //     if (value) data.append(key, value);
-  //   });
-
-  //   if (org?._id) {
-  //     dispatch(updateOrganisation({ id: org._id, data }));
-  //   } else {
-  //     dispatch(addOrganisation(data));
-  //   }
-  // };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -116,10 +104,14 @@ const page = () => {
 
     try {
       if (org?._id) {
-        await dispatch(updateOrganisation({
-          // @ts-ignore
-          id: org._id, data
-        })).unwrap();
+        await dispatch(
+          updateOrganisation({
+            // @ts-ignore
+            id: org._id,
+            // @ts-ignore
+            data,
+          })
+        ).unwrap();
         // @ts-ignore
         toast.current?.show({
           severity: 'success',
@@ -149,7 +141,7 @@ const page = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 space-y-6">
       <Toast ref={toast} />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

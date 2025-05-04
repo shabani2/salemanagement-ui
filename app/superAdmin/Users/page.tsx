@@ -15,7 +15,7 @@ import { BreadCrumb } from 'primereact/breadcrumb';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
 import { deleteUser, fetchUsers, updateUser } from '@/stores/slices/users/userSlice';
-import { User, UserModel } from '@/Models/UserType';
+import { isPointVente, isRegion, User, UserModel } from '@/Models/UserType';
 import { Menu } from 'primereact/menu';
 import { UserRoleModel } from '@/lib/utils';
 import { FileUpload } from 'primereact/fileupload';
@@ -25,10 +25,12 @@ import { registerUser } from '@/stores/slices/auth/authSlice';
 import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import UserDialog from '@/components/ui/produitComponent/userComponent/UserDialog';
 
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 
 const Page = () => {
+  const [loadingCreateOrUpdate, setLoadingCreateOrUpdate] = useState(false);
   const toastRef = useRef<Toast>(null);
   const [users, setUsers] = useState<User[] | null[]>([]); //useSelector((state: RootState) => selectAllUsers(state));
   const [loading, setLoading] = useState(false);
@@ -102,14 +104,13 @@ const Page = () => {
 
   const handleAction = (action: string, user: any) => {
     setSelectedUser(user);
-    setDialogType(action);
+
     if (action == 'delete') {
       setDeleteDialogType(true);
+    } else {
+      setDialogType(action);
     }
   };
-
-  const showRegionField = newUser.role === 'AdminRegion';
-  const showPointVenteField = newUser.role === 'AdminPointVente' || newUser.role === 'Vendeur';
 
   const actionBodyTemplate = (rowData: any) => {
     const menuRef = useRef<any>(null);
@@ -157,32 +158,15 @@ const Page = () => {
     }
     setLoading(false);
   };
-  const handleUpdate = async () => {
-    if (!selectedUser) return;
-    setLoading(true);
-    try {
-      //await apiClient.delete(`/users/${selectedUser._id}`);
-      dispatch(updateUser(selectedUser)).then(() => {
-        dispatch(fetchUsers()).then((resp) => {
-          toastRef.current?.show({
-            severity: 'success',
-            summary: 'Succès',
-            detail: 'Utilisateur ajouté avec succès !',
-            life: 3000,
-          });
-          setUsers(resp.payload);
-        });
-      });
-      setDialogType(null);
-    } catch (error) {
-      console.error("Erreur lors de la suppression de l'utilisateur", error);
-    }
-    setLoading(false);
-  };
+ 
 
   const home = { icon: 'pi pi-home', url: '/' };
-  const handleCreate = async () => {
-    if (!newUser.nom || !newUser.prenom || !newUser.email || !newUser.password) {
+ 
+
+  const handleCreateOrUpdate = async () => {
+    const isEditMode = !!newUser._id;
+
+    if (!newUser.nom || !newUser.prenom || !newUser.email || (!isEditMode && !newUser.password)) {
       setErrors({
         ...errors,
         // @ts-ignore
@@ -191,61 +175,88 @@ const Page = () => {
       return;
     }
 
-    try {
-      setLoadingCreate(true);
-
-      const formData = new FormData();
-      if (newUser?._id) {
-        formData.append('_id', newUser?._id.toString()); // Cast en string si nécessaire
-      }
-      formData.append('nom', newUser.nom);
-      formData.append('prenom', newUser.prenom);
-      formData.append('telephone', newUser.telephone);
-      formData.append('email', newUser.email);
-      formData.append('adresse', newUser.adresse);
-      formData.append('password', newUser.password);
-      formData.append('role', newUser.role);
-
-      if (newUser.region) {
-        formData.append('region', newUser.region);
-      }
-      if (newUser.pointVente) {
-        formData.append('pointVente', newUser.pointVente);
-      }
-      if (newUser.image instanceof File) {
-        formData.append('image', newUser.image);
-      }
-
-      await dispatch(registerUser(formData)).then(async (response) => {
-        await dispatch(fetchUsers()).then((resp) => {
-          toastRef.current?.show({
-            severity: 'success',
-            summary: 'Succès',
-            detail: 'Utilisateur ajouté avec succès !',
-            life: 3000,
+    if (isEditMode) {
+      setLoading(true);
+      try {
+        // @ts-ignore
+        dispatch(updateUser(newUser)).then(() => {
+          dispatch(fetchUsers()).then((resp) => {
+            toastRef.current?.show({
+              severity: 'success',
+              summary: 'Succès',
+              detail: 'Utilisateur ajouté avec succès !',
+              life: 3000,
+            });
+            setUsers(resp.payload);
           });
-          setUsers(resp.payload);
         });
-        console.log('user created : ', response.payload);
-      });
-
-      setDialogType(null);
-      setNewUser(initialUserState);
-    } catch (error) {
-      console.error("Erreur lors de la création de l'utilisateur :", error);
-      if (error instanceof Error) {
-        toastRef.current?.show({
-          severity: 'error',
-          summary: 'Erreur',
-          detail: error.message || "Échec de l'inscription",
-          life: 1000,
-        });
+        setDialogType(null);
+      } catch (error) {
+        console.error("Erreur lors de la suppression de l'utilisateur", error);
       }
-      setDialogType(null);
-      setNewUser(initialUserState);
-    } finally {
-      setLoadingCreate(false);
-      setNewUser(initialUserState);
+      setLoading(false);
+    } else {
+      try {
+        setLoadingCreate(true);
+
+        const formData = new FormData();
+        if (newUser?._id) {
+          formData.append('_id', newUser?._id.toString());
+        }
+        formData.append('nom', newUser.nom);
+        formData.append('prenom', newUser.prenom);
+        formData.append('telephone', newUser.telephone);
+        formData.append('email', newUser.email);
+        formData.append('adresse', newUser.adresse);
+        formData.append('password', newUser.password);
+        formData.append('role', newUser.role);
+
+        if (newUser.region) {
+          formData.append('region', isRegion(newUser.region) ? newUser.region._id : newUser.region);
+        }
+
+        if (newUser.pointVente) {
+          formData.append(
+            'pointVente',
+            isPointVente(newUser.pointVente) ? newUser.pointVente._id : newUser.pointVente
+          );
+        }
+
+        if (newUser.image instanceof File) {
+          formData.append('image', newUser.image);
+        }
+
+        await dispatch(registerUser(formData)).then(async (response) => {
+          await dispatch(fetchUsers()).then((resp) => {
+            toastRef.current?.show({
+              severity: 'success',
+              summary: 'Succès',
+              detail: 'Utilisateur ajouté avec succès !',
+              life: 3000,
+            });
+            setUsers(resp.payload);
+          });
+          console.log('user created : ', response.payload);
+        });
+
+        setDialogType(null);
+        setNewUser(initialUserState);
+      } catch (error) {
+        console.error("Erreur lors de la création de l'utilisateur :", error);
+        if (error instanceof Error) {
+          toastRef.current?.show({
+            severity: 'error',
+            summary: 'Erreur',
+            detail: error.message || "Échec de l'inscription",
+            life: 1000,
+          });
+        }
+        setDialogType(null);
+        setNewUser(initialUserState);
+      } finally {
+        setLoadingCreate(false);
+        setNewUser(initialUserState);
+      }
     }
   };
 
@@ -254,18 +265,26 @@ const Page = () => {
     dispatch(fetchRegions());
   }, [dispatch]);
 
-  console.log('users heres => ', users);
-
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (newUser.image) {
-      // @ts-ignore
+    if (newUser.image instanceof File) {
       const url = URL.createObjectURL(newUser.image);
       setPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
+
+      return () => URL.revokeObjectURL(url); // libère l'URL temporaire
+    } else if (typeof newUser.image === 'string') {
+      setPreviewUrl(newUser.image); // mode edit : image déjà hébergée
+    } else {
+      setPreviewUrl(''); // aucun fichier ou URL
     }
   }, [newUser.image]);
+
+  useEffect(() => {
+    if (dialogType === 'edit' && selectedUser) {
+      setNewUser(selectedUser);
+    }
+  }, [dialogType, selectedUser]);
 
   return (
     <div className="bg-gray-100 h-screen-min">
@@ -317,6 +336,22 @@ const Page = () => {
           >
             <Column field="_id" header="#" body={(_data, options) => options.rowIndex + 1} />
             <Column
+              field="region.nom"
+              header="Region"
+              filter
+              body={(rowData) =>
+                rowData?.region?.nom || rowData?.pointVente?.region.nom || 'Depot Central'
+              }
+              className="px-4 py-1"
+            />
+            <Column
+              field="pointVente.nom"
+              header="point vente"
+              filter
+              body={(rowData) => rowData?.pointVente?.nom || 'Depot Central'}
+              className="px-4 py-1"
+            />
+            <Column
               header="Avatar"
               body={(data) => (
                 <img
@@ -329,436 +364,34 @@ const Page = () => {
             <Column field="nom" header="Nom" sortable filter className="px-4 py-1" />
             <Column field="prenom" header="Prénom" sortable filter className="px-4 py-1" />
             <Column field="email" header="Email" sortable filter className="px-4 py-1" />
-            <Column field="telephone" header="Téléphone" sortable filter className="px-4 py-1" />
-            <Column field="role" header="Rôle" sortable filter className="px-4 py-1" />
+            <Column field="telephone" header="Téléphone" className="px-4 py-1" />
+            <Column field="role" header="Rôle" className="px-4 py-1" />
             <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
           </DataTable>
         </div>
       </div>
 
-      {/* Dialogs of create */}
-      <Dialog
-        visible={dialogType === 'create'}
-        header="Ajouter un utilisateur"
-        onHide={() => setDialogType(null)}
-        style={{ width: '50vw', height: '70vh' }}
-        modal
-      >
-        <div className="flex flex-col h-full">
-          <div className="overflow-y-auto flex-grow px-4 py-2 space-y-4">
-            {/* Nom et Prénom */}
-            <div className="flex space-x-4">
-              {[
-                { name: 'nom', placeholder: 'Nom' },
-                { name: 'prenom', placeholder: 'Prénom' },
-              ].map(({ name, placeholder }) => (
-                <div key={name} className="relative w-1/2 flex items-center">
-                  <InputText
-                    type="text"
-                    placeholder={placeholder}
-                    // @ts-ignore
-                    value={newUser[name] as string}
-                    onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
-                    required
-                    className="w-full pr-10"
-                  />
-                  <i className="pi pi-user absolute right-2 text-gray-500 text-lg flex items-center" />
-                  {// @ts-ignore
-                    errors[name] && <small className="text-red-500">{errors[name]}</small>}
-                </div>
-              ))}
-            </div>
 
-            {/* Téléphone et Email */}
-            <div className="flex space-x-4">
-              {[
-                { name: 'telephone', placeholder: 'Téléphone', icon: 'pi-phone' },
-                { name: 'email', placeholder: 'Email', icon: 'pi-envelope' },
-              ].map(({ name, placeholder, icon }) => (
-                <div key={name} className="relative w-1/2 flex items-center">
-                  <InputText
-                    type="text"
-                    placeholder={placeholder}
-                    // @ts-ignore
-                    value={newUser[name] as string}
-                    onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
-                    required
-                    className="w-full pr-10"
-                  />
-                  <i
-                    className={`pi ${icon} absolute right-2 text-gray-500 text-lg flex items-center`}
-                  />
-                  {
-                  // @ts-ignore
-                    errors[name] && <small className="text-red-500">{errors[name]}</small>}
-                </div>
-              ))}
-            </div>
-
-            {/* Adresse et Mot de passe */}
-            {[
-              { name: 'adresse', placeholder: 'Adresse', icon: 'pi-map-marker' },
-              { name: 'password', placeholder: 'Mot de passe', icon: 'pi-key', type: 'password' },
-            ].map(({ name, placeholder, icon, type }) => (
-              <div key={name} className="relative flex items-center">
-                <InputText
-                  type={type || 'text'}
-                  placeholder={placeholder}
-                  // @ts-ignore
-                  value={newUser[name] as string}
-                  onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
-                  required
-                  className="w-full pr-10"
-                />
-                <i
-                  className={`pi ${icon} absolute right-2 text-gray-500 text-lg flex items-center`}
-                />
-               
-                {
-                  // @ts-ignore
-                  errors[name] && <small className="text-red-500">{errors[name]}</small>}
-              </div>
-            ))}
-
-            {/* Rôle */}
-            <div className="mb-2">
-              <Dropdown
-                value={newUser.role}
-                options={UserRoleModel.map((role) => ({ label: role, value: role }))}
-                placeholder="Sélectionner un rôle"
-                onChange={(e) => setNewUser({ ...newUser, role: e.value })}
-                className="w-full mb-3"
-              />
-              {showRegionField && (
-                <Dropdown
-                  value={newUser.region}
-                  options={regions}
-                  onChange={(e) => setNewUser({ ...newUser, region: e.value })}
-                  optionLabel="nom"
-                  optionValue="_id"
-                  placeholder="Sélectionnez une région"
-                  className="w-full"
-                />
-              )}
-              {showPointVenteField && (
-                <Dropdown
-                  value={newUser.pointVente}
-                  options={pointsVente}
-                  onChange={(e) => setNewUser({ ...newUser, pointVente: e.value })}
-                  optionLabel="nom"
-                  optionValue="_id"
-                  placeholder="Sélectionnez un point de vente"
-                  className="w-full"
-                />
-              )}
-            </div>
-
-            {/* Upload + Preview */}
-            <div className="flex items-center space-x-4">
-              <FileUpload
-                mode="basic"
-                accept="image/*"
-                maxFileSize={1000000}
-                chooseLabel="Choisir une image"
-                onSelect={(e) => setNewUser({ ...newUser, image: e.files[0] })}
-                className="w-full"
-              />
-              {previewUrl && (
-                <img
-                  src={previewUrl}
-                  alt="Preview"
-                  className="w-20 h-20 object-cover rounded shadow"
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Submit */}
-          <div className="p-2 border-t flex justify-end bg-white">
-            <Button
-              label="Ajouter"
-              className="bg-green-500 text-white"
-              onClick={handleCreate}
-              loading={loadingCreate}
-            />
-          </div>
-        </div>
-      </Dialog>
-      {/* dialog of detail */}
-      <Dialog
-        visible={dialogType === 'details'}
-        header="Détails de l’utilisateur"
-        onHide={() => setDialogType(null)}
-        style={{ width: '50vw', height: '70vh' }}
-        modal
-      >
-        <div className="flex flex-col h-full">
-          {/* Scrollable fields */}
-          <div className="overflow-y-auto flex-grow px-4 py-2 space-y-4">
-            {/* Nom et Prénom */}
-            <div className="flex space-x-4">
-              {[
-                { name: 'nom', placeholder: 'Nom' },
-                { name: 'prenom', placeholder: 'Prénom' },
-              ].map(({ name, placeholder }) => (
-                <div key={name} className="relative w-1/2 flex items-center">
-                  <InputText
-                    type="text"
-                    placeholder={placeholder}
-                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
-                    onChange={(e) =>
-                      setSelectedUser(
-                        selectedUser && {
-                          ...selectedUser,
-                          [name]: e.target.value,
-                        }
-                      )
-                    }
-                    required
-                    className="w-full pr-10"
-                  />
-                  <i className="pi pi-user absolute right-2 text-gray-500 text-lg flex items-center" />
-                </div>
-              ))}
-            </div>
-
-            {/* Téléphone et Email */}
-            <div className="flex space-x-4">
-              {[
-                {
-                  name: 'telephone',
-                  placeholder: 'Téléphone',
-                  icon: 'pi-phone',
-                },
-                { name: 'email', placeholder: 'Email', icon: 'pi-envelope' },
-              ].map(({ name, placeholder, icon }) => (
-                <div key={name} className="relative w-1/2 flex items-center">
-                  <InputText
-                    type="text"
-                    placeholder={placeholder}
-                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
-                    onChange={(e) =>
-                      setSelectedUser(
-                        selectedUser && {
-                          ...selectedUser,
-                          [name]: e.target.value,
-                        }
-                      )
-                    }
-                    required
-                    className="w-full pr-10"
-                  />
-                  <i
-                    className={`pi ${icon} absolute right-2 text-gray-500 text-lg flex items-center`}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {/* Adresse */}
-            <div className="relative flex items-center">
-              <InputText
-                type="text"
-                placeholder="Adresse"
-                value={selectedUser?.adresse}
-                onChange={(e) =>
-                  setSelectedUser(
-                    selectedUser && {
-                      ...selectedUser,
-                      adresse: e.target.value,
-                    }
-                  )
-                }
-                required
-                className="w-full pr-10"
-              />
-              <i className="pi pi-map-marker absolute right-2 text-gray-500 text-lg flex items-center" />
-            </div>
-
-            {/* Rôle */}
-            <div className="mb-2">
-              <Dropdown
-                value={selectedUser?.role}
-                options={UserRoleModel.map((role: string) => ({
-                  label: role,
-                  value: role,
-                }))}
-                placeholder="Sélectionner un rôle"
-                onChange={(e) =>
-                  setSelectedUser(selectedUser && { ...selectedUser, role: e.value })
-                }
-                className="w-full mb-3"
-              />
-            </div>
-
-            {/* Upload d'image */}
-            <FileUpload
-              mode="basic"
-              accept="image/*"
-              maxFileSize={1000000}
-              chooseLabel="Choisir une image"
-              onSelect={(e) => {
-                const file = e.files[0];
-                if (file) {
-                  const fileUrl = URL.createObjectURL(file); // Génère une URL temporaire
-                  setSelectedUser(selectedUser && { ...selectedUser, image: fileUrl });
-                }
-              }}
-              className="w-full mt-2"
-            />
-          </div>
-
-          {/* Fixed Update Button */}
-          <div className="p-2 border-t flex justify-end bg-white">
-            <Button
-              label="Mettre à jour"
-              className="bg-blue-500 text-white"
-              onClick={handleUpdate}
-              loading={loading}
-            />
-          </div>
-        </div>
-      </Dialog>
-
-      {/* dialog of Edit */}
-      <Dialog
-        visible={dialogType === 'edit'}
-        header="Modifier l’utilisateur"
-        onHide={() => setDialogType(null)}
-        style={{ width: '50vw', height: '70vh' }}
-        modal
-      >
-        <div className="flex flex-col h-full">
-          {/* Scrollable fields */}
-          <div className="overflow-y-auto flex-grow px-4 py-2 space-y-4">
-            {/* Nom et Prénom */}
-            <div className="flex space-x-4">
-              {[
-                { name: 'nom', placeholder: 'Nom' },
-                { name: 'prenom', placeholder: 'Prénom' },
-              ].map(({ name, placeholder }) => (
-                <div key={name} className="relative w-1/2 flex items-center">
-                  <InputText
-                    type="text"
-                    placeholder={placeholder}
-                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
-                    onChange={(e) =>
-                      setSelectedUser(
-                        selectedUser && {
-                          ...selectedUser,
-                          [name]: e.target.value,
-                        }
-                      )
-                    }
-                    required
-                    className="w-full pr-10"
-                  />
-                  <i className="pi pi-user absolute right-2 text-gray-500 text-lg flex items-center" />
-                </div>
-              ))}
-            </div>
-
-            {/* Téléphone et Email */}
-            <div className="flex space-x-4">
-              {[
-                {
-                  name: 'telephone',
-                  placeholder: 'Téléphone',
-                  icon: 'pi-phone',
-                },
-                { name: 'email', placeholder: 'Email', icon: 'pi-envelope' },
-              ].map(({ name, placeholder, icon }) => (
-                <div key={name} className="relative w-1/2 flex items-center">
-                  <InputText
-                    type="text"
-                    placeholder={placeholder}
-                    value={selectedUser && (selectedUser[name as keyof UserModel] as string)}
-                    onChange={(e) =>
-                      setSelectedUser(
-                        selectedUser && {
-                          ...selectedUser,
-                          [name]: e.target.value,
-                        }
-                      )
-                    }
-                    required
-                    className="w-full pr-10"
-                  />
-                  <i
-                    className={`pi ${icon} absolute right-2 text-gray-500 text-lg flex items-center`}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {/* Adresse */}
-            <div className="relative flex items-center">
-              <InputText
-                type="text"
-                placeholder="Adresse"
-                value={selectedUser?.adresse}
-                onChange={(e) =>
-                  setSelectedUser(
-                    selectedUser && {
-                      ...selectedUser,
-                      adresse: e.target.value,
-                    }
-                  )
-                }
-                required
-                className="w-full pr-10"
-              />
-              <i className="pi pi-map-marker absolute right-2 text-gray-500 text-lg flex items-center" />
-            </div>
-
-            {/* Rôle */}
-            <div className="mb-2">
-              <Dropdown
-                value={selectedUser?.role}
-                options={UserRoleModel.map((role: string) => ({
-                  label: role,
-                  value: role,
-                }))}
-                placeholder="Sélectionner un rôle"
-                onChange={(e) =>
-                  setSelectedUser(selectedUser && { ...selectedUser, role: e.value })
-                }
-                className="w-full mb-3"
-              />
-            </div>
-
-            {/* Upload d'image */}
-            <FileUpload
-              mode="basic"
-              accept="image/*"
-              maxFileSize={1000000}
-              chooseLabel="Choisir une image"
-              onSelect={(e) => {
-                const file = e.files[0];
-                if (file) {
-                  const fileUrl = URL.createObjectURL(file); // Génère une URL temporaire
-                  setSelectedUser(selectedUser && { ...selectedUser, image: fileUrl });
-                }
-              }}
-              className="w-full mt-2"
-            />
-          </div>
-
-          {/* Fixed Update Button */}
-          <div className="p-2 border-t flex justify-end bg-white">
-            <Button
-              label="Mettre à jour"
-              className="bg-blue-500 text-white"
-              onClick={handleUpdate}
-              loading={loading}
-            />
-          </div>
-        </div>
-      </Dialog>
+      <UserDialog
+        // @ts-ignore
+        dialogType={dialogType}
+        setDialogType={setDialogType}
+        newUser={newUser}
+        setNewUser={setNewUser}
+        errors={errors}
+        showRegionField={true}
+        showPointVenteField={true}
+        UserRoleModel={['Admin', 'Manager', 'Vendeur']} // ou depuis un model
+        regions={regions}
+        pointsVente={pointsVente}
+        previewUrl={previewUrl}
+        handleCreateOrUpdate={handleCreateOrUpdate}
+        loadingCreateOrUpdate={loadingCreateOrUpdate}
+      />
       {/* dialog of deletion */}
 
       <ConfirmDeleteDialog
-      // @ts-ignore
+        // @ts-ignore
         visible={deleteDialogType}
         onHide={() => setDeleteDialogType(false)}
         onConfirm={(item) => {

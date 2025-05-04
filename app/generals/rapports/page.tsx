@@ -48,7 +48,6 @@ const page = () => {
     setRows(event.rows);
   };
 
-   
   const handleAction = (action: string, rowData: MouvementStock) => {
     setSelectedMvt(rowData);
     console.log('selected row data : ', rowData);
@@ -146,7 +145,7 @@ const page = () => {
           first={first}
           onPage={onPageChange}
           className="rounded-lg custom-datatable"
-// @ts-ignore
+          // @ts-ignore
           tableStyle={{ minWidth: '60rem' }}
           // @ts-ignore
           rowClassName={(_, index: number) =>
@@ -169,17 +168,22 @@ const page = () => {
                   {
                     // @ts-ignore
                     categorie.image && (
-                    <img
-                      src={imageUrl}
+                      <img
+                        src={imageUrl}
                         alt={
                           // @ts-ignore
-                          categorie.nom}
-                      className="w-8 h-8 rounded-full object-cover border border-gray-300"
-                    />
-                  )}
-                  <span>{
-                    // @ts-ignore
-                    categorie.nom}</span>
+                          categorie.nom
+                        }
+                        className="w-8 h-8 rounded-full object-cover border border-gray-300"
+                      />
+                    )
+                  }
+                  <span>
+                    {
+                      // @ts-ignore
+                      categorie.nom
+                    }
+                  </span>
                 </div>
               );
             }}
