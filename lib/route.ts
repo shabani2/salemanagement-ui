@@ -33,7 +33,7 @@ export const Routes = [
     path: '/generals/categories',
     title: 'Catégories',
     icon: PrimeIcons.LIST,
-   
+
     component: Categories,
   },
   {
@@ -41,7 +41,7 @@ export const Routes = [
     title: 'Produits',
     icon: PrimeIcons.TAG,
     component: Produit,
-  }, 
+  },
   {
     path: '/generals/operations',
     title: 'Opérations',

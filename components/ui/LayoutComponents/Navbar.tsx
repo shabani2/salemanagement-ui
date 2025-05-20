@@ -13,7 +13,7 @@ import { Menu } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '@/stores/store';
 import { logoutUser } from '@/stores/slices/auth/authSlice';
-import { useRouter, usePathname } from 'next/navigation';
+import {  usePathname } from 'next/navigation';
 import { User, isRegion, isPointVente } from '../../../Models/UserType';
 import { isUserRole } from '@/lib/utils';
 
@@ -30,7 +30,7 @@ interface NavbarProps {
 
 export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
   const dispatch = useDispatch<AppDispatch>();
-  const router = useRouter();
+
   const pathname = usePathname();
 
   const [user, setUser] = useState<User | null>(null);
@@ -83,7 +83,7 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
 
   return (
     <nav
-      className={`fixed top-0 bg-white shadow flex justify-between items-center p-4 z-50 transition-all duration-300`}
+      className={`fixed top-0 !bg-green-700 text-gray-100 shadow flex justify-between items-center p-4 z-50 transition-all duration-300`}
       style={{
         left: isOpen ? '16rem' : '0',
         width: isOpen ? 'calc(100% - 16rem)' : '100%',
@@ -94,6 +94,7 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
           variant="ghost"
           size="icon"
           onClick={onMenuClick}
+         
           className="mr-2 outline-none cursor-pointer"
         >
           <Menu className="w-6 h-6 cursor-pointer" />

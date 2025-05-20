@@ -149,7 +149,7 @@ const page = () => {
           model={[{ label: 'Accueil', url: '/' }, { label: 'Organisation' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
         />
-        <h2 className="text-2xl font-bold">Organisation</h2>
+        <h2 className="text-2xl font-bold  text-gray-500">Organisation</h2>
       </div>
 
       <div className="bg-white rounded-2xl shadow-lg p-8">
@@ -213,7 +213,7 @@ const page = () => {
                   className="h-16 w-16 object-contain border rounded"
                 />
               ) : (
-                <span className="text-sm text-gray-500">Aucune image</span>
+                <span className="text-sm  text-gray-500">Aucune image</span>
               )}
             </div>
           </div>
@@ -225,6 +225,7 @@ const page = () => {
             icon={org ? 'pi pi-refresh' : 'pi pi-plus'}
             className="w-full sm:w-auto"
             onClick={handleSubmit}
+            severity={undefined}
           />
         </div>
       </div>

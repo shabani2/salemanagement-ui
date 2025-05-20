@@ -48,40 +48,41 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100 p-6">
+    <div className="flex min-h-screen items-center justify-center   p-6">
       <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg border border-gray-300">
         {/* Logo */}
         <div className="flex justify-center mb-6">
           <Image src={inaf} alt="App Logo" width={100} height={100} />
         </div>
 
-        <h2 className="text-2xl font-semibold text-gray-800 text-center mb-6">Se connecter</h2>
+        <h2 className="text-2xl font-semibold  text-gray-500 text-center mb-6">Se connecter</h2>
 
         {/* Téléphone */}
         <div className="mb-4">
-          <label className="block text-gray-700 text-sm font-medium mb-2">Téléphone</label>
+          <label className="block  text-gray-500 text-sm font-medium mb-2">Téléphone</label>
           <InputText
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="exemple: +33 6 12 34 56 78"
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-700"
           />
         </div>
 
         {/* Mot de passe */}
         <div className="mb-4 relative">
-          <label className="block text-gray-700 text-sm font-medium mb-2">Mot de passe</label>
+          <label className="block  text-gray-500 text-sm font-medium mb-2">Mot de passe</label>
           <div className="relative w-full">
             <input
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Entrez votre mot de passe"
-              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 pr-10"
+              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-700 pr-10"
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-3 flex items-center text-gray-500 cursor-pointer"
+              severity={undefined}
+              className="absolute inset-y-0 right-3 flex items-center  text-gray-500 cursor-pointer"
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (
@@ -107,10 +108,11 @@ export default function LoginPage() {
         </div>
 
         {/* Message d'erreur */}
-        {error && <p className="text-red-500 text-sm mb-4">{String(error)}</p>}
+        {error && <p className="text-red-700 text-sm mb-4">{String(error)}</p>}
 
         {/* Bouton de connexion avec spinner */}
         <Button
+          severity={undefined}
           label="Se connecter"
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-300 flex justify-center items-center"
           onClick={handleLogin}

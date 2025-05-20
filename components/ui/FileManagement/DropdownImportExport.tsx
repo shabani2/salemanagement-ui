@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import { OverlayPanel } from 'primereact/overlaypanel';
 import { Button } from 'primereact/button';
 import { TieredMenu } from 'primereact/tieredmenu';
 import { Dialog } from 'primereact/dialog';
@@ -54,14 +53,14 @@ const DropdownImportExport: React.FC<DropdownImportExportProps> = ({ onAction })
         {
           label: 'Excel',
           icon: 'pi pi-file-excel',
-          command: () => handleImportClick('excel')
+          command: () => handleImportClick('excel'),
         },
         {
           label: 'CSV',
           icon: 'pi pi-file',
-          command: () => handleImportClick('csv')
-        }
-      ]
+          command: () => handleImportClick('csv'),
+        },
+      ],
     },
     {
       label: 'Export',
@@ -70,15 +69,15 @@ const DropdownImportExport: React.FC<DropdownImportExportProps> = ({ onAction })
         {
           label: 'Excel',
           icon: 'pi pi-file-excel',
-          command: () => handleExportClick('excel')
+          command: () => handleExportClick('excel'),
         },
         {
           label: 'CSV',
           icon: 'pi pi-file',
-          command: () => handleExportClick('csv')
-        }
-      ]
-    }
+          command: () => handleExportClick('csv'),
+        },
+      ],
+    },
   ];
 
   const getAcceptedFormat = () => {
@@ -93,9 +92,10 @@ const DropdownImportExport: React.FC<DropdownImportExportProps> = ({ onAction })
         label="Fichiers"
         icon="pi pi-bars"
         onClick={(e) => tieredMenuRef.current?.toggle(e)}
-        className="rounded-lg p-button-success"
+        className="rounded-lg !bg-green-700"
         aria-haspopup
         aria-controls="tiered_menu"
+        severity={undefined}
       />
 
       <TieredMenu
@@ -103,7 +103,8 @@ const DropdownImportExport: React.FC<DropdownImportExportProps> = ({ onAction })
         popup
         ref={tieredMenuRef}
         id="tiered_menu"
-        appendTo={document.body}
+        // appendTo={document.body}
+        appendTo={typeof window !== 'undefined' ? document.body : undefined}
       />
 
       <input
@@ -120,8 +121,14 @@ const DropdownImportExport: React.FC<DropdownImportExportProps> = ({ onAction })
         onHide={() => setShowExportDialog(false)}
         footer={
           <>
-            <Button label="Cancel" icon="pi pi-times" onClick={() => setShowExportDialog(false)} className="p-button-text" />
-            <Button label="Download" icon="pi pi-check" onClick={confirmExport} autoFocus />
+            <Button
+              label="annuler"
+              icon="pi pi-times"
+              onClick={() => setShowExportDialog(false)}
+              className=" p-button-danger"
+              severity={undefined}
+            />
+            <Button label="enregistrer" icon="pi pi-check" onClick={confirmExport} autoFocus className='!bg-green-900' />
           </>
         }
       >

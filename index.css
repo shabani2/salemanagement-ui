@@ -1,0 +1,10 @@
+.row-even {
+    background-color: #e5e7eb !important;
+    color: #111827 !important;
+  }
+  
+  .row-odd {
+    background-color: #065f46 !important;
+    color: #ffffff !important;
+  }
+  

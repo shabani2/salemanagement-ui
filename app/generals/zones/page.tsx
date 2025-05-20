@@ -17,6 +17,8 @@ import {
   selectAllRegions,
 } from '@/stores/slices/regions/regionSlice';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
+import { saveAs } from 'file-saver';
 
 export default function RegionManagement() {
   const [deleteDialogType, setDeleteDialogType] = useState<boolean | null>(null);
@@ -87,7 +89,7 @@ export default function RegionManagement() {
         />
         <Button
           icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
+          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
           onClick={(event) => menuRef.current.toggle(event)}
           aria-haspopup
         />
@@ -111,15 +113,58 @@ export default function RegionManagement() {
     setFilteredRegions(filtered);
   }, [search, regions]);
 
+    //file management
+      const toast = useRef<Toast>(null);
+    
+      const handleFileManagement = ({
+        type,
+        format,
+        file,
+      }: {
+        type: 'import' | 'export';
+        format: 'csv' | 'pdf';
+        file?: File;
+      }) => {
+        if (type === 'import' && file) {
+          setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+          toast.current?.show({
+            severity: 'info',
+            summary: `Import ${format.toUpperCase()}`,
+            detail: `File imported: ${file.name}`,
+            life: 3000,
+          });
+          return;
+        }
+    
+        if (type === 'export') {
+          const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+          const blob = new Blob([content], {
+            type:
+              format === 'csv'
+                ? 'text/csv;charset=utf-8'
+                : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          });
+          const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+          saveAs(blob, filename);
+    
+          toast.current?.show({
+            severity: 'success',
+            summary: `Export ${format.toUpperCase()}`,
+            detail: `File downloaded: ${filename}`,
+            life: 3000,
+          });
+        }
+      };
+
   return (
-    <div className="bg-gray-100 min-h-screen ">
+    <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-3">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des régions' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Gestion des Régions</h2>
+        <h2 className="text-2xl font-bold  text-gray-500">Gestion des Régions</h2>
       </div>
       <div className="bg-white p-2 rounded-lg">
         <div className="flex justify-between my-4">
@@ -131,14 +176,14 @@ export default function RegionManagement() {
               onChange={(e) => setSearch(e.target.value)}
             />
             <div className="ml-3 flex gap-2 w-2/5">
-              <Button icon="pi pi-upload" label="Upload" className="p-button-primary text-[16px]" />
-              <Button icon="pi pi-download" label="download" className="p-button-success" />
+               <DropdownImportExport onAction={handleFileManagement} />
             </div>
           </div>
 
           <Button
-            label="ajouter une region"
-            className="bg-blue-500 text-white p-2 rounded"
+            icon="pi pi-plus"
+            label="nouvau"
+            className="!bg-green-700 text-white p-2 rounded border-none"
             onClick={() => setDialogType('create')}
           />
         </div>
@@ -146,7 +191,7 @@ export default function RegionManagement() {
           <DataTable
             value={filteredRegions}
             paginator
-            stripedRows
+            
             rows={5}
             className="rounded-lg"
             tableStyle={{ minWidth: '50rem' }}
@@ -189,12 +234,12 @@ export default function RegionManagement() {
             </div>
           ))}
           <div className="flex justify-end mt-4">
-            <Button label="Modifier" className="bg-blue-500 text-white" onClick={handleUpdate} />
+            <Button label="Modifier" className="bg-blue-700 text-white" onClick={handleUpdate} severity={undefined} />
           </div>
         </div>
       </Dialog>
       <ConfirmDeleteDialog
-        // @ts-ignore
+        
         visible={deleteDialogType}
         onHide={() => setDeleteDialogType(false)}
         onConfirm={(item) => {
@@ -231,7 +276,7 @@ export default function RegionManagement() {
             </div>
           ))}
           <div className="flex justify-end mt-4">
-            <Button label="Ajouter" className="bg-green-500 text-white" onClick={handleCreate} />
+            <Button label="Ajouter" className="!bg-green-700 text-white" onClick={handleCreate} severity={undefined} />
           </div>
         </div>
       </Dialog>

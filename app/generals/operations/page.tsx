@@ -196,7 +196,7 @@ const Page = () => {
             severity: 'error',
             summary: `Erreur: ${produitNom}`,
             detail: res.reason || 'Échec de l’enregistrement',
-            life: 5000,
+            life: 7000,
           });
         }
       });
@@ -293,7 +293,7 @@ const Page = () => {
     if (!produitId || !value || value <= 0) {
       return 'Quantité invalide';
     }
-console.log('type selectionne : ',type)
+    console.log('type selectionne : ', type);
     if (type === 'Entrée' || type === 'Commande') {
       return true;
     }
@@ -378,7 +378,7 @@ console.log('type selectionne : ',type)
   const filteredProduits = allProduits.filter((p) => p.categorie._id == selectedCatId);
 
   return (
-    <div className="bg-gray-100 min-h-screen p-4">
+    <div className="  min-h-screen p-4">
       <Toast ref={toast} />
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
@@ -386,7 +386,7 @@ console.log('type selectionne : ',type)
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Gestion des opérations</h2>
+        <h2 className="text-2xl font-bold  text-gray-500">Gestion des opérations</h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -424,12 +424,12 @@ console.log('type selectionne : ',type)
                     />
                   )}
                 />
-                {errors.type && <small className="text-red-500">{errors.type.message}</small>}
+                {errors.type && <small className="text-red-700">{errors.type.message}</small>}
               </div>
 
               {/* Taux Dollar */}
               <div className="w-1/4">
-                <label className="block text-sm font-medium mb-1 text-gray-700">Taux dollar</label>
+                <label className="block text-sm font-medium mb-1  text-gray-500">Taux dollar</label>
                 <InputText
                   type="number"
                   value={watch('tauxDollar') ?? ''}
@@ -449,7 +449,7 @@ console.log('type selectionne : ',type)
 
               {/* Taux Franc */}
               <div className="w-1/4">
-                <label className="block text-sm font-medium mb-1 text-gray-700">
+                <label className="block text-sm font-medium mb-1  text-gray-500">
                   Taux en franc
                 </label>
                 <InputText
@@ -487,7 +487,7 @@ console.log('type selectionne : ',type)
                   Dépôt central
                 </label>
                 {errors.depotCentral && (
-                  <small className="text-red-500">{errors.depotCentral.message}</small>
+                  <small className="text-red-700">{errors.depotCentral.message}</small>
                 )}
               </div>
             )}
@@ -505,7 +505,7 @@ console.log('type selectionne : ',type)
                   className="w-full"
                   disabled={!watch('type') || isPointVenteLocked}
                 />
-                {errors.pointVente && <small className="text-red-500">Champ requis</small>}
+                {errors.pointVente && <small className="text-red-700">Champ requis</small>}
               </div>
             )}
 
@@ -549,7 +549,7 @@ console.log('type selectionne : ',type)
                     )}
                   />
                   {errors.formulaire?.produit && (
-                    <small className="text-red-500">{errors.formulaire.produit.message}</small>
+                    <small className="text-red-700">{errors.formulaire.produit.message}</small>
                   )}
                 </div>
 
@@ -570,7 +570,7 @@ console.log('type selectionne : ',type)
                   />
 
                   {errors.formulaire?.quantite && (
-                    <small className="text-red-500">
+                    <small className="text-red-700">
                       {errors.formulaire.quantite.message || 'Quantité requise'}
                     </small>
                   )}
@@ -581,6 +581,7 @@ console.log('type selectionne : ',type)
               <div className="flex gap-4 justify-end">
                 <Button
                   type="button"
+                  severity={undefined}
                   icon={editingIndex !== null ? 'pi pi-check' : 'pi pi-plus'}
                   label={editingIndex !== null ? 'Modifier' : 'Ajouter un produit'}
                   onClick={async () => {
@@ -614,188 +615,192 @@ console.log('type selectionne : ',type)
 
         {/* zone de recapitulation */}
         <div className="bg-white p-6 rounded-2xl shadow-xl space-y-6">
-  <h3 className="text-xl font-bold text-gray-800">Récapitulatif</h3>
+          <h3 className="text-xl font-bold text-gray-800">Récapitulatif</h3>
 
-  {(() => {
-    const montantFranc = montantDollar * tauxFranc;
-    const produits = watch('produits') || [];
-    const totalMontant = produits.reduce((acc, item) => {
-      const produit = allProduits.find((p) => p._id === item.produit);
-      const prix = produit
-        ? ['Livraison', 'Entrée'].includes(type)
-          ? produit.prix
-          : produit.prixVente
-        : 0;
-      return acc + item.quantite * prix;
-    }, 0);
+          {(() => {
+            const montantFranc = montantDollar * tauxFranc;
+            const produits = watch('produits') || [];
+            const totalMontant = produits.reduce((acc, item) => {
+              const produit = allProduits.find((p) => p._id === item.produit);
+              const prix = produit
+                ? ['Livraison', 'Entrée'].includes(type)
+                  ? produit.prix
+                  : produit.prixVente
+                : 0;
+              return acc + item.quantite * prix;
+            }, 0);
 
-    const valeurRabais = Number(((totalMontant * rabais) / 100).toFixed(2));
-    const valeurRemise = Number(
-      (((totalMontant - valeurRabais) * remise) / 100).toFixed(2)
-    );
-    const netAPayer = Number((totalMontant - valeurRabais - valeurRemise).toFixed(2));
-    const reste = Number((montantRecu - netAPayer).toFixed(2));
+            const valeurRabais = Number(((totalMontant * rabais) / 100).toFixed(2));
+            const valeurRemise = Number(
+              (((totalMontant - valeurRabais) * remise) / 100).toFixed(2)
+            );
+            const netAPayer = Number((totalMontant - valeurRabais - valeurRemise).toFixed(2));
+            const reste = Number((montantRecu - netAPayer).toFixed(2));
 
-    return (
-      <>
-        {type !== 'Entrée' && (
-          <>
-            {['Livraison', 'Commande'].includes(type) && pointVente && (
-              <div className="border p-3 rounded-lg bg-gray-50 text-gray-700">
-                <div className="font-semibold">Point de vente sélectionné :</div>
-                <div>Nom : {pointVente.nom}</div>
-                <div>Adresse : {pointVente.adresse}</div>
-                <div>Région : {pointVente.region?.nom}</div>
-                <div>Ville : {pointVente.region?.ville}</div>
-              </div>
-            )}
-          </>
-        )}
+            return (
+              <>
+                {type !== 'Entrée' && (
+                  <>
+                    {['Livraison', 'Commande'].includes(type) && pointVente && (
+                      <div className="border p-3 rounded-lg bg-gray-50  text-gray-500">
+                        <div className="font-semibold">Point de vente sélectionné :</div>
+                        <div>Nom : {pointVente.nom}</div>
+                        <div>Adresse : {pointVente.adresse}</div>
+                        <div>Région : {pointVente.region?.nom}</div>
+                        <div>Ville : {pointVente.region?.ville}</div>
+                      </div>
+                    )}
+                  </>
+                )}
 
-        <div>
-          <h4 className="font-semibold text-gray-700">Détails par produit</h4>
-          <Accordion>
-            <AccordionTab header="Opérations effectuées">
-              <DataTable value={produits} responsiveLayout="scroll">
-                <Column header="#" body={(_, i) => i.rowIndex + 1} />
-                <Column
-                  field="produit"
-                  header="Produit"
-                  body={(rowData) => {
-                    const produit = allProduits.find((p) => p._id === rowData.produit);
-                    return produit?.nom || '-';
-                  }}
-                />
-                <Column
-                  field="quantite"
-                  header="Quantité"
-                  body={(rowData) => rowData.quantite || '-'}
-                />
-                <Column
-                  header="Prix unitaire"
-                  body={(rowData) => {
-                    const produit = allProduits.find((p) => p._id === rowData.produit);
-                    if (!produit) return '-';
-                    const prix = ['Livraison', 'Entrée'].includes(type)
-                      ? produit.prix
-                      : produit.prixVente;
-                    return `${prix} FC`;
-                  }}
-                />
-                <Column
-                  header="Total"
-                  body={(rowData) => {
-                    const produit = allProduits.find((p) => p._id === rowData.produit);
-                    if (!produit) return '-';
-                    const prix = ['Livraison', 'Entrée'].includes(type)
-                      ? produit.prix
-                      : produit.prixVente;
-                    return `${rowData.quantite * prix} FC`;
-                  }}
-                />
-              </DataTable>
-            </AccordionTab>
-          </Accordion>
-        </div>
-
-        <div className="text-right text-lg font-semibold text-gray-800">
-          Total : {totalMontant} FC
-        </div>
-
-        {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Rabais (%)</label>
-              <InputText type="number" {...register('rabais')} className="w-full" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Remise (%)</label>
-              <InputText type="number" {...register('remise')} className="w-full" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Valeur rabais</label>
-              <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
-                {valeurRabais} FC
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Valeur remise</label>
-              <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
-                {valeurRemise} FC
-              </div>
-            </div>
-          </div>
-        )}
-
-        {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
-          <div className="text-right text-lg font-bold text-green-700">
-            Net à payer : {netAPayer} FC
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-          {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Montant reçu en dollar
-                </label>
-                <InputText
-                  type="number"
-                  {...register('montantDollar')}
-                  className="w-full"
-                  onBlur={() => setValue('montantFranc', montantFranc)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') setValue('montantFranc', montantFranc);
-                  }}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Montant converti en francs
-                </label>
-                <div className="w-full border rounded-md p-2 bg-gray-100 text-gray-800">
-                  {montantFranc} FC
+                <div>
+                  <h4 className="font-semibold  text-gray-500">Détails par produit</h4>
+                  <Accordion>
+                    <AccordionTab header="Opérations effectuées">
+                      <DataTable value={produits} responsiveLayout="scroll">
+                        <Column header="#" body={(_, i) => i.rowIndex + 1} />
+                        <Column
+                          field="produit"
+                          header="Produit"
+                          body={(rowData) => {
+                            const produit = allProduits.find((p) => p._id === rowData.produit);
+                            return produit?.nom || '-';
+                          }}
+                        />
+                        <Column
+                          field="quantite"
+                          header="Quantité"
+                          body={(rowData) => rowData.quantite || '-'}
+                        />
+                        <Column
+                          header="Prix unitaire"
+                          body={(rowData) => {
+                            const produit = allProduits.find((p) => p._id === rowData.produit);
+                            if (!produit) return '-';
+                            const prix = ['Livraison', 'Entrée'].includes(type)
+                              ? produit.prix
+                              : produit.prixVente;
+                            return `${prix} FC`;
+                          }}
+                        />
+                        <Column
+                          header="Total"
+                          body={(rowData) => {
+                            const produit = allProduits.find((p) => p._id === rowData.produit);
+                            if (!produit) return '-';
+                            const prix = ['Livraison', 'Entrée'].includes(type)
+                              ? produit.prix
+                              : produit.prixVente;
+                            return `${rowData.quantite * prix} FC`;
+                          }}
+                        />
+                      </DataTable>
+                    </AccordionTab>
+                  </Accordion>
                 </div>
-              </div>
-            </>
-          )}
 
-          {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Montant reçu en franc
-              </label>
-              <InputText type="number" {...register('montantRecu')} className="w-full" />
-            </div>
-          )}
+                <div className="text-right text-lg font-semibold text-gray-800">
+                  Total : {totalMontant} FC
+                </div>
 
-          {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Reste / à retourner
-              </label>
-              <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
-                {reste} FC
-              </div>
-            </div>
-          )}
+                {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium  text-gray-500">Rabais (%)</label>
+                      <InputText type="number" {...register('rabais')} className="w-full" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium  text-gray-500">Remise (%)</label>
+                      <InputText type="number" {...register('remise')} className="w-full" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium  text-gray-500">
+                        Valeur rabais
+                      </label>
+                      <div className="w-full border rounded-md p-2   text-right">
+                        {valeurRabais} FC
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium  text-gray-500">
+                        Valeur remise
+                      </label>
+                      <div className="w-full border rounded-md p-2   text-right">
+                        {valeurRemise} FC
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+                  <div className="text-right text-lg font-bold text-green-700">
+                    Net à payer : {netAPayer} FC
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                  {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium  text-gray-500">
+                          Montant reçu en dollar
+                        </label>
+                        <InputText
+                          type="number"
+                          {...register('montantDollar')}
+                          className="w-full"
+                          onBlur={() => setValue('montantFranc', montantFranc)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') setValue('montantFranc', montantFranc);
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium  text-gray-500">
+                          Montant converti en francs
+                        </label>
+                        <div className="w-full border rounded-md p-2   text-gray-800">
+                          {montantFranc} FC
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+                    <div>
+                      <label className="block text-sm font-medium  text-gray-500">
+                        Montant reçu en franc
+                      </label>
+                      <InputText type="number" {...register('montantRecu')} className="w-full" />
+                    </div>
+                  )}
+
+                  {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+                    <div>
+                      <label className="block text-sm font-medium  text-gray-500">
+                        Reste / à retourner
+                      </label>
+                      <div className="w-full border rounded-md p-2   text-right">
+                        {reste} FC
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-4 border-t mt-4">
+                  <Button
+                    className="mt-4"
+                    label="Valider l'opération"
+                    icon="pi pi-check"
+                    onClick={handleSubmit(onSubmit)}
+                    severity={undefined}
+                  />
+                </div>
+              </>
+            );
+          })()}
         </div>
-
-        <div className="flex justify-end pt-4 border-t mt-4">
-          <Button
-            className="mt-4"
-            label="Valider l'opération"
-            icon="pi pi-check"
-            onClick={handleSubmit(onSubmit)}
-          />
-        </div>
-      </>
-    );
-  })()}
-</div>
-
       </div>
       <ConfirmDialog />
     </div>

@@ -13,7 +13,7 @@ interface Props {
   onAction: (action: 'edit' | 'delete', categorie: Categorie) => void;
 }
 
-const CategorieList: React.FC<Props> = ({ categories,  onAction }) => {
+const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
   const menuRefs = useRef<Record<string, Menu | null>>({});
   const [activeSwitches, setActiveSwitches] = useState<Record<string, boolean>>({ all: true });
 
@@ -103,6 +103,7 @@ const CategorieList: React.FC<Props> = ({ categories,  onAction }) => {
                 //@ts-ignore
                 menuRefs.current[categorie._id]?.toggle?.(e)
               }
+              severity={undefined}
             />
           </div>
         );

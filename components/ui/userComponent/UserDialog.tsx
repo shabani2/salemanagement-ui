@@ -78,8 +78,8 @@ const UserDialog: React.FC<UserDialogProps> = ({
                   required
                   className="w-full pr-10"
                 />
-                <i className="pi pi-user absolute right-2 text-gray-500 text-lg" />
-                {errors[name] && <small className="text-red-500">{errors[name]}</small>}
+                <i className="pi pi-user absolute right-2  text-gray-500 text-lg" />
+                {errors[name] && <small className="text-red-700">{errors[name]}</small>}
               </div>
             ))}
           </div>
@@ -100,8 +100,8 @@ const UserDialog: React.FC<UserDialogProps> = ({
                   required
                   className="w-full pr-10"
                 />
-                <i className={`pi ${icon} absolute right-2 text-gray-500 text-lg`} />
-                {errors[name] && <small className="text-red-500">{errors[name]}</small>}
+                <i className={`pi ${icon} absolute right-2  text-gray-500 text-lg`} />
+                {errors[name] && <small className="text-red-700">{errors[name]}</small>}
               </div>
             ))}
           </div>
@@ -121,8 +121,8 @@ const UserDialog: React.FC<UserDialogProps> = ({
                 required
                 className="w-full pr-10"
               />
-              <i className={`pi ${icon} absolute right-2 text-gray-500 text-lg`} />
-              {errors[name] && <small className="text-red-500">{errors[name]}</small>}
+              <i className={`pi ${icon} absolute right-2  text-gray-500 text-lg`} />
+              {errors[name] && <small className="text-red-700">{errors[name]}</small>}
             </div>
           ))}
 
@@ -202,9 +202,10 @@ const UserDialog: React.FC<UserDialogProps> = ({
           <div className="p-2 border-t flex justify-end bg-white">
             <Button
               label={dialogType === 'create' ? 'Ajouter' : 'Mettre à jour'}
-              className="bg-green-500 text-white"
+              className="!bg-green-700 text-white"
               onClick={handleCreateOrUpdate}
               loading={loadingCreateOrUpdate}
+              severity={undefined}
             />
           </div>
         )}

@@ -31,6 +31,8 @@ import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointven
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import UserDialog from '@/components/ui/userComponent/UserDialog';
+import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
+import { saveAs } from 'file-saver';
 
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 
@@ -130,8 +132,9 @@ const Page = () => {
           ref={menuRef}
         />
         <Button
+          severity={undefined}
           icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
+          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
           onClick={(event) => menuRef.current.toggle(event)}
           aria-haspopup
         />
@@ -315,11 +318,54 @@ const Page = () => {
     );
   }, [search, users]);
 
+   //file management
+    const toast = useRef<Toast>(null);
+  
+    const handleFileManagement = ({
+      type,
+      format,
+      file,
+    }: {
+      type: 'import' | 'export';
+      format: 'csv' | 'pdf';
+      file?: File;
+    }) => {
+      if (type === 'import' && file) {
+        setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+        toast.current?.show({
+          severity: 'info',
+          summary: `Import ${format.toUpperCase()}`,
+          detail: `File imported: ${file.name}`,
+          life: 3000,
+        });
+        return;
+      }
+  
+      if (type === 'export') {
+        const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+        const blob = new Blob([content], {
+          type:
+            format === 'csv'
+              ? 'text/csv;charset=utf-8'
+              : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        saveAs(blob, filename);
+  
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      }
+    };
+
   return (
-    <div className="bg-gray-100 h-screen-min">
+    <div className="  h-screen-min">
       <div className="flex items-center justify-between mb-4">
         <BreadCrumb model={breadcrumbItems} home={home} className="bg-none" />
-        <h2 className="text-2xl font-bold">Gestion des utilisateurs</h2>
+        <h2 className="text-2xl font-bold  text-gray-500">Gestion des utilisateurs</h2>
       </div>
       <div className="bg-white p-2 rounded-lg">
         <div className="flex justify-between my-4">
@@ -331,16 +377,18 @@ const Page = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
             <div className="ml-3 flex gap-2 w-2/5">
-              <Button icon="pi pi-upload" label="Upload" className="p-button-primary text-[16px]" />
-              <Button icon="pi pi-download" label="download" className="p-button-success" />
+                <DropdownImportExport onAction={handleFileManagement} />
             </div>
             {/* <i className="pi pi-search absolute -3 top-1/2 transform -translate-y-1/2 text-gray-400"></i> */}
           </div>
           {!(user.role === 'Gerant' || user.role === 'Vendeur') && (
             <Button
-              label="Créer un utilisateur"
-              className="bg-blue-500 text-white p-2 rounded"
+            severity={undefined}
+               icon="pi pi-plus"
+              label="nouveau"
+              className="!bg-green-700 text-white p-2 rounded"
               onClick={() => setDialogType('create')}
+             
             />
           )}
         </div>
@@ -351,7 +399,7 @@ const Page = () => {
             paginator
             loading={loading}
             rows={rows}
-            stripedRows
+            
             first={first}
             onPage={onPageChange}
             className="rounded-lg  custom-datatable"
@@ -361,7 +409,7 @@ const Page = () => {
               console.log('Row Index in rowClassName:', index);
               return index && index % 2 === 0
                 ? 'bg-gray-300 text-gray-900'
-                : 'bg-green-700 text-white';
+                : '!bg-green-700 text-white';
             }}
           >
             <Column field="_id" header="#" body={(_data, options) => options.rowIndex + 1} />

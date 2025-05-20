@@ -25,27 +25,17 @@ import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportE
 import { Toast } from 'primereact/toast';
 
 const page = () => {
-
   const dispatch = useDispatch<AppDispatch>();
- 
+
   const categories = useSelector((state: RootState) => selectAllCategories(state));
- 
-  
+
   const [selectedCategorie, setSelectedCategorie] = useState<Categorie | null>(null);
- 
-
-
 
   //@ts-ignore
   // const [newCategory, setNewCategory] = useState<Categorie | null>(null);
   useEffect(() => {
     dispatch(fetchCategories());
-    
   }, [dispatch]);
-    
-
-
-
 
   //gestion de variable de categorie
 
@@ -120,12 +110,20 @@ const page = () => {
     }
   }, [selectedCategorie, formState.image]);
 
- //file management
+  //file management
   const toast = useRef<Toast>(null);
 
-  const handleFileManagement = ({ type, format, file }: { type: 'import' | 'export'; format: 'csv' | 'pdf'; file?: File }) => {
+  const handleFileManagement = ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'pdf';
+    file?: File;
+  }) => {
     if (type === 'import' && file) {
-      setImportedFiles(prev => [...prev, { name: file.name, format }]);
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
       toast.current?.show({
         severity: 'info',
         summary: `Import ${format.toUpperCase()}`,
@@ -138,7 +136,10 @@ const page = () => {
     if (type === 'export') {
       const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
       const blob = new Blob([content], {
-        type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        type:
+          format === 'csv'
+            ? 'text/csv;charset=utf-8'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
       saveAs(blob, filename);
@@ -152,44 +153,37 @@ const page = () => {
     }
   };
 
-
   return (
-    <div className="bg-gray-100 min-h-screen ">
+    <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Categories' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Gestion des Categories</h2>
+        <h2 className="text-2xl font-bold  text-gray-500">Gestion des Categories</h2>
       </div>
       <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row">
         <div className=" w-full bg-white p-2 rounded-lg">
-                  <div className="flex flex-row justify-between p-1 items-center mb-2">
-                      <div className='flex flex-row gap-2 items-center'>
-                      <h3 className="text-lg font-bold">categories</h3>
-                      <DropdownImportExport onAction={handleFileManagement} />
-                      </div>  
-                      
+          <div className="flex flex-row justify-between p-1 items-center mb-2">
+            <div className="flex flex-row gap-2 items-center">
+              <h3 className="text-lg font-bold">categories</h3>
+              <DropdownImportExport onAction={handleFileManagement} />
+            </div>
+
             <div>
-                          <Button
-                               icon="pi pi-plus"
+              <Button
+                icon="pi pi-plus"
                 label="nouveau"
-               
-                className="bg-blue-500 text-white p-1 rounded p-button-success"
+                className=" text-white p-1 rounded !bg-green-700"
                 onClick={() => handleOpenCreate()}
+                severity={undefined}
               />
             </div>
           </div>
-          <CategorieList
-            categories={categories}
-           
-            onAction={geteActionMade}
-          />
+          <CategorieList categories={categories} onAction={geteActionMade} />
         </div>
-       
       </div>
-      
 
       {/* dialog cote categorie */}
       <Dialog
@@ -279,6 +273,7 @@ const page = () => {
               label={actionMade === 'create' ? 'Ajouter' : 'Modifier'}
               className="bg-blue-600 text-white"
               onClick={handleSubmit}
+              severity={undefined}
             />
           </div>
         </div>
@@ -299,8 +294,6 @@ const page = () => {
         objectLabel="la catégorie"
         displayField="nom"
       />
-
-     
     </div>
   );
 };

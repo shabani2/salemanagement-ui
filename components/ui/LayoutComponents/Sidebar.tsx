@@ -12,7 +12,6 @@ import {
   selectCurrentOrganisation,
 } from '@/stores/slices/organisation/organisationSlice';
 
-
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -25,14 +24,14 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
   const authUser = useSelector((state: RootState) => selectAuthUser(state));
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const org = useSelector((state: RootState) => selectCurrentOrganisation(state));
- 
+
   const dispatch = useDispatch<AppDispatch>();
 
   useEffect(() => {
     if (authUser?.role) {
       setMenuItems(filterRoutesByRole(authUser.role));
     }
-    dispatch(fetchDefaultOrganisationLogo())
+    dispatch(fetchDefaultOrganisationLogo());
   }, [authUser]);
 
   const handleNavigation = (path: string) => {
@@ -43,18 +42,18 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
   const isActive = (path: string) => {
     return pathname === path || pathname.startsWith(path + '/');
   };
-// console.log('logo', logo);
+  // console.log('logo', logo);
   return (
     <aside
-      className={`fixed top-0 left-0 h-full w-64 bg-gray-900 text-white flex flex-col transition-transform ${
+      className={`fixed top-0 left-0 h-full w-64 !bg-green-900 text-white flex flex-col transition-transform ${
         isOpen ? 'translate-x-0' : '-translate-x-64'
       }`}
     >
       <div className="flex justify-between items-center p-4 border-b border-gray-700">
         <span className="text-lg font-bold">AgriCap</span>
 
-        <img         
-         src={org && `http://localhost:8000/${org?.logo.replace('../', '')}`}
+        <img
+          src={org && `http://localhost:8000/${org?.logo.replace('../', '')}`}
           width={64}
           height={64}
           className="rounded-full cursor-pointer"
@@ -73,8 +72,8 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
                 onClick={() => handleNavigation(path)}
                 className={`flex items-center px-4 py-2 rounded w-full text-left transition cursor-pointer ${
                   isActive(path)
-                    ? 'bg-green-900 text-gray-100'
-                    : 'hover:bg-green-500 hover:text-white'
+                    ? '!bg-green-700 text-gray-100'
+                    : 'hover:!bg-green-400 hover:text-white'
                 }`}
               >
                 <i className={`pi mr-2 ${icon} text-lg`} />

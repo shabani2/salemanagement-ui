@@ -59,18 +59,18 @@ const Page = () => {
   }
   console.log('user', user);
   return (
-    <div className="bg-gray-100 min-h-screen">
+    <div className="  min-h-screen">
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion du profil' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Profil</h2>
+        <h2 className="text-2xl font-bold  text-gray-500">Profil</h2>
       </div>
 
       <Card className="w-full h-full shadow-lg rounded-none overflow-hidden p-0">
-        <div className="relative bg-gradient-to-r from-indigo-500 to-purple-600 h-40 md:h-56 lg:h-72 flex justify-center items-center">
+        <div className="relative bg-gradient-to-r from-indigo-700 to-purple-600 h-40 md:h-56 lg:h-72 flex justify-center items-center">
           <div className="absolute -bottom-20 md:-bottom-24 z-10">
             {user.image ? (
               <img
@@ -90,9 +90,9 @@ const Page = () => {
           <h2 className="text-lg md:text-xl font-semibold text-gray-800">
             {`${user.prenom || ''} ${user.nom || ''}`}
           </h2>
-          <p className="text-sm md:text-base text-gray-500">{user.role || 'Rôle inconnu'}</p>
+          <p className="text-sm md:text-base  text-gray-500">{user.role || 'Rôle inconnu'}</p>
 
-          <div className="mt-4 text-gray-700 text-sm md:text-base">
+          <div className="mt-4  text-gray-500 text-sm md:text-base">
             {user.email && <p>📧 {user.email}</p>}
             {user.telephone && <p>📞 {user.telephone}</p>}
             {user.adresse && <p>📍 {user.adresse}</p>}
@@ -106,6 +106,7 @@ const Page = () => {
               icon="pi pi-pencil"
               className="p-button-rounded p-button-primary p-button-sm"
               onClick={() => setDialogType('edit')}
+              severity={undefined}
             />
           </div>
 
@@ -118,6 +119,7 @@ const Page = () => {
               onClick={(e) => menu.current?.toggle(e)}
               aria-haspopup
               aria-controls="popup_menu"
+              severity={undefined}
             />
           </div>
         </div>
@@ -149,7 +151,7 @@ const Page = () => {
                     }
                     className="w-full pr-10"
                   />
-                  <i className="pi pi-user absolute right-2 text-gray-500 text-lg" />
+                  <i className="pi pi-user absolute right-2  text-gray-500 text-lg" />
                 </div>
               ))}
             </div>
@@ -171,7 +173,7 @@ const Page = () => {
                     }
                     className="w-full pr-10"
                   />
-                  <i className={`pi ${icon} absolute right-2 text-gray-500 text-lg`} />
+                  <i className={`pi ${icon} absolute right-2  text-gray-500 text-lg`} />
                 </div>
               ))}
             </div>
@@ -187,7 +189,7 @@ const Page = () => {
                 }
                 className="w-full pr-10"
               />
-              <i className="pi pi-map-marker absolute right-2 text-gray-500 text-lg" />
+              <i className="pi pi-map-marker absolute right-2  text-gray-500 text-lg" />
             </div>
 
             {/* Role */}
@@ -224,9 +226,10 @@ const Page = () => {
           <div className="p-2 border-t flex justify-end bg-white">
             <Button
               label="Mettre à jour"
-              className="bg-blue-500 text-white"
+              className="bg-blue-700 text-white"
               onClick={handleUpdate}
               loading={loading}
+              severity={undefined}
             />
           </div>
         </div>

@@ -23,14 +23,14 @@ import {
 } from '@/stores/slices/pointvente/pointventeSlice';
 import { PointVente } from '@/Models/pointVenteType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { saveAs } from 'file-saver'
+import { saveAs } from 'file-saver';
 import { Toast } from 'primereact/toast';
 
 export default function PointVenteManagement() {
   const dispatch = useDispatch<AppDispatch>();
   const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
   const regions = useSelector((state: RootState) => selectAllRegions(state));
- 
+
   const [dialogType, setDialogType] = useState<string | null>(null);
   const [selectedPointVente, setSelectedPointVente] = useState<any>(null);
   const [newPointVente, setNewPointVente] = useState<{
@@ -63,43 +63,46 @@ export default function PointVenteManagement() {
     }
   };
   const selectedRowDataRef = useRef<any>(null);
-    const actionBodyTemplate = (rowData: PointVente) => (
-      <div>
-        <Menu
-          model={[
-            {
-              label: 'Détails',
-              command: () => handleAction('details', selectedRowDataRef.current),
-            },
-            {
-              label: 'Modifier',
-              command: () => handleAction('edit', selectedRowDataRef.current),
-            },
-            {
-              label: 'Supprimer',
-              command: () => handleAction('delete', selectedRowDataRef.current),
-            },
-          ]}
-          popup
-          ref={menuRef}
-        />
-        <Button
-          icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
-          onClick={(event) => {
-            selectedRowDataRef.current = rowData; // 👈 on stocke ici le bon rowData
-            menuRef.current.toggle(event);
-          }}
-          aria-haspopup
-        />
-      </div>
-    );
+  const actionBodyTemplate = (rowData: PointVente) => (
+    <div>
+      <Menu
+        model={[
+          {
+            label: 'Détails',
+            command: () => handleAction('details', selectedRowDataRef.current),
+          },
+          {
+            label: 'Modifier',
+            command: () => handleAction('edit', selectedRowDataRef.current),
+          },
+          {
+            label: 'Supprimer',
+            command: () => handleAction('delete', selectedRowDataRef.current),
+          },
+        ]}
+        popup
+        ref={menuRef}
+      />
+      <Button
+        icon="pi pi-bars"
+        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+        onClick={(event) => {
+          selectedRowDataRef.current = rowData; // 👈 on stocke ici le bon rowData
+          menuRef.current.toggle(event);
+        }}
+        aria-haspopup
+        severity={undefined}
+      />
+    </div>
+  );
 
   const handleUpdate = () => {
-    dispatch(updatePointVente({ id: selectedPointVente?._id, updateData: selectedPointVente })).then(() => {
+    dispatch(
+      updatePointVente({ id: selectedPointVente?._id, updateData: selectedPointVente })
+    ).then(() => {
       dispatch(fetchPointVentes());
     });
-    setSelectedPointVente(null);      
+    setSelectedPointVente(null);
     setDialogType(null);
   };
 
@@ -121,13 +124,20 @@ export default function PointVenteManagement() {
     setFilteredPointsVente(filtered);
   }, [searchPV, pointsVente]);
 
-
   //file management
   const toast = useRef<Toast>(null);
 
-  const handleFileManagement = ({ type, format, file }: { type: 'import' | 'export'; format: 'csv' | 'pdf'; file?: File }) => {
+  const handleFileManagement = ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'pdf';
+    file?: File;
+  }) => {
     if (type === 'import' && file) {
-      setImportedFiles(prev => [...prev, { name: file.name, format }]);
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
       toast.current?.show({
         severity: 'info',
         summary: `Import ${format.toUpperCase()}`,
@@ -140,7 +150,10 @@ export default function PointVenteManagement() {
     if (type === 'export') {
       const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
       const blob = new Blob([content], {
-        type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        type:
+          format === 'csv'
+            ? 'text/csv;charset=utf-8'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
       saveAs(blob, filename);
@@ -154,14 +167,14 @@ export default function PointVenteManagement() {
     }
   };
   return (
-    <div className="bg-gray-100 min-h-screen ">
+    <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des points de vente' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Gestion des Points de Vente</h2>
+        <h2 className="text-2xl font-bold  text-gray-500">Gestion des Points de Vente</h2>
       </div>
       <div className="bg-white p-4 rounded-lg shadow-md">
         <div className="gap-4 mb-4   flex justify-between">
@@ -173,20 +186,21 @@ export default function PointVenteManagement() {
               onChange={(e) => setSearchPV(e.target.value)}
             />
             <div className="ml-3 flex w-2/5 ">
-            <DropdownImportExport onAction={handleFileManagement} />
+              <DropdownImportExport onAction={handleFileManagement} />
             </div>
           </div>
           <Button
             icon="pi pi-plus"
             label="nouveau"
-            className=" text-white p-2 rounded p-button-success"
+            className=" text-white p-2 rounded !bg-green-700"
             onClick={() => setDialogType('create')}
+            severity={undefined}
           />
         </div>
         <DataTable
           value={filteredPointsVente}
           paginator
-          stripedRows
+          
           rows={5}
           className="rounded-lg"
           tableStyle={{ minWidth: '50rem' }}
@@ -238,7 +252,7 @@ export default function PointVenteManagement() {
             />
           </div>
           <div className="flex justify-end mt-4">
-            <Button label="Ajouter" className="bg-green-500 text-white" onClick={handleCreate} />
+            <Button label="Ajouter" className="!bg-green-700 text-white" onClick={handleCreate} severity={undefined}/>
           </div>
         </div>
       </Dialog>
@@ -254,11 +268,13 @@ export default function PointVenteManagement() {
           <p>Voulez-vous vraiment supprimer ce point de vente ?</p>
           <div className="flex justify-end mt-4 gap-2">
             <Button
+              severity={undefined}
               label="Annuler"
               className="p-button-secondary"
               onClick={() => setDialogType(null)}
+             
             />
-            <Button label="Supprimer" className="bg-red-500 text-white" onClick={handleDelete} />
+            <Button label="Supprimer" className="bg-red-700 text-white" onClick={handleDelete} severity={undefined}/>
           </div>
         </div>
       </Dialog>
@@ -320,7 +336,7 @@ export default function PointVenteManagement() {
           </div>
           <div className="mb-2"></div>
 
-          <Button label="Mettre à jour" className="bg-blue-500 text-white" onClick={handleUpdate} />
+          <Button label="Mettre à jour" className="bg-blue-700 text-white" onClick={handleUpdate} />
         </div>
       </Dialog>
     </div>

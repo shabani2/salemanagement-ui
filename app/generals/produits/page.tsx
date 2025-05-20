@@ -3,12 +3,7 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 'use client';
 
-import {
- 
-  fetchCategories,
-  selectAllCategories,
- 
-} from '@/stores/slices/produits/categoriesSlice';
+import { fetchCategories, selectAllCategories } from '@/stores/slices/produits/categoriesSlice';
 import {
   addProduit,
   deleteProduit,
@@ -30,7 +25,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { Produit } from '@/Models/produitsType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { saveAs } from 'file-saver'
+import { saveAs } from 'file-saver';
 import { Toast } from 'primereact/toast';
 const page = () => {
   const menuRef = useRef<any>(null);
@@ -38,7 +33,7 @@ const page = () => {
   const [produits, setProduits] = useState<Produit[]>([]); //useSelector((state: RootState) => selectAllProduits(state));
   const [allProduits, setAllProduits] = useState<Produit[]>([]);
   const categories = useSelector((state: RootState) => selectAllCategories(state));
- 
+
   const [dialogType, setDialogType] = useState<string | null>(null);
   const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
 
@@ -65,8 +60,6 @@ const page = () => {
       setProduits(resp.payload); // version visible (filtrée ou pas)
     });
   }, [dispatch]);
-
-  
 
   const handleAction = (action: string, rowData: Produit) => {
     console.log('Produit cliqué :', rowData);
@@ -101,12 +94,13 @@ const page = () => {
       />
       <Button
         icon="pi pi-bars"
-        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
+        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
         onClick={(event) => {
           selectedRowDataRef.current = rowData; // 👈 on stocke ici le bon rowData
           menuRef.current.toggle(event);
         }}
         aria-haspopup
+        severity={undefined}
       />
     </div>
   );
@@ -168,8 +162,6 @@ const page = () => {
 
   //gestion de variable de categorie
 
- 
-
   // traitement de la recherche de produit
   const [searchProd, setSearchProd] = useState('');
   const [filteredProduits, setFilteredProduits] = useState(produits || []);
@@ -190,51 +182,60 @@ const page = () => {
     setFilteredProduits(filtered);
   }, [searchProd, produits]);
 
+  //file management
+  const toast = useRef<Toast>(null);
 
-    //file management
-    const toast = useRef<Toast>(null);
-  
-    const handleFileManagement = ({ type, format, file }: { type: 'import' | 'export'; format: 'csv' | 'pdf'; file?: File }) => {
-      if (type === 'import' && file) {
-        setImportedFiles(prev => [...prev, { name: file.name, format }]);
-        toast.current?.show({
-          severity: 'info',
-          summary: `Import ${format.toUpperCase()}`,
-          detail: `File imported: ${file.name}`,
-          life: 3000,
-        });
-        return;
-      }
-  
-      if (type === 'export') {
-        const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-        const blob = new Blob([content], {
-          type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        });
-        const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-        saveAs(blob, filename);
-  
-        toast.current?.show({
-          severity: 'success',
-          summary: `Export ${format.toUpperCase()}`,
-          detail: `File downloaded: ${filename}`,
-          life: 3000,
-        });
-      }
-    };
+  const handleFileManagement = ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'pdf';
+    file?: File;
+  }) => {
+    if (type === 'import' && file) {
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+      toast.current?.show({
+        severity: 'info',
+        summary: `Import ${format.toUpperCase()}`,
+        detail: `File imported: ${file.name}`,
+        life: 3000,
+      });
+      return;
+    }
+
+    if (type === 'export') {
+      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+      const blob = new Blob([content], {
+        type:
+          format === 'csv'
+            ? 'text/csv;charset=utf-8'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+      saveAs(blob, filename);
+
+      toast.current?.show({
+        severity: 'success',
+        summary: `Export ${format.toUpperCase()}`,
+        detail: `File downloaded: ${filename}`,
+        life: 3000,
+      });
+    }
+  };
 
   return (
-    <div className="bg-gray-100 min-h-screen ">
+    <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des Produits1' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Gestion des Produits</h2>
+        <h2 className="text-2xl font-bold text-gray-500">Gestion des Produits</h2>
       </div>
       <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row">
-        
         <div className=" bg-white p-2 rounded-lg">
           <div className="gap-4 mb-4   flex justify-between">
             <div className="relative w-2/3 flex flex-row ">
@@ -245,33 +246,33 @@ const page = () => {
                 onChange={(e) => setSearchProd(e.target.value)}
               />
               <div className="ml-3 flex gap-2 w-2/5">
-              <DropdownImportExport onAction={handleFileManagement} />
+                <DropdownImportExport onAction={handleFileManagement} />
               </div>
             </div>
             <Button
               label="nouveau"
               icon="pi pi-plus"
-              className="p-button-success text-white p-2 rounded"
+              className="!bg-green-700 text-white p-2 rounded"
               onClick={() => setDialogType('create')}
+              severity={undefined}
             />
           </div>
           <div>
             <DataTable
               value={filteredProduits}
               paginator
-              stripedRows
+              
               rows={5}
               className="rounded-lg"
               tableStyle={{ minWidth: '70rem' }}
             >
               <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
               <Column field="nom" header="Nom" sortable />
-              <Column field="prix" header="cout unitaire"  />
+              <Column field="prix" header="cout unitaire" />
               <Column
                 field="marge"
                 header="Marge (%)"
                 body={(rowData: Produit) => rowData.marge ?? 'N/A'}
-                
               />
               <Column
                 header="Valeur Marge"
@@ -286,7 +287,7 @@ const page = () => {
                 header="Net à Payer"
                 body={(rowData: Produit) => rowData.netTopay?.toFixed(2) ?? 'N/A'}
               />
-              <Column field="tva" header="TVA (%)"  />
+              <Column field="tva" header="TVA (%)" />
               <Column
                 header="Valeur TVA"
                 body={(rowData: Produit) =>
@@ -419,15 +420,13 @@ const page = () => {
           <div className="flex justify-end">
             <Button
               label={dialogType === 'edit' ? 'Modifier' : 'Ajouter'}
-              className="bg-green-500 text-white"
+              className="!bg-green-700 text-white"
               onClick={handleSubmitProduit}
+              severity={undefined}
             />
           </div>
         </div>
-      </Dialog> 
-
-
-     
+      </Dialog>
 
       {/* delete dialog pour produit */}
 

@@ -1022,7 +1022,7 @@ packages:
   '@tailwindcss/node@4.1.4':
     resolution:
       {
-        integrity: sha512-MT5118zaiO6x6hNA04OWInuAiP1YISXql8Z+/Y8iisV5nuhM8VXlyhRuqc2PEviPszcXI66W44bCIk500Oolhw==,
+        integrity: sha512-MT5118zaiO6x6hNA04OWInuAiP1YISXql8Z+/Y8iisV5nuhM8VXlyhRuqc2PEviPszcXI66W44bCIk700Oolhw==,
       }
 
   '@tailwindcss/oxide-android-arm64@4.1.4':

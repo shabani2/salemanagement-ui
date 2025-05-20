@@ -15,6 +15,7 @@ import {
   selectCurrentOrganisation,
 } from '@/stores/slices/organisation/organisationSlice';
 
+
 interface LayoutProps {
   children: ReactNode;
 }
@@ -50,7 +51,7 @@ export default function BaseLayout({ children }: LayoutProps) {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100 w-full">
+    <div className="flex flex-col min-h-screen bg-gray-200 w-full">
       <Navbar
         isOpen={sidebarOpen}
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
@@ -65,7 +66,7 @@ export default function BaseLayout({ children }: LayoutProps) {
         <div
           className={`flex flex-col flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}
         >
-          <main className="flex-1 overflow-auto p-6 mt-16">
+          <main className="flex-1 overflow-auto p-6 mt-16 ">
             {loading ? (
               <div className="flex justify-center items-center h-full">
                 <ClipLoader color="#22c55e" size={60} />

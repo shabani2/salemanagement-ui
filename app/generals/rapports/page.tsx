@@ -2,6 +2,8 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
+
+
 /* eslint-disable react-hooks/rules-of-hooks */
 import { OperationType } from '@/lib/operationType';
 import {
@@ -30,7 +32,10 @@ import { getOptionsByRole, getRoleOptionsByUser } from '@/lib/utils';
 import Operations from '@/app/generals/operations/page';
 import { InputText } from 'primereact/inputtext';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { saveAs } from 'file-saver'
+import { saveAs } from 'file-saver';
+import { Toast } from 'primereact/toast';
+import { useZebraRowClassName } from '@/hooks/useZebraRowClassName';
+
 
 const typeOptions = Object.values(OperationType).map((op) => ({
   label: op,
@@ -87,7 +92,7 @@ const page = () => {
       />
       <Button
         icon="pi pi-bars"
-        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
+        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
         onClick={(event) => {
           selectedRowDataRef.current = rowData; // 👈 on stocke ici le bon rowData
           menuRef.current.toggle(event);
@@ -107,7 +112,7 @@ const page = () => {
     return types;
   }, [user?.role]);
 
-  console.log('allowed types : ', allowedTypes);
+  
   const mvtStocks = useMemo(() => {
     return allMvtStocks.filter((mvt) => allowedTypes.includes(mvt.type));
   }, [allMvtStocks, allowedTypes]);
@@ -125,7 +130,7 @@ const page = () => {
     }
   }, [dispatch, user?.role]);
 
-  console.log('mvtStocks : ', allMvtStocks);
+  // console.log('mvtStocks : ', allMvtStocks);
 
   // traitement de recherche
   const [search, setSearch] = useState('');
@@ -150,7 +155,7 @@ const page = () => {
 
   const mvtOptions = getOptionsByRole(user?.role);
   const mvtDefault = mvtOptions[0]?.value || null;
-  
+
   useEffect(() => {
     if (mvtDefault) {
       setSelectedType(mvtDefault);
@@ -159,296 +164,338 @@ const page = () => {
   }, [mvtStocks, mvtDefault]);
 
   //file management
-      const toast = useRef<Toast>(null);
-    
-      const handleFileManagement = ({ type, format, file }: { type: 'import' | 'export'; format: 'csv' | 'pdf'; file?: File }) => {
-        if (type === 'import' && file) {
-          setImportedFiles(prev => [...prev, { name: file.name, format }]);
-          toast.current?.show({
-            severity: 'info',
-            summary: `Import ${format.toUpperCase()}`,
-            detail: `File imported: ${file.name}`,
-            life: 3000,
-          });
-          return;
-        }
-    
-        if (type === 'export') {
-          const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-          const blob = new Blob([content], {
-            type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          });
-          const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-          saveAs(blob, filename);
-    
-          toast.current?.show({
-            severity: 'success',
-            summary: `Export ${format.toUpperCase()}`,
-            detail: `File downloaded: ${filename}`,
-            life: 3000,
-          });
-        }
-      };
+  const toast = useRef<Toast>(null);
+
+  const handleFileManagement = ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'pdf';
+    file?: File;
+  }) => {
+    if (type === 'import' && file) {
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+      toast.current?.show({
+        severity: 'info',
+        summary: `Import ${format.toUpperCase()}`,
+        detail: `File imported: ${file.name}`,
+        life: 3000,
+      });
+      return;
+    }
+
+    if (type === 'export') {
+      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+      const blob = new Blob([content], {
+        type:
+          format === 'csv'
+            ? 'text/csv;charset=utf-8'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+      saveAs(blob, filename);
+
+      toast.current?.show({
+        severity: 'success',
+        summary: `Export ${format.toUpperCase()}`,
+        detail: `File downloaded: ${filename}`,
+        life: 3000,
+      });
+    }
+  };
+
+  const rowClassName = useZebraRowClassName<MouvementStock>(
+    filteredMvtStocks,
+    '_id',      // champ unique
+    first,
+    rows
+  );
   
+
   return (
-    <div className="bg-gray-100 min-h-screen ">
+    <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des Rapports' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Gestion des Rapports</h2>
+        <h2 className="text-2xl font-bold  text-gray-500">Gestion des Rapports</h2>
       </div>
       <div className="bg-white p-4 rounded-lg shadow-md">
-      <div className="flex mb-4 gap-4">
-  {/* Partie gauche : 50% de la largeur */}
-  <div className="w-1/2 flex gap-3">
-    {/* Champ de recherche */}
-    <div className="w-1/2">
-      <InputText
-        className="p-2 pl-10 border rounded w-full"
-        placeholder="Rechercher..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-    </div>
+        <div className="flex mb-4 gap-4">
+          {/* Partie gauche : 50% de la largeur */}
+          <div className="w-1/2 flex gap-3">
+            {/* Champ de recherche */}
+            <div className="w-1/2">
+              <InputText
+                className="p-2 pl-10 border rounded w-full"
+                placeholder="Rechercher..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-    {/* Dropdown */}
-    <div className="w-1/2">
-      <Dropdown
-        value={selectedType}
-        onChange={(e) => {
-          setSelectedType(e.value);
-          setFilteredMvtStocks(
-            e.value ? mvtStocks.filter((s) => s.type === e.value) : mvtStocks
-          );
-        }}
-        options={mvtOptions}
-        optionLabel="label"
-        placeholder="Sélectionner le type d'opération"
-        className="w-full bg-green-100 text-green-900 font-semibold rounded-md border-none"
-      />
-    </div>
-  </div>
+            {/* Dropdown */}
+            <div className="w-1/2">
+              <Dropdown
+                value={selectedType}
+                onChange={(e) => {
+                  setSelectedType(e.value);
+                  setFilteredMvtStocks(
+                    e.value ? mvtStocks.filter((s) => s.type === e.value) : mvtStocks
+                  );
+                }}
+                options={mvtOptions}
+                optionLabel="label"
+                placeholder="Sélectionner le type d'opération"
+                className="w-full !bg-green-700 !text-gray-100 font-semibold rounded-md border-none"
+              />
+            </div>
+          </div>
 
-  {/* Partie droite : 50% de la largeur, alignée à droite */}
-  <div className="w-1/2 flex justify-end items-end gap-2">
-   <DropdownImportExport onAction={handleFileManagement} />
-  </div>
-</div>
+          {/* Partie droite : 50% de la largeur, alignée à droite */}
+          <div className="w-1/2 flex justify-end items-end gap-2">
+            <DropdownImportExport onAction={handleFileManagement} />
+          </div>
+        </div>
 
         {/* datatable zone */}
         <DataTable
-  value={filteredMvtStocks}
-  dataKey="_id"
-  paginator
-  loading={loading}
-  rows={rows}
-  stripedRows
-  first={first}
-  onPage={onPageChange}
-  className="rounded-lg custom-datatable text-[14px]"
-  // @ts-ignore
-  tableStyle={{ minWidth: '60rem' }}
-  // @ts-ignore
-  rowClassName={(_, index: number) =>
-    index % 2 === 0 ? 'bg-gray-300 text-gray-900' : 'bg-green-700 text-white'
-  }
->
-  <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} headerClassName="text-[16px]" />
+          value={filteredMvtStocks}
+          dataKey="_id"          
+          paginator
+          loading={loading}
+          rows={rows}          
+          first={first}
+          onPage={onPageChange}
+          className="rounded-lg custom-datatable text-[12px]"
+          // @ts-ignore
+          tableStyle={{ minWidth: '60rem' }}
+          // @ts-ignore
+          rowClassName={(rowData, options) => {
+            const index = options?.index ?? 0;
+            const globalIndex = first + index;
+          
+            console.log({ index, first, globalIndex, id: rowData._id });
+          
+            return globalIndex % 2 === 0
+              ? '!bg-gray-300 !text-gray-900'
+              : '!bg-green-900 !text-white';
+          }}
+          
+          
+          
+          
+          
+          
+          
+          
+        >
+          <Column
+            field="_id"
+            header="#"
+            body={(_, options) => options.rowIndex + 1}
+            headerClassName="text-[16px] !bg-green-900 !text-white "
+          />
 
-  <Column
-    field="produit.categorie.nom"
-    header="Catégorie"
-    filter
-    body={(rowData: MouvementStock) => {
-      const categorie = rowData?.produit?.categorie;
-      if (!categorie) return '—';
-      const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
+          <Column
+            field="produit.categorie.nom"
+            header="Catégorie"
+            filter
+            body={(rowData: MouvementStock) => {
+              const categorie = rowData?.produit?.categorie;
+              if (!categorie) return '—';
+              const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
 
-      return (
-        <div className="flex items-center gap-2">
-          {categorie.image && (
-            <img
-              src={imageUrl}
-              alt={categorie.nom}
-              className="w-8 h-8 rounded-full object-cover border border-gray-300"
-            />
-          )}
-          <span>{categorie.nom}</span>
-        </div>
-      );
-    }}
-    className="px-4 py-1"
-    headerClassName="text-[16px]"
-  />
+              return (
+                <div className="flex items-center gap-2">
+                  {categorie.image && (
+                    <img
+                      src={imageUrl}
+                      alt={categorie.nom}
+                      className="w-8 h-8 rounded-full object-cover border border-gray-100"
+                    />
+                  )}
+                  <span>{categorie.nom}</span>
+                </div>
+              );
+            }}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
 
-  <Column
-    field="produit.nom"
-    header="Produit"
-    filter
-    body={(rowData:MouvementStock) => rowData.produit?.nom}
-    className="px-4 py-1"
-    headerClassName="text-[16px]"
-  />
+          <Column
+            field="produit.nom"
+            header="Produit"
+            filter
+            body={(rowData: MouvementStock) => rowData.produit?.nom}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
 
-  <Column
-    field="pointVente.nom"
-    header="Point de Vente"
-    filter
-    body={(rowData) => rowData.pointVente?.nom || 'Depot Central'}
-    className="px-4 py-1"
-    headerClassName="text-[16px]"
-  />
+          <Column
+            field="pointVente.nom"
+            header="Point de Vente"
+            filter
+            body={(rowData) => rowData.pointVente?.nom || 'Depot Central'}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
 
-  {/* <Column field="type" header="Type" filter className="px-4 py-1" headerClassName="text-[16px]" /> */}
+          {/* <Column field="type" header="Type" filter className="px-4 py-1" headerClassName="text-[16px]" /> */}
 
-  <Column field="quantite" header="Quantité" filter className="px-4 py-1" headerClassName="text-[16px]" />
-  <Column
-  header="Prix Unitaire"
-  body={(rowData:MouvementStock) => {
-    const prix =
-      ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
-        ? rowData.produit?.prix
-        : rowData.produit?.prixVente;
+          <Column
+            field="quantite"
+            header="Quantité"
+            filter
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
+          <Column
+            header="Prix Unitaire"
+            body={(rowData: MouvementStock) => {
+              const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+                ? rowData.produit?.prix
+                : rowData.produit?.prixVente;
 
-    return (
-      <span className="text-blue-500 font-medium">
-        {prix?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? 'N/A'}
-      </span>
-    );
-  }}
-  className="px-4 py-1"
-  headerClassName="text-[16px]"
-/>
+              return (
+                <span className="text-blue-700 font-medium">
+                  {prix?.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }) ?? 'N/A'}
+                </span>
+              );
+            }}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
 
-  
+          <Column
+            header="Montant"
+            body={(rowData: MouvementStock) => {
+              const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+                ? rowData.produit?.prix
+                : rowData.produit?.prixVente;
+              const quantite = rowData.quantite ?? 0;
+              const totalAcquisition = prix * quantite;
+              return (
+                <span className="text-blue-700 font-semibold">
+                  {totalAcquisition.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              );
+            }}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
 
-  <Column
-  header="Montant"
-  body={(rowData:MouvementStock) => {
-    const prix =
-    ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
-      ? rowData.produit?.prix
-      : rowData.produit?.prixVente;
-    const quantite = rowData.quantite ?? 0;
-    const totalAcquisition = prix * quantite;
-    return (
-      <span className="text-blue-700 font-semibold">
-        {totalAcquisition.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-      </span>
-    );
-  }}
-  className="px-4 py-1"
-  headerClassName="text-[16px]"
-/>
+          <Column
+            header="Valeur Marge"
+            body={(rowData: MouvementStock) => {
+              const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+                ? rowData.produit?.prix
+                : rowData.produit?.prixVente;
+              const marge = rowData.produit?.marge ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const valeur = ((prix * marge) / 100) * quantite;
+              return <span className="text-orange-600 font-medium">{valeur.toFixed(2)}</span>;
+            }}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
 
+          <Column
+            header="Net à Payer"
+            body={(rowData: MouvementStock) => {
+              const net = rowData.produit?.netTopay ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const totalNet = net * quantite;
+              return <span className="text-purple-700 font-semibold">{totalNet.toFixed(2)}</span>;
+            }}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
 
-<Column
-  header="Valeur Marge"
-  body={(rowData:MouvementStock) => {
-    const prix =
-    ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
-      ? rowData.produit?.prix
-      : rowData.produit?.prixVente;
-    const marge = rowData.produit?.marge ?? 0;
-    const quantite = rowData.quantite ?? 0;
-    const valeur = ((prix * marge) / 100) * quantite;
-    return <span className="text-orange-600 font-medium">{valeur.toFixed(2)}</span>;
-  }}
-  className="px-4 py-1"
-  headerClassName="text-[16px]"
-/>
-
-
-<Column
-  header="Net à Payer"
-  body={(rowData:MouvementStock) => {
-    const net = rowData.produit?.netTopay ?? 0;
-    const quantite = rowData.quantite ?? 0;
-    const totalNet = net * quantite;
-    return <span className="text-purple-700 font-semibold">{totalNet.toFixed(2)}</span>;
-  }}
-  className="px-4 py-1"
-  headerClassName="text-[16px]"
-/>
-
-
-  {/* <Column
+          {/* <Column
     header="TVA (%)"
     body={(rowData) => <span className="text-yellow-800 font-medium">{rowData.produit?.tva ?? '—'}%</span>}
     className="px-4 py-1"
     headerClassName="text-[16px]"
   /> */}
 
-<Column
-  header="Valeur TVA"
-  body={(rowData:MouvementStock) => {
-    const net = rowData.produit?.netTopay ?? 0;
-    const tva = rowData.produit?.tva ?? 0;
-    const quantite = rowData.quantite ?? 0;
-    const valeurTVA = ((net * tva) / 100) * quantite;
-    return <span className="text-yellow-600 font-medium">{valeurTVA.toFixed(2)}</span>;
-  }}
-  className="px-4 py-1"
-  headerClassName="text-[16px]"
-/>
+          <Column
+            header="Valeur TVA"
+            body={(rowData: MouvementStock) => {
+              const net = rowData.produit?.netTopay ?? 0;
+              const tva = rowData.produit?.tva ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const valeurTVA = ((net * tva) / 100) * quantite;
+              return <span className="text-yellow-600 font-medium">{valeurTVA.toFixed(2)}</span>;
+            }}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
 
+          <Column
+            header="Prix de Vente"
+            body={(rowData: MouvementStock) => {
+              const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+                ? rowData.produit?.prix
+                : rowData.produit?.prixVente;
+              const prixVente = rowData.produit?.prixVente ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const totalVente = prixVente * quantite;
 
-<Column
-  header="Prix de Vente"
-  body={(rowData:MouvementStock) => {
-    const prix =
-      ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
-        ? rowData.produit?.prix
-        : rowData.produit?.prixVente;
-    const prixVente = rowData.produit?.prixVente ?? 0;
-    const quantite = rowData.quantite ?? 0;
-    const totalVente = prixVente * quantite;
+              let colorClass = 'text-blue-600';
+              if (prixVente > prix) colorClass = 'text-green-600 font-bold';
+              else if (prixVente < prix) colorClass = 'text-red-600 font-bold';
 
-    let colorClass = 'text-blue-600';
-    if (prixVente > prix) colorClass = 'text-green-600 font-bold';
-    else if (prixVente < prix) colorClass = 'text-red-600 font-bold';
+              return <span className={colorClass}>{totalVente.toFixed(2)}</span>;
+            }}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
 
-    return <span className={colorClass}>{totalVente.toFixed(2)}</span>;
-  }}
-  className="px-4 py-1"
-  headerClassName="text-[16px]"
-/>
+          <Column
+            field="statut"
+            header="Statut"
+            filter
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+            body={(rowData) => {
+              const isValide = rowData.statut === true;
+              return (
+                <Badge
+                  value={isValide ? 'Validé' : 'En attente'}
+                  severity={isValide ? 'success' : 'warning'}
+                  className="text-sm px-2 py-1"
+                />
+              );
+            }}
+          />
 
+          <Column
+            field="createdAt"
+            filter
+            header="Créé le"
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+            body={(rowData) => new Date(rowData.createdAt || '').toLocaleDateString()}
+          />
 
-
-  <Column
-    field="statut"
-    header="Statut"
-    filter
-    className="px-4 py-1"
-    headerClassName="text-[16px]"
-    body={(rowData) => {
-      const isValide = rowData.statut === true;
-      return (
-        <Badge
-          value={isValide ? 'Validé' : 'En attente'}
-          severity={isValide ? 'success' : 'warning'}
-          className="text-sm px-2 py-1"
-        />
-      );
-    }}
-  />
-
-  <Column
-    field="createdAt"
-    filter
-    header="Créé le"
-    className="px-4 py-1"
-    headerClassName="text-[16px]"
-    body={(rowData) => new Date(rowData.createdAt || '').toLocaleDateString()}
-  />
-
-  <Column header="Actions" body={actionBodyTemplate} className="px-4 py-1" headerClassName="text-[16px]" />
-</DataTable>
-
+          <Column
+            header="Actions"
+            body={actionBodyTemplate}
+            className="px-4 py-1"
+            headerClassName="text-[16px] !bg-green-900 !text-white"
+          />
+        </DataTable>
       </div>
 
       {/* dialog de validation */}
