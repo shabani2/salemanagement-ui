@@ -19,13 +19,18 @@ import {
   deletePointVente,
   fetchPointVentes,
   selectAllPointVentes,
+  updatePointVente,
 } from '@/stores/slices/pointvente/pointventeSlice';
+import { PointVente } from '@/Models/pointVenteType';
+import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
+import { saveAs } from 'file-saver'
+import { Toast } from 'primereact/toast';
 
 export default function PointVenteManagement() {
   const dispatch = useDispatch<AppDispatch>();
   const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
   const regions = useSelector((state: RootState) => selectAllRegions(state));
-  const [search, setSearch] = useState('');
+ 
   const [dialogType, setDialogType] = useState<string | null>(null);
   const [selectedPointVente, setSelectedPointVente] = useState<any>(null);
   const [newPointVente, setNewPointVente] = useState<{
@@ -57,38 +62,97 @@ export default function PointVenteManagement() {
       setDialogType(null);
     }
   };
+  const selectedRowDataRef = useRef<any>(null);
+    const actionBodyTemplate = (rowData: PointVente) => (
+      <div>
+        <Menu
+          model={[
+            {
+              label: 'Détails',
+              command: () => handleAction('details', selectedRowDataRef.current),
+            },
+            {
+              label: 'Modifier',
+              command: () => handleAction('edit', selectedRowDataRef.current),
+            },
+            {
+              label: 'Supprimer',
+              command: () => handleAction('delete', selectedRowDataRef.current),
+            },
+          ]}
+          popup
+          ref={menuRef}
+        />
+        <Button
+          icon="pi pi-bars"
+          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
+          onClick={(event) => {
+            selectedRowDataRef.current = rowData; // 👈 on stocke ici le bon rowData
+            menuRef.current.toggle(event);
+          }}
+          aria-haspopup
+        />
+      </div>
+    );
 
-  const actionBodyTemplate = (rowData: any) => (
-    <div>
-      <Menu
-        model={[
-          {
-            label: 'Détails',
-            command: () => handleAction('details', rowData),
-          },
-          { label: 'Modifier', command: () => handleAction('edit', rowData) },
-          {
-            label: 'Supprimer',
-            command: () => handleAction('delete', rowData),
-          },
-        ]}
-        popup
-        ref={menuRef}
-      />
-      <Button
-        icon="pi pi-bars"
-        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
-        onClick={(event) => menuRef.current.toggle(event)}
-        aria-haspopup
-      />
-    </div>
-  );
   const handleUpdate = () => {
-    dispatch(deletePointVente(selectedPointVente));
+    dispatch(updatePointVente({ id: selectedPointVente?._id, updateData: selectedPointVente })).then(() => {
+      dispatch(fetchPointVentes());
+    });
+    setSelectedPointVente(null);      
     setDialogType(null);
   };
 
   console.log('point de vente = ', pointsVente);
+
+  // traitement de la recherche
+  const [searchPV, setSearchPV] = useState('');
+  const [filteredPointsVente, setFilteredPointsVente] = useState(pointsVente || []);
+
+  useEffect(() => {
+    const filtered = pointsVente.filter((pv) => {
+      const query = searchPV.toLowerCase();
+      return (
+        pv.nom?.toLowerCase().includes(query) ||
+        pv.adresse?.toLowerCase().includes(query) ||
+        pv.region?.nom?.toLowerCase().includes(query)
+      );
+    });
+    setFilteredPointsVente(filtered);
+  }, [searchPV, pointsVente]);
+
+
+  //file management
+  const toast = useRef<Toast>(null);
+
+  const handleFileManagement = ({ type, format, file }: { type: 'import' | 'export'; format: 'csv' | 'pdf'; file?: File }) => {
+    if (type === 'import' && file) {
+      setImportedFiles(prev => [...prev, { name: file.name, format }]);
+      toast.current?.show({
+        severity: 'info',
+        summary: `Import ${format.toUpperCase()}`,
+        detail: `File imported: ${file.name}`,
+        life: 3000,
+      });
+      return;
+    }
+
+    if (type === 'export') {
+      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+      const blob = new Blob([content], {
+        type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+      saveAs(blob, filename);
+
+      toast.current?.show({
+        severity: 'success',
+        summary: `Export ${format.toUpperCase()}`,
+        detail: `File downloaded: ${filename}`,
+        life: 3000,
+      });
+    }
+  };
   return (
     <div className="bg-gray-100 min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -103,28 +167,24 @@ export default function PointVenteManagement() {
         <div className="gap-4 mb-4   flex justify-between">
           <div className="relative w-2/3 flex flex-row ">
             <InputText
-              className="p-2 border rounded flex-grow"
-              placeholder="Rechercher..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              className="p-2 pl-10 border rounded w-full"
+              placeholder="Rechercher ..."
+              value={searchPV}
+              onChange={(e) => setSearchPV(e.target.value)}
             />
-            <div className="ml-3 flex gap-2 w-2/5">
-              <Button label="import" icon="pi pi-upload" className="p-button-primary text-[16px]" />
-              <Button
-                label="export"
-                icon="pi pi-download"
-                className="p-button-success text-[16px]"
-              />
+            <div className="ml-3 flex w-2/5 ">
+            <DropdownImportExport onAction={handleFileManagement} />
             </div>
           </div>
           <Button
-            label="Créer un point de vente"
-            className="bg-blue-500 text-white p-2 rounded"
+            icon="pi pi-plus"
+            label="nouveau"
+            className=" text-white p-2 rounded p-button-success"
             onClick={() => setDialogType('create')}
           />
         </div>
         <DataTable
-          value={pointsVente}
+          value={filteredPointsVente}
           paginator
           stripedRows
           rows={5}

@@ -17,12 +17,18 @@ import { useRouter, usePathname } from 'next/navigation';
 import { User, isRegion, isPointVente } from '../../../Models/UserType';
 import { isUserRole } from '@/lib/utils';
 
+// interface NavbarProps {
+//   onMenuClick: () => void;
+//   isOpen: boolean;
+// }
+
 interface NavbarProps {
   onMenuClick: () => void;
   isOpen: boolean;
+  onNavigate: (path: string) => void;
 }
 
-export function Navbar({ onMenuClick, isOpen }: NavbarProps) {
+export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
   const dispatch = useDispatch<AppDispatch>();
   const router = useRouter();
   const pathname = usePathname();
@@ -34,7 +40,7 @@ export function Navbar({ onMenuClick, isOpen }: NavbarProps) {
     dispatch(logoutUser()).then(() => {
       localStorage.removeItem('user-agricap');
       setUser(null);
-      router.push('/login');
+      onNavigate('/login');
     });
   };
 
@@ -110,19 +116,19 @@ export function Navbar({ onMenuClick, isOpen }: NavbarProps) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
-            onClick={() => router.push('/generals/profile')}
+            onClick={() => onNavigate('/generals/profile')}
             className="cursor-pointer"
           >
             <i className="pi pi-user text-blue-600 mr-2" />
             Profil
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => router.push('/superAdmin/Parametres/')}
+          {/* <DropdownMenuItem
+            onClick={() => onNavigate('/superAdmin/Parametres/')}
             className="cursor-pointer"
           >
             <i className="pi pi-cog text-gray-600 mr-2" />
             Paramètres
-          </DropdownMenuItem>
+          </DropdownMenuItem> */}
           <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
             <i className="pi pi-sign-out text-red-600 mr-2" />
             Déconnexion

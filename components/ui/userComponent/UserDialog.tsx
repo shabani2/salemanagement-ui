@@ -4,8 +4,8 @@ import { Dropdown } from 'primereact/dropdown';
 import { FileUpload } from 'primereact/fileupload';
 import { Button } from 'primereact/button';
 import React from 'react';
-import { isPointVente, isRegion } from '@/Models/UserType';
-import { UserRoleModel } from '@/lib/utils';
+import { isPointVente, isRegion, User, UserModel } from '@/Models/UserType';
+import { getRoleOptionsByUser, UserRoleModel } from '@/lib/utils';
 
 interface UserDialogProps {
   dialogType: 'create' | 'edit' | 'detail' | null;
@@ -43,6 +43,11 @@ const UserDialog: React.FC<UserDialogProps> = ({
   const showRegionField = newUser.role === 'AdminRegion';
   const showPointVenteField =
     newUser.role === 'AdminPointVente' || newUser.role === 'Vendeur' || newUser.role === 'Gerant';
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
+  const allowedOptions = getRoleOptionsByUser(user.role);
+
+  if (user.role === 'Gerant' || user.role === 'Vendeur') return null;
 
   return (
     <Dialog
@@ -124,7 +129,7 @@ const UserDialog: React.FC<UserDialogProps> = ({
           {/* Rôle */}
           <Dropdown
             value={newUser.role}
-            options={UserRoleModel.map((role) => ({ label: role, value: role }))}
+            options={allowedOptions}
             placeholder="Sélectionner un rôle"
             onChange={(e) => setNewUser({ ...newUser, role: e.value })}
             disabled={readOnly}

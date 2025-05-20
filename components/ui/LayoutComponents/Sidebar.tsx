@@ -1,12 +1,17 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { selectAuthUser } from '@/stores/slices/auth/authSlice';
-import { RootState } from '@/stores/store';
+import { AppDispatch, RootState } from '@/stores/store';
 import { filterRoutesByRole } from '@/lib/roleFilter';
-import { selectCurrentOrganisation } from '@/stores/slices/organisation/organisationSlice';
+import {
+  fetchDefaultOrganisationLogo,
+  selectCurrentOrganisation,
+} from '@/stores/slices/organisation/organisationSlice';
+
 
 interface SidebarProps {
   isOpen: boolean;
@@ -20,11 +25,14 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
   const authUser = useSelector((state: RootState) => selectAuthUser(state));
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const org = useSelector((state: RootState) => selectCurrentOrganisation(state));
+ 
+  const dispatch = useDispatch<AppDispatch>();
 
   useEffect(() => {
     if (authUser?.role) {
       setMenuItems(filterRoutesByRole(authUser.role));
     }
+    dispatch(fetchDefaultOrganisationLogo())
   }, [authUser]);
 
   const handleNavigation = (path: string) => {
@@ -35,7 +43,7 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
   const isActive = (path: string) => {
     return pathname === path || pathname.startsWith(path + '/');
   };
-
+// console.log('logo', logo);
   return (
     <aside
       className={`fixed top-0 left-0 h-full w-64 bg-gray-900 text-white flex flex-col transition-transform ${
@@ -44,10 +52,9 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
     >
       <div className="flex justify-between items-center p-4 border-b border-gray-700">
         <span className="text-lg font-bold">AgriCap</span>
-// @ts-ignore
-        <img
-          // @ts-ignore
-          src={org && `http://localhost:8000/${org?.logo.replace('../', '')}`}
+
+        <img         
+         src={org && `http://localhost:8000/${org?.logo.replace('../', '')}`}
           width={64}
           height={64}
           className="rounded-full cursor-pointer"

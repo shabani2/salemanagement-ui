@@ -2,14 +2,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/rules-of-hooks */
 'use client';
-import CategorieList from '@/components/ui/produitComponent/CategoriesList';
-import { Categorie, Produit } from '@/Models/produitsType';
+
 import {
-  addCategorie,
-  deleteCategorie,
+ 
   fetchCategories,
   selectAllCategories,
-  updateCategorie,
+ 
 } from '@/stores/slices/produits/categoriesSlice';
 import {
   addProduit,
@@ -28,19 +26,22 @@ import { InputText } from 'primereact/inputtext';
 import { Menu } from 'primereact/menu';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { FileUpload } from 'primereact/fileupload';
-import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { Produit } from '@/Models/produitsType';
+import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
+import { saveAs } from 'file-saver'
+import { Toast } from 'primereact/toast';
 const page = () => {
   const menuRef = useRef<any>(null);
   const dispatch = useDispatch<AppDispatch>();
   const [produits, setProduits] = useState<Produit[]>([]); //useSelector((state: RootState) => selectAllProduits(state));
   const [allProduits, setAllProduits] = useState<Produit[]>([]);
   const categories = useSelector((state: RootState) => selectAllCategories(state));
-  const [search, setSearch] = useState('');
+ 
   const [dialogType, setDialogType] = useState<string | null>(null);
   const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
-  const [selectedCategorie, setSelectedCategorie] = useState<Categorie | null>(null);
+
   const selectedRowDataRef = useRef<any>(null);
   const [isDeleteProduit, setIsDeleteProduit] = useState<boolean>(false);
 
@@ -65,17 +66,7 @@ const page = () => {
     });
   }, [dispatch]);
 
-  const filterProduitByCategorie = (categorie: Categorie | null) => {
-    if (!categorie) {
-      setProduits(allProduits); // réinitialise
-      return;
-    }
-    //@ts-ignore
-    const filtered = allProduits.filter((p) => p.categorie._id === categorie._id);
-
-    setProduits(filtered);
-    console.log('Produits filtrés pour:', categorie.nom, filtered);
-  };
+  
 
   const handleAction = (action: string, rowData: Produit) => {
     console.log('Produit cliqué :', rowData);
@@ -177,76 +168,60 @@ const page = () => {
 
   //gestion de variable de categorie
 
-  const [newCategorie, setNewCategorie] = useState<Categorie>({
-    nom: '',
-    type: '',
-    image: null,
-  });
-  const [formState, setFormState] = useState<Categorie>(newCategorie);
-  const [isDeleteCat, setIsDeleteCat] = useState<boolean>(false);
+ 
 
-  const handleOpenCreate = () => {
-    setNewCategorie({ nom: '', type: '', image: null });
-    setActionMade('create');
-  };
-
-  const [actionMade, setActionMade] = useState<string | null>(null);
-
-  const geteActionMade = (action: 'edit' | 'delete', categorie: Categorie) => {
-    if (action === 'edit') {
-      setActionMade('update');
-      setSelectedCategorie(categorie);
-      console.log('selected categorie => ', selectedCategorie);
-    } else if (action === 'delete') {
-      setActionMade('delete');
-      setIsDeleteCat(true);
-      setSelectedCategorie(categorie);
-    }
-  };
+  // traitement de la recherche de produit
+  const [searchProd, setSearchProd] = useState('');
+  const [filteredProduits, setFilteredProduits] = useState(produits || []);
 
   useEffect(() => {
-    if (actionMade === 'create') {
-      setFormState(newCategorie);
-    } else if (actionMade === 'update' && selectedCategorie) {
-      setFormState({
-        _id: selectedCategorie._id,
-        nom: selectedCategorie.nom,
-        type: selectedCategorie.type,
-        image: null,
-      });
-    }
-  }, [actionMade, newCategorie, selectedCategorie]);
+    const filtered = produits.filter((p) => {
+      const query = searchProd.toLowerCase();
+      return (
+        p.nom?.toLowerCase().includes(query) ||
+        String(p.prix).includes(query) ||
+        String(p.marge).includes(query) ||
+        String(p.netTopay).includes(query) ||
+        String(p.tva).includes(query) ||
+        String(p.prixVente).includes(query) ||
+        p.unite?.toLowerCase().includes(query)
+      );
+    });
+    setFilteredProduits(filtered);
+  }, [searchProd, produits]);
 
-  const handleSubmit = () => {
-    const formData = new FormData();
-    formData.append('nom', formState.nom);
-    formData.append('type', formState.type);
-    if (formState.image) {
-      formData.append('image', formState.image);
-    }
-    if (actionMade === 'create') {
-      console.log('categorie created : ', formData, formState);
-      dispatch(addCategorie(formState)).then((resp) => {
-        console.log('resp ', resp.payload);
-      });
-    } else if (actionMade === 'update') {
-      if (formState.image == null) {
-        console.log('image', selectedCategorie?.image);
-        setFormState({ ...formState, image: selectedCategorie?.image });
+
+    //file management
+    const toast = useRef<Toast>(null);
+  
+    const handleFileManagement = ({ type, format, file }: { type: 'import' | 'export'; format: 'csv' | 'pdf'; file?: File }) => {
+      if (type === 'import' && file) {
+        setImportedFiles(prev => [...prev, { name: file.name, format }]);
+        toast.current?.show({
+          severity: 'info',
+          summary: `Import ${format.toUpperCase()}`,
+          detail: `File imported: ${file.name}`,
+          life: 3000,
+        });
+        return;
       }
-      //@ts-ignore
-      dispatch(updateCategorie({ id: selectedCategorie?._id, data: formState }));
-      console.log('categorie updated : ', formState);
-    }
-
-    setActionMade(null);
-  };
-  useEffect(() => {
-    if (!formState.image && selectedCategorie?.image) {
-      console.log('Image injectée dans formState:', selectedCategorie.image);
-      setFormState((prev) => ({ ...prev, image: selectedCategorie.image }));
-    }
-  }, [selectedCategorie, formState.image]);
+  
+      if (type === 'export') {
+        const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+        const blob = new Blob([content], {
+          type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        saveAs(blob, filename);
+  
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      }
+    };
 
   return (
     <div className="bg-gray-100 min-h-screen ">
@@ -259,56 +234,30 @@ const page = () => {
         <h2 className="text-2xl font-bold">Gestion des Produits</h2>
       </div>
       <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row">
-        <div className=" w-3/12 bg-white p-2 rounded-lg">
-          <div className="flex flex-row justify-between p-1 items-center mb-2">
-            <h3 className="text-lg font-bold">categories</h3>
-            <div>
-              <Button
-                label="nouveau"
-                icon="pi pi-plus"
-                className="bg-blue-500 text-white p-1 rounded"
-                onClick={() => handleOpenCreate()}
-              />
-            </div>
-          </div>
-          <CategorieList
-            categories={categories}
-            filterProduitByCategorie={filterProduitByCategorie}
-            onAction={geteActionMade}
-          />
-        </div>
-        <div className="w-9/12 bg-white p-2 rounded-lg">
+        
+        <div className=" bg-white p-2 rounded-lg">
           <div className="gap-4 mb-4   flex justify-between">
             <div className="relative w-2/3 flex flex-row ">
               <InputText
-                className="p-2 border rounded flex-grow"
-                placeholder="Rechercher..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                className="p-2 pl-10 border rounded w-full"
+                placeholder="Rechercher un produit..."
+                value={searchProd}
+                onChange={(e) => setSearchProd(e.target.value)}
               />
               <div className="ml-3 flex gap-2 w-2/5">
-                <Button
-                  label="import"
-                  icon="pi pi-upload"
-                  className="p-button-primary text-[16px]"
-                />
-                <Button
-                  label="export"
-                  icon="pi pi-download"
-                  className="p-button-success text-[16px]"
-                />
+              <DropdownImportExport onAction={handleFileManagement} />
               </div>
             </div>
             <Button
               label="nouveau"
               icon="pi pi-plus"
-              className="bg-blue-500 text-white p-2 rounded"
+              className="p-button-success text-white p-2 rounded"
               onClick={() => setDialogType('create')}
             />
           </div>
           <div>
             <DataTable
-              value={produits}
+              value={filteredProduits}
               paginator
               stripedRows
               rows={5}
@@ -317,12 +266,12 @@ const page = () => {
             >
               <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
               <Column field="nom" header="Nom" sortable />
-              <Column field="prix" header="Prix d'acquisition/ production" sortable />
+              <Column field="prix" header="cout unitaire"  />
               <Column
                 field="marge"
                 header="Marge (%)"
                 body={(rowData: Produit) => rowData.marge ?? 'N/A'}
-                sortable
+                
               />
               <Column
                 header="Valeur Marge"
@@ -337,7 +286,7 @@ const page = () => {
                 header="Net à Payer"
                 body={(rowData: Produit) => rowData.netTopay?.toFixed(2) ?? 'N/A'}
               />
-              <Column field="tva" header="TVA (%)" sortable />
+              <Column field="tva" header="TVA (%)"  />
               <Column
                 header="Valeur TVA"
                 body={(rowData: Produit) =>
@@ -475,116 +424,10 @@ const page = () => {
             />
           </div>
         </div>
-      </Dialog>
+      </Dialog> 
 
-      {/* dialog cote categorie */}
-      <Dialog
-        visible={actionMade === 'create' || actionMade === 'update'}
-        header={actionMade === 'create' ? 'Ajouter une catégorie' : 'Modifier la catégorie'}
-        onHide={() => setActionMade(null)}
-        style={{ width: '40vw' }}
-        modal
-      >
-        <div className="p-4 space-y-4">
-          {/* Ligne Nom + Type */}
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block mb-1 text-sm font-medium">Nom</label>
-              <InputText
-                type="text"
-                value={formState.nom}
-                onChange={(e) => setFormState({ ...formState, nom: e.target.value })}
-                required
-                className="w-full p-2 border rounded"
-                placeholder="Nom de la catégorie"
-              />
-            </div>
 
-            <div className="flex-1">
-              <label className="block mb-1 text-sm font-medium">Type</label>
-              <InputText
-                type="text"
-                value={formState.type}
-                onChange={(e) => setFormState({ ...formState, type: e.target.value })}
-                required
-                className="w-full p-2 border rounded"
-                placeholder="Type de la catégorie"
-              />
-            </div>
-          </div>
-
-          {/* Champ FileUpload + image preview côte à côte */}
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <label className="block mb-1 text-sm font-medium">Sélectionner une image</label>
-              <FileUpload
-                mode="basic"
-                accept="image/*"
-                maxFileSize={1000000}
-                chooseLabel="Choisir une image"
-                className="w-full mt-2"
-                customUpload
-                uploadHandler={() => {}}
-                onSelect={(e) => {
-                  const file = e.files?.[0];
-                  // @ts-ignore
-                  if (file) {
-                    // @ts-ignore
-                    setFormState({ ...formState, image: file });
-                  }
-                }}
-              />
-            </div>
-
-            {/* Image sélectionnée (preview) ou image actuelle */}
-            {
-              // @ts-ignore
-              formState.image instanceof File ? (
-                // @ts-ignore
-                <img
-                  src={URL.createObjectURL(formState.image)}
-                  alt="Aperçu sélectionné"
-                  className="h-24 w-auto object-contain border rounded"
-                />
-              ) : (
-                actionMade === 'update' &&
-                selectedCategorie?.image && (
-                  <img
-                    src={`http://localhost:8000/${selectedCategorie.image}`}
-                    alt="Image actuelle"
-                    className="h-24 w-auto object-contain border rounded"
-                  />
-                )
-              )
-            }
-          </div>
-
-          {/* Bouton Ajouter/Modifier */}
-          <div className="flex justify-end">
-            <Button
-              label={actionMade === 'create' ? 'Ajouter' : 'Modifier'}
-              className="bg-blue-600 text-white"
-              onClick={handleSubmit}
-            />
-          </div>
-        </div>
-      </Dialog>
-
-      {/* delete categorie Dialogue */}
-
-      <ConfirmDeleteDialog
-        visible={isDeleteCat}
-        onHide={() => setIsDeleteCat(false)}
-        onConfirm={(item) => {
-          dispatch(deleteCategorie(item._id)).then(() => {
-            dispatch(fetchCategories());
-            setIsDeleteCat(false);
-          });
-        }}
-        item={selectedCategorie}
-        objectLabel="la catégorie"
-        displayField="nom"
-      />
+     
 
       {/* delete dialog pour produit */}
 

@@ -67,6 +67,23 @@ export const fetchMouvementStockById = createAsyncThunk(
   }
 );
 
+export const fetchMouvementStockByPointVenteId = createAsyncThunk(
+  'mouvementStock/fetchBypointVenteId',
+  async (pointVenteId: string, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/mouvementStock/by-point-vente/${pointVenteId}`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la récupération du mouvement de stock');
+    }
+  }
+);
+
 export const createMouvementStock = createAsyncThunk(
   'mouvementStock/create',
   async (data: Omit<MouvementStock, '_id'>, { rejectWithValue }) => {
@@ -148,6 +165,7 @@ const mouvementStockSlice = createSlice({
       .addCase(fetchMouvementsStock.fulfilled, (state, action) => {
         state.status = 'succeeded';
         mouvementStockAdapter.setAll(state, action.payload);
+        fetchMouvementStockByPointVenteId;
       })
       .addCase(fetchMouvementsStock.rejected, (state, action) => {
         state.status = 'failed';
@@ -167,6 +185,14 @@ const mouvementStockSlice = createSlice({
       })
       .addCase(deleteMouvementStock.fulfilled, (state, action) => {
         mouvementStockAdapter.removeOne(state, action.payload);
+      })
+      .addCase(fetchMouvementStockByPointVenteId.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        mouvementStockAdapter.setAll(state, action.payload);
+      })
+      .addCase(fetchMouvementStockByPointVenteId.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
       });
   },
 });

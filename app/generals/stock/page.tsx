@@ -5,8 +5,13 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 'use client';
 import { OperationType } from '@/lib/operationType';
+import { MouvementStock } from '@/Models/mouvementStockType';
 import { Stock } from '@/Models/stock';
-import { fetchStocks, selectAllStocks } from '@/stores/slices/stock/stockSlice';
+import {
+  fetchStockByPointVenteId,
+  fetchStocks,
+  selectAllStocks,
+} from '@/stores/slices/stock/stockSlice';
 import { AppDispatch, RootState } from '@/stores/store';
 import { Badge } from 'primereact/badge';
 import { BreadCrumb } from 'primereact/breadcrumb';
@@ -14,8 +19,9 @@ import { Button } from 'primereact/button';
 import { Column } from 'primereact/column';
 import { DataTable } from 'primereact/datatable';
 import { Dropdown } from 'primereact/dropdown';
+import { InputText } from 'primereact/inputtext';
 import { Menu } from 'primereact/menu';
-import React, { SetStateAction, useEffect, useRef, useState } from 'react';
+import React, { SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 const typeOptions = Object.values(OperationType).map((op) => ({
@@ -42,42 +48,33 @@ const page = () => {
     // setDialogType(action);
   };
 
-  const actionBodyTemplate = (rowData: any) => {
-    const menuRef = useRef<any>(null);
-    console.log('stock = ', stocks);
-    return (
-      <div>
-        <Menu
-          model={[
-            {
-              label: 'Détails',
-              // @ts-ignore
-              command: () => handleAction('details', rowData),
-            },
-            // @ts-ignore
-            { label: 'Modifier', command: () => handleAction('edit', rowData) },
-            {
-              label: 'Supprimer',
-              // @ts-ignore
-              command: () => handleAction('delete', rowData),
-            },
-          ]}
-          popup
-          ref={menuRef}
-        />
-        <Button
-          icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
-          onClick={(event) => menuRef.current.toggle(event)}
-          aria-haspopup
-        />
-      </div>
-    );
-  };
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
 
   useEffect(() => {
-    dispatch(fetchStocks());
-  }, [dispatch]);
+    if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
+      dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
+    } else {
+      dispatch(fetchStocks());
+    }
+  }, [dispatch, user?.role]);
+
+  // traitement de la recherche dans le stock
+  const [search, setSearch] = useState('');
+
+  const filteredStocks = useMemo(() => {
+    const lowerSearch = search.toLowerCase();
+    return stocks.filter((s) => {
+      const cat = s.produit?.categorie?.nom?.toLowerCase() || '';
+      const prod = s.produit?.nom?.toLowerCase() || '';
+      const pv = s.pointVente?.nom?.toLowerCase() || 'depot central';
+      const quantite = String(s.quantite || '').toLowerCase();
+      const montant = String(s.montant || '').toLowerCase();
+      const date = new Date(s.createdAt || '').toLocaleDateString().toLowerCase();
+      return [cat, prod, pv, quantite, montant, date].some((field) => field.includes(lowerSearch));
+    });
+  }, [search, stocks]);
+
   return (
     <div className="bg-gray-100 min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -89,142 +86,181 @@ const page = () => {
         <h2 className="text-2xl font-bold">Gestion des stock</h2>
       </div>
       <div className="bg-white p-4 rounded-lg shadow-md">
-        <div className="gap-4 mb-4   flex justify-between">
-          <div className="relative w-2/3 flex flex-row items-end gap-3">
-            <div className="w-full flex flex-col gap-2">
-              {/* <label htmlFor="type">Type</label> */}
-              <Dropdown
-                id="type"
-                value={selectedType}
-                options={typeOptions}
-                onChange={(e) => {
-                  setSelectedType(e.value);
-                  console.log('Type sélectionné:', e.value);
-                }}
-                placeholder="Sélectionner un type"
-                className="w-full"
-              />
-            </div>
+      <div className="flex mb-4 gap-4">
+  {/* Partie gauche - champ de recherche */}
+  <div className="w-1/2">
+    <InputText
+      className="p-2 pl-10 border rounded w-full"
+      placeholder="Rechercher..."
+      value={search}
+      onChange={(e) => setSearch(e.target.value)}
+    />
+  </div>
 
-            <div className="flex gap-2 h-full items-end self-end">
-              <Button
-                label="upload"
-                icon="pi pi-upload"
-                className="p-button-primary text-[16px] h-[46px]"
-              />
-              <Button
-                label="download"
-                icon="pi pi-download"
-                className="p-button-success text-[16px] h-[46px]"
-              />
-            </div>
-          </div>
-        </div>
+  {/* Partie droite - boutons alignés à droite */}
+  <div className="w-1/2 flex justify-end items-end gap-2">
+    <Button
+      label="upload"
+      icon="pi pi-upload"
+      className="p-button-primary text-[16px] h-[46px]"
+    />
+    <Button
+      label="download"
+      icon="pi pi-download"
+      className="p-button-success text-[16px] h-[46px]"
+    />
+  </div>
+</div>
+
         {/* dataTable */}
         <DataTable
-          value={stocks}
-          dataKey="_id"
-          paginator
-          loading={loading}
-          rows={rows}
-          first={first}
-          onPage={onPageChange}
-          stripedRows
-          className="rounded-lg custom-datatable"
-          // @ts-ignore
-          tableStyle={{ minWidth: '60rem' }}
-          // @ts-ignore
-          rowClassName={(_, index: number) =>
-            index % 2 === 0 ? 'bg-gray-300 text-gray-900' : 'bg-green-700 text-white'
-          }
-        >
-          <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
+  value={filteredStocks}
+  dataKey="_id"
+  paginator
+  loading={loading}
+  rows={rows}
+  first={first}
+  onPage={onPageChange}
+  stripedRows
+  className="rounded-lg custom-datatable text-[14px]"
+  // @ts-ignore
+  tableStyle={{ minWidth: '60rem' }}
+  // @ts-ignore
+  rowClassName={(_, index: number) =>
+    index % 2 === 0 ? 'bg-gray-300 text-gray-900' : 'bg-green-700 text-white'
+  }
+>
+  <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} headerClassName="text-[16px]" />
 
-          <Column
-            field="produit.categorie.nom"
-            header="Catégorie"
-            filter
-            body={(rowData: Stock) => {
-              const categorie = rowData.produit?.categorie;
-              if (!categorie) return '—';
-              // @ts-ignore
-              const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
+  <Column
+    field="produit.categorie.nom"
+    header="Catégorie"
+    filter
+    body={(rowData: Stock) => {
+      const categorie = rowData.produit?.categorie;
+      if (!categorie) return '—';
+      const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
 
-              return (
-                <div className="flex items-center gap-2">
-                  {
-                    // @ts-ignore
-                    categorie.image && (
-                      <img
-                        src={imageUrl}
-                        // @ts-ignore
-                        alt={categorie.nom}
-                        className="w-8 h-8 rounded-full object-cover border border-gray-300"
-                      />
-                    )
-                  }
-                  <span>
-                    {
-                      // @ts-ignore
-                      categorie.nom
-                    }
-                  </span>
-                </div>
-              );
-            }}
-            className="px-4 py-1"
-          />
+      return (
+        <div className="flex items-center gap-2">
+          {categorie.image && (
+            <img
+              src={imageUrl}
+              alt={categorie.nom}
+              className="w-8 h-8 rounded-full object-cover border border-gray-300"
+            />
+          )}
+          <span>{categorie.nom}</span>
+        </div>
+      );
+    }}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
 
-          <Column
-            field="produit.nom"
-            header="Produit"
-            filter
-            body={(rowData: Stock) => rowData.produit?.nom || '—'}
-            className="px-4 py-1"
-          />
+  <Column
+    field="produit.nom"
+    header="Produit"
+    filter
+    body={(rowData: Stock) => rowData.produit?.nom || '—'}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
 
-          <Column
-            field="pointVente.nom"
-            header="Point de Vente"
-            filter
-            body={(rowData: Stock) => rowData.pointVente?.nom || 'Depot Central'}
-            className="px-4 py-1"
-          />
+  <Column
+    field="pointVente.nom"
+    header="Point de Vente"
+    filter
+    body={(rowData: Stock) => rowData.pointVente?.nom || 'Depot Central'}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
 
-          <Column field="quantite" filter header="Quantité" className="px-4 py-1" />
+  <Column field="quantite" sortable header="Quantité" className="px-4 py-1" headerClassName="text-[16px]" />
 
-          <Column
-            field="montant"
-            filter
-            header="Montant"
-            className="px-4 py-1"
-            body={(rowData: Stock) => `${rowData.montant.toLocaleString()} FC`}
-          />
+  <Column
+    field="montant"
+    sortable
+    header="Montant"
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+    body={(rowData: Stock) => rowData.montant.toLocaleString()}
+  />
 
-          <Column
-            field="depotCentral"
-            filter
-            header="Source"
-            className="px-4 py-1"
-            body={(rowData: Stock) => (
-              <Badge
-                value={rowData.depotCentral ? 'Central' : 'Point de vente'}
-                severity={rowData.depotCentral ? 'info' : 'warning'}
-                className="text-sm px-2 py-1"
-              />
-            )}
-          />
+  <Column
+    header="Prix acquisition"
+    body={(rowData) => (
+      <span className="text-blue-700 font-semibold">
+        {rowData.produit?.prix?.toLocaleString() ?? 'N/A'}
+      </span>
+    )}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
 
-          <Column
-            field="createdAt"
-            filter
-            header="Créé le"
-            className="px-4 py-1"
-            body={(rowData: Stock) => new Date(rowData.createdAt || '').toLocaleDateString()}
-          />
+  <Column
+    header="Valeur Marge"
+    body={(rowData: MouvementStock) => {
+      const prix = rowData.produit?.prix;
+      const marge = rowData.produit?.marge;
+      const valeur = prix && marge !== undefined ? ((prix * marge) / 100).toFixed(2) : 'N/A';
+      return <span className="text-orange-600 font-medium">{valeur}</span>;
+    }}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
 
-          <Column header="Actions" body={actionBodyTemplate} className="px-4 py-1" />
-        </DataTable>
+  <Column
+    header="Net à Payer"
+    body={(rowData) => {
+      const net = rowData.produit?.netTopay;
+      return <span className="text-purple-700 font-semibold">{net?.toFixed(2) ?? 'N/A'}</span>;
+    }}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
+
+  <Column
+    header="TVA (%)"
+    body={(rowData : MouvementStock) => <span className="text-yellow-800 font-medium">{rowData.produit?.tva ?? '—'}%</span>}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
+
+  <Column
+    header="Valeur TVA"
+    body={(rowData: MouvementStock) => {
+      const net = rowData.produit?.netTopay;
+      const tva = rowData.produit?.tva;
+      const value = net && tva !== undefined ? ((net * tva) / 100).toFixed(2) : 'N/A';
+      return <span className="text-yellow-600 font-medium">{value}</span>;
+    }}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
+
+  <Column
+    header="Prix de Vente"
+    body={(rowData) => (
+      <span className="text-green-600 font-bold">
+        {rowData.produit?.prixVente?.toFixed(2) ?? 'N/A'}
+      </span>
+    )}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
+
+  <Column
+    field="createdAt"
+    filter
+    header="Créé le"
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+    body={(rowData: Stock) => new Date(rowData.createdAt || '').toLocaleDateString()}
+    sortable
+  />
+</DataTable>
+
       </div>
     </div>
   );

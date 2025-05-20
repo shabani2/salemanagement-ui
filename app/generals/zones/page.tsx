@@ -95,6 +95,22 @@ export default function RegionManagement() {
     );
   };
 
+  // gestion de la recherche
+
+  const [filteredRegions, setFilteredRegions] = useState(regions || []);
+
+  useEffect(() => {
+    const filtered = regions.filter((region) => {
+      const query = search.toLowerCase();
+      return (
+        region.nom?.toLowerCase().includes(query) ||
+        region.ville?.toLowerCase().includes(query) ||
+        String(region.pointVenteCount).includes(query)
+      );
+    });
+    setFilteredRegions(filtered);
+  }, [search, regions]);
+
   return (
     <div className="bg-gray-100 min-h-screen ">
       <div className="flex items-center justify-between mb-3">
@@ -128,7 +144,7 @@ export default function RegionManagement() {
         </div>
         <div className=" rounded-lg shadow-md">
           <DataTable
-            value={regions}
+            value={filteredRegions}
             paginator
             stripedRows
             rows={5}

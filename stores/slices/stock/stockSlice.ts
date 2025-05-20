@@ -42,6 +42,22 @@ export const fetchStocks = createAsyncThunk('stock/fetchAll', async (_, { reject
     return rejectWithValue('Erreur lors de la récupération des stocks');
   }
 });
+export const fetchStockByPointVenteId = createAsyncThunk(
+  'Stock/fetchStockBypointVenteId',
+  async (pointVenteId: string, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/stock/stock-by-pv/${pointVenteId}`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la récupération du mouvement de stock');
+    }
+  }
+);
 
 export const fetchStockById = createAsyncThunk(
   'stock/fetchById',
@@ -137,6 +153,7 @@ const stockSlice = createSlice({
       .addCase(fetchStocks.fulfilled, (state, action) => {
         state.status = 'succeeded';
         stockAdapter.setAll(state, action.payload);
+        fetchStockByPointVenteId;
       })
       .addCase(fetchStocks.rejected, (state, action) => {
         state.status = 'failed';
@@ -153,6 +170,14 @@ const stockSlice = createSlice({
       })
       .addCase(deleteStock.fulfilled, (state, action) => {
         stockAdapter.removeOne(state, action.payload);
+      })
+      .addCase(fetchStockByPointVenteId.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        stockAdapter.setAll(state, action.payload);
+      })
+      .addCase(fetchStockByPointVenteId.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
       });
   },
 });

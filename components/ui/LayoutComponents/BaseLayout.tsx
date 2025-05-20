@@ -4,7 +4,7 @@ import { useState, ReactNode, useEffect } from 'react';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
 import { Footer } from './Footer';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectAuthUser } from '@/stores/slices/auth/authSlice';
 import { ClipLoader } from 'react-spinners';
@@ -25,7 +25,7 @@ export default function BaseLayout({ children }: LayoutProps) {
   const pathname = usePathname();
   const noLayoutPages = ['/login'];
   const user = useSelector(selectAuthUser);
-
+  const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
   const currentOrganisation = useSelector((state: RootState) => selectCurrentOrganisation(state));
 
@@ -42,9 +42,20 @@ export default function BaseLayout({ children }: LayoutProps) {
     return <div className="w-full h-full">{children}</div>;
   }
 
+  const handleNavigation = (path: string) => {
+    if (pathname !== path) {
+      setLoading(true);
+      router.push(path);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 w-full">
-      <Navbar isOpen={sidebarOpen} onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+      <Navbar
+        isOpen={sidebarOpen}
+        onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+        onNavigate={handleNavigation}
+      />
       <div className="flex flex-1">
         <Sidebar
           isOpen={sidebarOpen}

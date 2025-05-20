@@ -57,7 +57,7 @@ const Page = () => {
   if (!user) {
     return <p className="text-center text-gray-600">Utilisateur non trouvé.</p>;
   }
-
+  console.log('user', user);
   return (
     <div className="bg-gray-100 min-h-screen">
       <div className="flex items-center justify-between mb-6">
@@ -97,7 +97,7 @@ const Page = () => {
             {user.telephone && <p>📞 {user.telephone}</p>}
             {user.adresse && <p>📍 {user.adresse}</p>}
             {user.region && <p>🌍 {user.region}</p>}
-            {user.pointVente && <p>🏬 {user.pointVente}</p>}
+            {user?.pointVente && <p>🏬 {user?.pointVente.nom}</p>}
           </div>
 
           <div className="hidden md:flex mt-6 justify-center gap-3">
@@ -140,7 +140,7 @@ const Page = () => {
               ].map(({ name, placeholder }) => (
                 <div key={name} className="relative w-1/2 flex items-center">
                   <InputText
-                    type="text"// @ts-ignore
+                    type="text" // @ts-ignore
                     placeholder={placeholder}
                     // @ts-ignore
                     value={selectedUser?.[name as keyof UserModel] ?? ''}

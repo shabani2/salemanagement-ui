@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, SetStateAction, useRef } from 'react';
+import { useState, useEffect, SetStateAction, useRef, useMemo } from 'react';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { InputText } from 'primereact/inputtext';
@@ -14,7 +14,12 @@ import { Dialog } from 'primereact/dialog';
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
-import { deleteUser, fetchUsers, updateUser } from '@/stores/slices/users/userSlice';
+import {
+  deleteUser,
+  fetchUsers,
+  fetchUsersByPointVenteId,
+  updateUser,
+} from '@/stores/slices/users/userSlice';
 import { isPointVente, isRegion, User, UserModel } from '@/Models/UserType';
 import { Menu } from 'primereact/menu';
 import { UserRoleModel } from '@/lib/utils';
@@ -25,7 +30,7 @@ import { registerUser } from '@/stores/slices/auth/authSlice';
 import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import UserDialog from '@/components/ui/produitComponent/userComponent/UserDialog';
+import UserDialog from '@/components/ui/userComponent/UserDialog';
 
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 
@@ -74,6 +79,8 @@ const Page = () => {
   useEffect(() => {
     console.log('Row Index Map Updated:', rowIndexes);
   }, [rowIndexes]);
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
 
   const validate = () => {
     const newErrors: { [key in keyof User]?: string } = {};
@@ -85,17 +92,7 @@ const Page = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // const handleSubmit = () => {
-  //   if (validate()) handleCreateUser();
-  // };
-
   const dispatch = useDispatch<AppDispatch>();
-
-  useEffect(() => {
-    dispatch(fetchUsers()).then((resp) => {
-      setUsers(resp.payload);
-    });
-  }, [dispatch]);
 
   const onPageChange = (event: { first: SetStateAction<number>; rows: SetStateAction<number> }) => {
     setFirst(event.first);
@@ -158,10 +155,8 @@ const Page = () => {
     }
     setLoading(false);
   };
- 
 
   const home = { icon: 'pi pi-home', url: '/' };
- 
 
   const handleCreateOrUpdate = async () => {
     const isEditMode = !!newUser._id;
@@ -286,6 +281,40 @@ const Page = () => {
     }
   }, [dialogType, selectedUser]);
 
+  useEffect(() => {
+    if (user?.role === 'SuperAdmin' || user?.role === 'AdminRegion') {
+      dispatch(fetchUsers()).then((resp) => {
+        console.log('users by point vente : ', resp.payload);
+        setUsers(resp.payload);
+      });
+    } else if (user?.pointVente?._id) {
+      dispatch(fetchUsersByPointVenteId(user.pointVente._id)).then((resp) => {
+        console.log('users by point vente : ', resp.payload);
+        setUsers(resp.payload);
+      });
+    }
+  }, [dispatch, user?.role, user?.pointVente?._id]);
+  //traitement de la recherche
+
+  const filteredUsers = useMemo(() => {
+    const lowerSearch = search.toLowerCase();
+    return (Array.isArray(users) ? users.filter((user): user is User => user !== null) : []).filter(
+      (u) => {
+        const nom = u.nom?.toLowerCase() || '';
+        const prenom = u.prenom?.toLowerCase() || '';
+        const email = u.email?.toLowerCase() || '';
+        const tel = u.telephone?.toLowerCase() || '';
+        const region =
+          u.region?.nom?.toLowerCase() || u.pointVente?.region?.nom?.toLowerCase() || '';
+        const pv = u.pointVente?.nom?.toLowerCase() || 'depot central';
+        const role = u.role?.toLowerCase() || '';
+        return [nom, prenom, email, tel, region, pv, role].some((field) =>
+          field.includes(lowerSearch)
+        );
+      }
+    );
+  }, [search, users]);
+
   return (
     <div className="bg-gray-100 h-screen-min">
       <div className="flex items-center justify-between mb-4">
@@ -307,16 +336,17 @@ const Page = () => {
             </div>
             {/* <i className="pi pi-search absolute -3 top-1/2 transform -translate-y-1/2 text-gray-400"></i> */}
           </div>
-
-          <Button
-            label="Créer un utilisateur"
-            className="bg-blue-500 text-white p-2 rounded"
-            onClick={() => setDialogType('create')}
-          />
+          {!(user.role === 'Gerant' || user.role === 'Vendeur') && (
+            <Button
+              label="Créer un utilisateur"
+              className="bg-blue-500 text-white p-2 rounded"
+              onClick={() => setDialogType('create')}
+            />
+          )}
         </div>
         <div className=" p-1 rounded-lg shadow-md ">
           <DataTable
-            value={Array.isArray(users) ? users.filter((user): user is User => user !== null) : []}
+            value={filteredUsers}
             dataKey="_id"
             paginator
             loading={loading}
@@ -336,6 +366,21 @@ const Page = () => {
           >
             <Column field="_id" header="#" body={(_data, options) => options.rowIndex + 1} />
             <Column
+              header=""
+              body={(data) => (
+                <img
+                  src={`http://localhost:8000/${data.image.replace('../', '')}`}
+                  alt="Avatar"
+                  className="w-10 h-10 rounded-full object-cover border border-gray-300"
+                />
+              )}
+            />
+            <Column field="nom" header="Nom" sortable filter className="px-4 py-1" />
+            <Column field="prenom" header="Prénom" sortable filter className="px-4 py-1" />
+            <Column field="email" header="Email" sortable filter className="px-4 py-1" />
+            <Column field="telephone" header="Téléphone" className="px-4 py-1" />
+
+            <Column
               field="region.nom"
               header="Region"
               filter
@@ -351,26 +396,12 @@ const Page = () => {
               body={(rowData) => rowData?.pointVente?.nom || 'Depot Central'}
               className="px-4 py-1"
             />
-            <Column
-              header="Avatar"
-              body={(data) => (
-                <img
-                  src={`http://localhost:8000/${data.image.replace('../', '')}`}
-                  alt="Avatar"
-                  className="w-10 h-10 rounded-full object-cover border border-gray-300"
-                />
-              )}
-            />
-            <Column field="nom" header="Nom" sortable filter className="px-4 py-1" />
-            <Column field="prenom" header="Prénom" sortable filter className="px-4 py-1" />
-            <Column field="email" header="Email" sortable filter className="px-4 py-1" />
-            <Column field="telephone" header="Téléphone" className="px-4 py-1" />
+
             <Column field="role" header="Rôle" className="px-4 py-1" />
             <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
           </DataTable>
         </div>
       </div>
-
 
       <UserDialog
         // @ts-ignore

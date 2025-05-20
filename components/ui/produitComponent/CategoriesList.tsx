@@ -9,11 +9,11 @@ import { Categorie } from '@/Models/produitsType';
 
 interface Props {
   categories: Categorie[];
-  filterProduitByCategorie: (categorie: Categorie | null) => void;
+  // filterProduitByCategorie: (categorie: Categorie | null) => void;
   onAction: (action: 'edit' | 'delete', categorie: Categorie) => void;
 }
 
-const CategorieList: React.FC<Props> = ({ categories, filterProduitByCategorie, onAction }) => {
+const CategorieList: React.FC<Props> = ({ categories,  onAction }) => {
   const menuRefs = useRef<Record<string, Menu | null>>({});
   const [activeSwitches, setActiveSwitches] = useState<Record<string, boolean>>({ all: true });
 
@@ -28,7 +28,7 @@ const CategorieList: React.FC<Props> = ({ categories, filterProduitByCategorie, 
     const updated: Record<string, boolean> = { [id]: true };
     setActiveSwitches(updated);
 
-    filterProduitByCategorie(categorie);
+    // filterProduitByCategorie(categorie);
   };
 
   return (

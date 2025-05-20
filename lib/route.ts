@@ -3,6 +3,7 @@ import SuperAdminDashboard from '@/app/page';
 import Zone from '@/app/generals/zones/page';
 import Pointventes from '@/app/generals/point-vente/page';
 import Produit from '@/app/generals/produits/page';
+import Categories from '@/app/generals/categories/page';
 import Operations from '@/app/generals/operations/page';
 import Rapport from '@/app/generals/rapports/page';
 import Stock from '@/app/generals/stock/page';
@@ -29,11 +30,18 @@ export const Routes = [
     component: Pointventes,
   },
   {
+    path: '/generals/categories',
+    title: 'Catégories',
+    icon: PrimeIcons.LIST,
+   
+    component: Categories,
+  },
+  {
     path: '/generals/produits',
     title: 'Produits',
     icon: PrimeIcons.TAG,
-    component: Zone,
-  },
+    component: Produit,
+  }, 
   {
     path: '/generals/operations',
     title: 'Opérations',

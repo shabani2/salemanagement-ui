@@ -6,6 +6,7 @@
 import { OperationType } from '@/lib/operationType';
 import {
   fetchMouvementsStock,
+  fetchMouvementStockByPointVenteId,
   selectAllMouvementsStock,
   validateMouvementStock,
 } from '@/stores/slices/mvtStock/mvtStock';
@@ -18,13 +19,18 @@ import { Column } from 'primereact/column';
 import { DataTable } from 'primereact/datatable';
 import { Dropdown } from 'primereact/dropdown';
 import { Menu } from 'primereact/menu';
-import React, { SetStateAction, useEffect, useRef, useState } from 'react';
+import React, { SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { MouvementStock } from '@/Models/mouvementStockType';
 import { Badge } from 'primereact/badge';
 // import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { ValidationDialog } from '@/components/ui/ValidationDialog';
+import { getOptionsByRole, getRoleOptionsByUser } from '@/lib/utils';
+import Operations from '@/app/generals/operations/page';
+import { InputText } from 'primereact/inputtext';
+import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
+import { saveAs } from 'file-saver'
 
 const typeOptions = Object.values(OperationType).map((op) => ({
   label: op,
@@ -33,7 +39,7 @@ const typeOptions = Object.values(OperationType).map((op) => ({
 const page = () => {
   const [selectedType, setSelectedType] = useState(null);
   const dispatch = useDispatch<AppDispatch>();
-  const mvtStocks = useSelector((state: RootState) => selectAllMouvementsStock(state));
+
   const [selectedMvt, setSelectedMvt] = useState<MouvementStock | null>(null);
   const [isValidateMvt, setIsValidateMvt] = useState<boolean>(false);
   const selectedRowDataRef = useRef<any>(null);
@@ -55,6 +61,9 @@ const page = () => {
       setIsValidateMvt(true);
     }
   };
+
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
 
   const actionBodyTemplate = (rowData: MouvementStock) => (
     <div>
@@ -88,10 +97,99 @@ const page = () => {
     </div>
   );
 
-  useEffect(() => {
-    dispatch(fetchMouvementsStock());
-  }, [dispatch]);
+  const allMvtStocks = useSelector((state: RootState) => selectAllMouvementsStock(state));
 
+  const allowedTypes = useMemo(() => {
+    const types = getOptionsByRole(user?.role).map((opt) => opt.value);
+    if (user?.role === 'AdminPointVente') {
+      return [...types, 'Livraison'];
+    }
+    return types;
+  }, [user?.role]);
+
+  console.log('allowed types : ', allowedTypes);
+  const mvtStocks = useMemo(() => {
+    return allMvtStocks.filter((mvt) => allowedTypes.includes(mvt.type));
+  }, [allMvtStocks, allowedTypes]);
+
+  useEffect(() => {
+    if (!user?.role) return;
+
+    if (user.role !== 'SuperAdmin' && user.role !== 'AdminRegion') {
+      console.log('user role : ', user.role);
+      dispatch(fetchMouvementStockByPointVenteId(user?.pointVente?._id)).then((resp) => {
+        console.log('mvt = ', resp.payload);
+      });
+    } else {
+      dispatch(fetchMouvementsStock());
+    }
+  }, [dispatch, user?.role]);
+
+  console.log('mvtStocks : ', allMvtStocks);
+
+  // traitement de recherche
+  const [search, setSearch] = useState('');
+  const [filteredMvtStocks, setFilteredMvtStocks] = useState(mvtStocks);
+
+  useEffect(() => {
+    const filtered = mvtStocks.filter((row) => {
+      const q = search.toLowerCase();
+      return (
+        row.produit?.categorie?.nom?.toLowerCase().includes(q) ||
+        row.produit?.nom?.toLowerCase().includes(q) ||
+        row.pointVente?.nom?.toLowerCase().includes(q) ||
+        row.type?.toLowerCase().includes(q) ||
+        String(row.quantite).includes(q) ||
+        String(row.montant).includes(q) ||
+        (row.statut === true ? 'validé' : 'en attente').includes(q) ||
+        new Date(row.createdAt || '').toLocaleDateString().toLowerCase().includes(q)
+      );
+    });
+    setFilteredMvtStocks(filtered);
+  }, [search, mvtStocks]);
+
+  const mvtOptions = getOptionsByRole(user?.role);
+  const mvtDefault = mvtOptions[0]?.value || null;
+  
+  useEffect(() => {
+    if (mvtDefault) {
+      setSelectedType(mvtDefault);
+      setFilteredMvtStocks(mvtStocks.filter((s) => s.type === mvtDefault));
+    }
+  }, [mvtStocks, mvtDefault]);
+
+  //file management
+      const toast = useRef<Toast>(null);
+    
+      const handleFileManagement = ({ type, format, file }: { type: 'import' | 'export'; format: 'csv' | 'pdf'; file?: File }) => {
+        if (type === 'import' && file) {
+          setImportedFiles(prev => [...prev, { name: file.name, format }]);
+          toast.current?.show({
+            severity: 'info',
+            summary: `Import ${format.toUpperCase()}`,
+            detail: `File imported: ${file.name}`,
+            life: 3000,
+          });
+          return;
+        }
+    
+        if (type === 'export') {
+          const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+          const blob = new Blob([content], {
+            type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          });
+          const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+          saveAs(blob, filename);
+    
+          toast.current?.show({
+            severity: 'success',
+            summary: `Export ${format.toUpperCase()}`,
+            detail: `File downloaded: ${filename}`,
+            life: 3000,
+          });
+        }
+      };
+  
   return (
     <div className="bg-gray-100 min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -103,148 +201,254 @@ const page = () => {
         <h2 className="text-2xl font-bold">Gestion des Rapports</h2>
       </div>
       <div className="bg-white p-4 rounded-lg shadow-md">
-        <div className="gap-4 mb-4   flex justify-between">
-          <div className="relative w-2/3 flex flex-row items-end gap-3">
-            <div className="w-full flex flex-col gap-2">
-              {/* <label htmlFor="type">Type</label> */}
-              <Dropdown
-                id="type"
-                value={selectedType}
-                options={typeOptions}
-                onChange={(e) => {
-                  setSelectedType(e.value);
-                  console.log('Type sélectionné:', e.value);
-                }}
-                placeholder="Sélectionner un type"
-                className="w-full"
-              />
-            </div>
+      <div className="flex mb-4 gap-4">
+  {/* Partie gauche : 50% de la largeur */}
+  <div className="w-1/2 flex gap-3">
+    {/* Champ de recherche */}
+    <div className="w-1/2">
+      <InputText
+        className="p-2 pl-10 border rounded w-full"
+        placeholder="Rechercher..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+    </div>
 
-            <div className="flex gap-2 h-full items-end self-end">
-              <Button
-                label="upload"
-                icon="pi pi-upload"
-                className="p-button-primary text-[16px] h-[46px]"
-              />
-              <Button
-                label="download"
-                icon="pi pi-download"
-                className="p-button-success text-[16px] h-[46px]"
-              />
-            </div>
-          </div>
-        </div>
+    {/* Dropdown */}
+    <div className="w-1/2">
+      <Dropdown
+        value={selectedType}
+        onChange={(e) => {
+          setSelectedType(e.value);
+          setFilteredMvtStocks(
+            e.value ? mvtStocks.filter((s) => s.type === e.value) : mvtStocks
+          );
+        }}
+        options={mvtOptions}
+        optionLabel="label"
+        placeholder="Sélectionner le type d'opération"
+        className="w-full bg-green-100 text-green-900 font-semibold rounded-md border-none"
+      />
+    </div>
+  </div>
+
+  {/* Partie droite : 50% de la largeur, alignée à droite */}
+  <div className="w-1/2 flex justify-end items-end gap-2">
+   <DropdownImportExport onAction={handleFileManagement} />
+  </div>
+</div>
+
         {/* datatable zone */}
         <DataTable
-          value={mvtStocks}
-          dataKey="_id"
-          paginator
-          loading={loading}
-          rows={rows}
-          stripedRows
-          first={first}
-          onPage={onPageChange}
-          className="rounded-lg custom-datatable"
-          // @ts-ignore
-          tableStyle={{ minWidth: '60rem' }}
-          // @ts-ignore
-          rowClassName={(_, index: number) =>
-            index % 2 === 0 ? 'bg-gray-300 text-gray-900' : 'bg-green-700 text-white'
-          }
-        >
-          <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
-          <Column
-            field="produit.categorie.nom"
-            header="Catégorie"
-            filter
-            body={(rowData: MouvementStock) => {
-              const categorie = rowData?.produit?.categorie;
-              if (!categorie) return '—';
-              // @ts-ignore
-              const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
+  value={filteredMvtStocks}
+  dataKey="_id"
+  paginator
+  loading={loading}
+  rows={rows}
+  stripedRows
+  first={first}
+  onPage={onPageChange}
+  className="rounded-lg custom-datatable text-[14px]"
+  // @ts-ignore
+  tableStyle={{ minWidth: '60rem' }}
+  // @ts-ignore
+  rowClassName={(_, index: number) =>
+    index % 2 === 0 ? 'bg-gray-300 text-gray-900' : 'bg-green-700 text-white'
+  }
+>
+  <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} headerClassName="text-[16px]" />
 
-              return (
-                <div className="flex items-center gap-2">
-                  {
-                    // @ts-ignore
-                    categorie.image && (
-                      <img
-                        src={imageUrl}
-                        alt={
-                          // @ts-ignore
-                          categorie.nom
-                        }
-                        className="w-8 h-8 rounded-full object-cover border border-gray-300"
-                      />
-                    )
-                  }
-                  <span>
-                    {
-                      // @ts-ignore
-                      categorie.nom
-                    }
-                  </span>
-                </div>
-              );
-            }}
-            className="px-4 py-1"
-          />
+  <Column
+    field="produit.categorie.nom"
+    header="Catégorie"
+    filter
+    body={(rowData: MouvementStock) => {
+      const categorie = rowData?.produit?.categorie;
+      if (!categorie) return '—';
+      const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
 
-          <Column
-            field="produit.nom"
-            header="Produit"
-            filter
-            body={(rowData) => rowData.produit?.nom}
-            className="px-4 py-1"
-          />
+      return (
+        <div className="flex items-center gap-2">
+          {categorie.image && (
+            <img
+              src={imageUrl}
+              alt={categorie.nom}
+              className="w-8 h-8 rounded-full object-cover border border-gray-300"
+            />
+          )}
+          <span>{categorie.nom}</span>
+        </div>
+      );
+    }}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
 
-          <Column
-            field="pointVente.nom"
-            header="Point de Vente"
-            filter
-            body={(rowData) => rowData.pointVente?.nom || 'Depot Central'}
-            className="px-4 py-1"
-          />
+  <Column
+    field="produit.nom"
+    header="Produit"
+    filter
+    body={(rowData:MouvementStock) => rowData.produit?.nom}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
 
-          <Column field="type" header="Type" filter className="px-4 py-1" />
+  <Column
+    field="pointVente.nom"
+    header="Point de Vente"
+    filter
+    body={(rowData) => rowData.pointVente?.nom || 'Depot Central'}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  />
 
-          <Column field="quantite" header="Quantité" filter className="px-4 py-1" />
+  {/* <Column field="type" header="Type" filter className="px-4 py-1" headerClassName="text-[16px]" /> */}
 
-          <Column
-            field="montant"
-            header="Montant"
-            filter
-            className="px-4 py-1"
-            body={(rowData) => `${rowData.montant.toLocaleString()} FC`}
-          />
+  <Column field="quantite" header="Quantité" filter className="px-4 py-1" headerClassName="text-[16px]" />
+  <Column
+  header="Prix Unitaire"
+  body={(rowData:MouvementStock) => {
+    const prix =
+      ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+        ? rowData.produit?.prix
+        : rowData.produit?.prixVente;
 
-          <Column
-            field="statut"
-            header="Statut"
-            filter
-            className="px-4 py-1"
-            body={(rowData) => {
-              const isValide = rowData.statut === true;
-              return (
-                <Badge
-                  value={isValide ? 'Validé' : 'En attente'}
-                  severity={isValide ? 'success' : 'warning'}
-                  className="text-sm px-2 py-1"
-                />
-              );
-            }}
-          />
+    return (
+      <span className="text-blue-500 font-medium">
+        {prix?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? 'N/A'}
+      </span>
+    );
+  }}
+  className="px-4 py-1"
+  headerClassName="text-[16px]"
+/>
 
-          <Column
-            field="createdAt"
-            filter
-            header="Créé le"
-            className="px-4 py-1"
-            body={(rowData) => new Date(rowData.createdAt || '').toLocaleDateString()}
-          />
+  
 
-          <Column header="Actions" body={actionBodyTemplate} className="px-4 py-1" />
-        </DataTable>
+  <Column
+  header="Montant"
+  body={(rowData:MouvementStock) => {
+    const prix =
+    ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+      ? rowData.produit?.prix
+      : rowData.produit?.prixVente;
+    const quantite = rowData.quantite ?? 0;
+    const totalAcquisition = prix * quantite;
+    return (
+      <span className="text-blue-700 font-semibold">
+        {totalAcquisition.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </span>
+    );
+  }}
+  className="px-4 py-1"
+  headerClassName="text-[16px]"
+/>
+
+
+<Column
+  header="Valeur Marge"
+  body={(rowData:MouvementStock) => {
+    const prix =
+    ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+      ? rowData.produit?.prix
+      : rowData.produit?.prixVente;
+    const marge = rowData.produit?.marge ?? 0;
+    const quantite = rowData.quantite ?? 0;
+    const valeur = ((prix * marge) / 100) * quantite;
+    return <span className="text-orange-600 font-medium">{valeur.toFixed(2)}</span>;
+  }}
+  className="px-4 py-1"
+  headerClassName="text-[16px]"
+/>
+
+
+<Column
+  header="Net à Payer"
+  body={(rowData:MouvementStock) => {
+    const net = rowData.produit?.netTopay ?? 0;
+    const quantite = rowData.quantite ?? 0;
+    const totalNet = net * quantite;
+    return <span className="text-purple-700 font-semibold">{totalNet.toFixed(2)}</span>;
+  }}
+  className="px-4 py-1"
+  headerClassName="text-[16px]"
+/>
+
+
+  {/* <Column
+    header="TVA (%)"
+    body={(rowData) => <span className="text-yellow-800 font-medium">{rowData.produit?.tva ?? '—'}%</span>}
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+  /> */}
+
+<Column
+  header="Valeur TVA"
+  body={(rowData:MouvementStock) => {
+    const net = rowData.produit?.netTopay ?? 0;
+    const tva = rowData.produit?.tva ?? 0;
+    const quantite = rowData.quantite ?? 0;
+    const valeurTVA = ((net * tva) / 100) * quantite;
+    return <span className="text-yellow-600 font-medium">{valeurTVA.toFixed(2)}</span>;
+  }}
+  className="px-4 py-1"
+  headerClassName="text-[16px]"
+/>
+
+
+<Column
+  header="Prix de Vente"
+  body={(rowData:MouvementStock) => {
+    const prix =
+      ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+        ? rowData.produit?.prix
+        : rowData.produit?.prixVente;
+    const prixVente = rowData.produit?.prixVente ?? 0;
+    const quantite = rowData.quantite ?? 0;
+    const totalVente = prixVente * quantite;
+
+    let colorClass = 'text-blue-600';
+    if (prixVente > prix) colorClass = 'text-green-600 font-bold';
+    else if (prixVente < prix) colorClass = 'text-red-600 font-bold';
+
+    return <span className={colorClass}>{totalVente.toFixed(2)}</span>;
+  }}
+  className="px-4 py-1"
+  headerClassName="text-[16px]"
+/>
+
+
+
+  <Column
+    field="statut"
+    header="Statut"
+    filter
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+    body={(rowData) => {
+      const isValide = rowData.statut === true;
+      return (
+        <Badge
+          value={isValide ? 'Validé' : 'En attente'}
+          severity={isValide ? 'success' : 'warning'}
+          className="text-sm px-2 py-1"
+        />
+      );
+    }}
+  />
+
+  <Column
+    field="createdAt"
+    filter
+    header="Créé le"
+    className="px-4 py-1"
+    headerClassName="text-[16px]"
+    body={(rowData) => new Date(rowData.createdAt || '').toLocaleDateString()}
+  />
+
+  <Column header="Actions" body={actionBodyTemplate} className="px-4 py-1" headerClassName="text-[16px]" />
+</DataTable>
+
       </div>
 
       {/* dialog de validation */}
@@ -255,7 +459,14 @@ const page = () => {
         onConfirm={(item) => {
           dispatch(validateMouvementStock(item?._id)).then((resp) => {
             console.log('mvt updated', resp.payload);
-            dispatch(fetchMouvementsStock());
+            if (user.role !== 'SuperAdmin' && user.role !== 'AdminRegion') {
+              console.log('user role : ', user.role);
+              dispatch(fetchMouvementStockByPointVenteId(user?.pointVente?._id)).then((resp) => {
+                console.log('mvt = ', resp.payload);
+              });
+            } else {
+              dispatch(fetchMouvementsStock());
+            }
             setIsValidateMvt(false);
           });
         }}

@@ -213,6 +213,23 @@ const organisationSlice = createSlice({
   },
 });
 
+export const fetchDefaultOrganisationLogo = createAsyncThunk(
+  'organisations/fetchDefaultOrganisationLogo',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get('/organisations/logo', {
+        headers: getAuthHeaders(),
+      });
+      return response.data.logoUrl; // ou response.data selon backend
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la récupération du logo');
+    }
+  }
+);
+
 export const organisationReducer = organisationSlice.reducer;
 
 export const { setCurrentOrganisation } = organisationSlice.actions;

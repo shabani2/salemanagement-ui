@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { InputText } from 'primereact/inputtext';
@@ -29,6 +29,10 @@ import { User } from '@/Models/UserType';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { downloadPdfFile, generateStockPdf } from '@/stores/slices/document/pdfGenerator';
 import { destinateur, organisation, serie } from '@/lib/Constants';
+import { getOptionsByRole } from '@/lib/utils';
+import { DataTable } from 'primereact/datatable';
+import { Accordion, AccordionTab } from 'primereact/accordion';
+import { Column } from 'primereact/column';
 
 type FormValues = {
   type: string;
@@ -44,6 +48,11 @@ type FormValues = {
     produit: string;
     quantite: number;
   }[];
+  formulaire: {
+    categorie: string;
+    produit: string;
+    quantite: number;
+  };
   remise?: number;
   rabais?: number;
   montantRecu?: number;
@@ -53,14 +62,6 @@ type FormValues = {
   tauxDollar?: number;
 };
 
-const typeOptions = [
-  { label: 'Entrée', value: 'Entrée' },
-  { label: 'Sortie', value: 'Sortie' },
-  { label: 'Vente', value: 'Vente' },
-  { label: 'Livraison', value: 'Livraison' },
-  { label: 'Commande', value: 'commande' },
-];
-
 const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
   const categories = useSelector((state: RootState) => selectAllCategories(state));
@@ -69,6 +70,7 @@ const Page = () => {
   const [produits, setProduits] = useState<Produit[]>([]);
   const [stockRestant, setStockRestant] = useState<{ [index: number]: number }>({});
   const [disableAdd, setDisableAdd] = useState(false);
+  const [editingIndex, setEditingIndex] = useState(null);
 
   const [selectedType, setSelectedType] = useState<string>('');
 
@@ -82,6 +84,11 @@ const Page = () => {
     depotCentral: false,
     pointVente: undefined,
     produits: [{ categorie: '', produit: '', quantite: 0 }],
+    formulaire: {
+      categorie: '',
+      produit: '',
+      quantite: 0,
+    },
     remise: 0,
     rabais: 0,
   };
@@ -96,12 +103,24 @@ const Page = () => {
     reset,
     setError,
     clearErrors,
+    getValues,
+    resetField,
+    unregister,
+    trigger,
   } = useForm<FormValues>({
-    defaultValues,
+    defaultValues: {
+      produits: [],
+      formulaire: {
+        categorie: '',
+        produit: '',
+        quantite: 0,
+      },
+      type: '',
+    },
     mode: 'onChange',
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'produits' });
+  const { fields, append, remove, update } = useFieldArray({ control, name: 'produits' });
 
   useEffect(() => {
     dispatch(fetchCategories());
@@ -123,12 +142,22 @@ const Page = () => {
   }, 0);
 
   const onSubmit = async (data: FormValues) => {
+    if (!data.produits || data.produits.length === 0) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Veuillez ajouter au moins un produit avant de soumettre.',
+        life: 4000,
+      });
+      return; // ❌ Bloque la soumission
+    }
+
     try {
       const mouvements = data.produits.map((item) => {
         const produitObj = allProduits.find((p) => p._id === item.produit);
         if (!produitObj) throw new Error('Produit introuvable');
 
-        const prix = ['Entrée', 'Livraison'].includes(data.type)
+        const prix = ['Entrée', 'Livraison', 'Commande', 'Sortie'].includes(data.type)
           ? produitObj.prix
           : produitObj.prixVente;
 
@@ -140,7 +169,7 @@ const Page = () => {
           type: data.type,
           depotCentral: data.depotCentral ?? false,
           pointVente: data.pointVente,
-          statut: data.type === 'Entrée',
+          statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type),
         };
       });
 
@@ -148,14 +177,12 @@ const Page = () => {
         mouvements.map((m) =>
           dispatch(
             createMouvementStock({
-              //@ts-ignore
               produit: m.produit,
               quantite: m.quantite,
-              montant: m.montant, //@ts-ignore
+              montant: m.montant,
               type: m.type,
               depotCentral: m.depotCentral,
               pointVente: m.pointVente,
-              //@ts-ignore
               statut: m.statut,
             })
           )
@@ -184,7 +211,6 @@ const Page = () => {
           life: 3000,
         });
 
-        // ✅ Ouverture du Dialog pour PDF
         confirmDialog({
           message: 'Voulez-vous télécharger le document PDF ?',
           header: 'Téléchargement',
@@ -222,7 +248,7 @@ const Page = () => {
       toast.current?.show({
         severity: 'error',
         summary: 'Erreur critique',
-        detail: 'Une erreur globale est survenue',
+        detail: 'Échec de l’opération',
         life: 4000,
       });
     }
@@ -234,7 +260,7 @@ const Page = () => {
   const selectedPointVente = watch('pointVente');
 
   useEffect(() => {
-    if (selectedType === 'Entrée') return; // 🚫 Ne pas vérifier le stock en cas d'entrée
+    if (selectedType === 'Entrée' || selectedType === 'Commande') return; // 🚫 Ne pas vérifier le stock en cas d'entrée
 
     watchProduits.forEach((prod, index) => {
       if (!prod.produit || !prod.quantite || prod.quantite <= 0) return;
@@ -260,18 +286,15 @@ const Page = () => {
     });
   }, [watchProduits, selectedType, selectedPointVente]);
   //@ts-ignore
-  const validateStock = async (value, index) => {
-    const produitId = watch(`produits.${index}.produit`);
+  const validateStock = async (value: number) => {
+    const produitId = watch('formulaire.produit');
     const type = watch('type');
 
     if (!produitId || !value || value <= 0) {
-      setDisableAdd(true);
       return 'Quantité invalide';
     }
-
-    // ✅ Si Entrée, on ne valide pas le stock
-    if (type === 'Entrée') {
-      setDisableAdd(false);
+console.log('type selectionne : ',type)
+    if (type === 'Entrée' || type === 'Commande') {
       return true;
     }
 
@@ -279,21 +302,16 @@ const Page = () => {
       checkStock({
         type,
         produitId,
-        quantite: Number(value),
-        pointVenteId: type !== 'Entrée' ? selectedPointVente?._id : undefined,
+        quantite: value,
+        pointVenteId: selectedPointVente?._id,
       })
     ).unwrap();
 
-    const isValid = result.suffisant && result.quantiteDisponible >= value;
-
-    if (!isValid) {
-      setDisableAdd(true); //@ts-ignore
-      setValue(`produits.${index}.quantite`, undefined);
-    } else {
-      setDisableAdd(false);
+    if (!result.suffisant || result.quantiteDisponible < value) {
+      return `Stock disponible : ${result.quantiteDisponible}`;
     }
 
-    return isValid ? true : `Stock disponible : ${result.quantiteDisponible}`;
+    return true;
   };
 
   const tauxFranc = watch('tauxFranc') || 0;
@@ -314,10 +332,23 @@ const Page = () => {
     required: 'Quantité requise',
     min: { value: 1, message: 'Minimum 1' },
     validate: async (value: any) => {
-      if (type === 'Entrée') return true;
+      if (type === 'Entrée' || type === 'Commande') return true;
       return await validateStock(value, index);
     },
   });
+
+  const rolesWithFixedPointVente = ['AdminPointVente', 'Vendeur', 'Gerant'];
+  const isPointVenteLocked = user && rolesWithFixedPointVente.includes(user.role);
+  useEffect(() => {
+    if (isPointVenteLocked && user?.pointVente && pointsVente.length > 0) {
+      const matchedPV = pointsVente.find(
+        (pv) =>
+          pv._id === (typeof user.pointVente === 'string' ? user.pointVente : user.pointVente._id)
+      );
+      //@ts-ignore
+      if (matchedPV) setValue('pointVente', matchedPV);
+    }
+  }, [isPointVenteLocked, user?.pointVente, setValue]);
 
   useEffect(() => {
     const savedTauxDollar = localStorage.getItem('tauxDollar');
@@ -325,6 +356,26 @@ const Page = () => {
     if (savedTauxDollar) setValue('tauxDollar', parseFloat(savedTauxDollar));
     if (savedTauxFranc) setValue('tauxFranc', parseFloat(savedTauxFranc));
   }, [setValue]);
+
+  useEffect(() => {
+    if (montantFranc > 0) {
+      setValue('montantRecu', montantFranc);
+    }
+  }, [montantFranc]);
+
+  const filteredTypeOptions = useMemo(() => user && getOptionsByRole(user?.role), [user?.role]);
+
+  // Afficher uniquement un seul champ dynamique pour édition
+
+  const [formulaire, setFormulaire] = useState({
+    categorie: '',
+    produit: '',
+    quantite: 0,
+  });
+
+  const selectedCatId = watch('formulaire.categorie');
+
+  const filteredProduits = allProduits.filter((p) => p.categorie._id == selectedCatId);
 
   return (
     <div className="bg-gray-100 min-h-screen p-4">
@@ -340,28 +391,86 @@ const Page = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-4 rounded-lg shadow-md">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="w-full flex items-center gap-2">
-              <Controller
-                name="type"
-                control={control}
-                rules={{ required: 'Type est requis' }}
-                render={({ field }) => (
-                  <Dropdown
-                    {...field}
-                    options={typeOptions}
-                    onChange={(e) => {
-                      field.onChange(e.value);
-                      setSelectedType(e.value);
-                    }}
-                    placeholder="Sélectionner un type"
-                    className={classNames('w-full', { 'p-invalid': !!errors.type })}
-                  />
-                )}
-              />
-              {errors.type && <small className="text-red-500">{errors.type.message}</small>}
+          <form
+            onSubmit={(e) => {
+              if (fields.length > 0) {
+                unregister('formulaire.produit');
+                unregister('formulaire.quantite');
+                unregister('formulaire.categorie');
+              }
+              handleSubmit(onSubmit)(e);
+            }}
+            className="space-y-4"
+          >
+            {/* Type */}
+            <div className="w-full flex items-end gap-4">
+              {/* Champ Type (50%) avec label fantôme pour alignement */}
+              <div className="w-1/2">
+                <label className="invisible block text-sm font-medium mb-1">Type</label>
+                <Controller
+                  name="type"
+                  control={control}
+                  rules={{ required: 'Type est requis' }}
+                  render={({ field }) => (
+                    <Dropdown
+                      {...field}
+                      options={filteredTypeOptions}
+                      onChange={(e) => {
+                        field.onChange(e.value);
+                        setSelectedType(e.value);
+                      }}
+                      placeholder="Sélectionner un type"
+                      className={classNames('w-full', { 'p-invalid': !!errors.type })}
+                    />
+                  )}
+                />
+                {errors.type && <small className="text-red-500">{errors.type.message}</small>}
+              </div>
+
+              {/* Taux Dollar */}
+              <div className="w-1/4">
+                <label className="block text-sm font-medium mb-1 text-gray-700">Taux dollar</label>
+                <InputText
+                  type="number"
+                  value={watch('tauxDollar') ?? ''}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    if (!isNaN(value)) {
+                      setValue('tauxDollar', value);
+                      localStorage.setItem('tauxDollar', value.toString());
+                    } else {
+                      setValue('tauxDollar', '');
+                      localStorage.removeItem('tauxDollar');
+                    }
+                  }}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Taux Franc */}
+              <div className="w-1/4">
+                <label className="block text-sm font-medium mb-1 text-gray-700">
+                  Taux en franc
+                </label>
+                <InputText
+                  type="number"
+                  value={watch('tauxFranc') ?? ''}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    if (!isNaN(value)) {
+                      setValue('tauxFranc', value);
+                      localStorage.setItem('tauxFranc', value.toString());
+                    } else {
+                      setValue('tauxFranc', '');
+                      localStorage.removeItem('tauxFranc');
+                    }
+                  }}
+                  className="w-full"
+                />
+              </div>
             </div>
 
+            {/* Dépôt central (si Entrée) */}
             {watch('type') === 'Entrée' && (
               <div>
                 <label>
@@ -383,6 +492,7 @@ const Page = () => {
               </div>
             )}
 
+            {/* Point de vente (si non Entrée) */}
             {watch('type') !== 'Entrée' && (
               <div>
                 <label>Point de vente</label>
@@ -393,301 +503,299 @@ const Page = () => {
                   onChange={(e) => setValue('pointVente', e.value)}
                   placeholder="Sélectionner un point de vente"
                   className="w-full"
-                  disabled={!watch('type')}
+                  disabled={!watch('type') || isPointVenteLocked}
                 />
                 {errors.pointVente && <small className="text-red-500">Champ requis</small>}
               </div>
             )}
 
-            {fields.map((field, index) => {
-              const selectedCatId = watch(`produits.${index}.categorie`);
-              const selectedProduitId = watch(`produits.${index}.produit`); //@ts-ignore
-              const filteredProduits = allProduits.filter((p) => p.categorie._id === selectedCatId);
-
-              return (
-                <div key={field.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                  <div>
-                    <label>Catégorie</label>
-                    <Dropdown
-                      value={selectedCatId}
-                      options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
-                      onChange={(e) => setValue(`produits.${index}.categorie`, e.value)}
-                      placeholder="Choisir une catégorie"
-                      className="w-full"
-                      disabled={!watch('type')}
-                    />
-                  </div>
-                  <div>
-                    <label>Produit</label>
-                    <Dropdown
-                      value={selectedProduitId}
-                      options={filteredProduits.map((p) => ({ label: p.nom, value: p._id }))}
-                      onChange={(e) => setValue(`produits.${index}.produit`, e.value)}
-                      placeholder="Choisir un produit"
-                      className="w-full"
-                      disabled={!watch('type')}
-                    />
-                  </div>
-                  <div>
-                    <label>Quantité</label>
-                    <InputText
-                      type="number"
-                      {...register(
-                        `produits.${index}.quantite`,
-                        getQuantiteValidationRules(watch('type'), index)
-                      )}
-                      onBlur={async () => {
-                        if (watch('type') !== 'Entrée') {
-                          const value = watch(`produits.${index}.quantite`);
-                          await validateStock(value, index);
-                        }
-                      }}
-                      className="w-full"
-                      disabled={!watch('type')}
-                    />
-
-                    {errors.produits?.[index]?.quantite && (
-                      <small className="text-red-500">
-                        {errors.produits[index].quantite.message || 'Quantité requise'}
-                      </small>
+            <div className="space-y-6">
+              {/* Produits */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                {/* Catégorie */}
+                <div>
+                  <label>Catégorie</label>
+                  <Controller
+                    name="formulaire.categorie"
+                    control={control}
+                    render={({ field }) => (
+                      <Dropdown
+                        {...field}
+                        options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
+                        onChange={(e) => field.onChange(e.value)}
+                        placeholder="Choisir une catégorie"
+                        className="w-full"
+                        disabled={!watch('type')}
+                      />
                     )}
-                  </div>
-                  <Button
-                    icon="pi pi-trash"
-                    severity="danger"
-                    text
-                    onClick={() => remove(index)}
-                    disabled={!watch('type')}
                   />
                 </div>
-              );
-            })}
 
-            <Button
-              type="button"
-              icon="pi pi-plus"
-              label="Ajouter un produit"
-              onClick={() => append({ categorie: '', produit: '', quantite: 0 })}
-              disabled={!watch('type') || disableAdd}
-            />
+                {/* Produit */}
+                <div>
+                  <label>Produit</label>
+                  <Controller
+                    name="formulaire.produit"
+                    control={control}
+                    // rules={showFormulaire ? { required: 'Produit requis' } : {}}
+                    render={({ field }) => (
+                      <Dropdown
+                        {...field}
+                        options={filteredProduits.map((p) => ({ label: p.nom, value: p._id }))}
+                        placeholder="Choisir un produit"
+                        className="w-full"
+                        onChange={(e) => field.onChange(e.value)}
+                      />
+                    )}
+                  />
+                  {errors.formulaire?.produit && (
+                    <small className="text-red-500">{errors.formulaire.produit.message}</small>
+                  )}
+                </div>
+
+                {/* Quantité */}
+                <div>
+                  <label>Quantité</label>
+                  <Controller
+                    name="formulaire.quantite"
+                    control={control}
+                    render={({ field }) => (
+                      <InputText
+                        type="number"
+                        value={field.value}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                        className={`w-full ${errors.formulaire?.quantite ? 'p-invalid' : ''}`}
+                      />
+                    )}
+                  />
+
+                  {errors.formulaire?.quantite && (
+                    <small className="text-red-500">
+                      {errors.formulaire.quantite.message || 'Quantité requise'}
+                    </small>
+                  )}
+                </div>
+              </div>
+
+              {/* Bouton Ajouter / Modifier */}
+              <div className="flex gap-4 justify-end">
+                <Button
+                  type="button"
+                  icon={editingIndex !== null ? 'pi pi-check' : 'pi pi-plus'}
+                  label={editingIndex !== null ? 'Modifier' : 'Ajouter un produit'}
+                  onClick={async () => {
+                    const isValid = await trigger([
+                      'formulaire.categorie',
+                      'formulaire.produit',
+                      'formulaire.quantite',
+                    ]);
+
+                    if (!isValid) return;
+
+                    const quantite = getValues('formulaire.quantite');
+                    const stockValidation = await validateStock(quantite);
+
+                    if (stockValidation !== true) {
+                      setError('formulaire.quantite', {
+                        type: 'manual',
+                        message: stockValidation,
+                      });
+                      return;
+                    }
+
+                    append(getValues('formulaire'));
+                    resetField('formulaire');
+                  }}
+                />
+              </div>
+            </div>
           </form>
         </div>
 
         {/* zone de recapitulation */}
         <div className="bg-white p-6 rounded-2xl shadow-xl space-y-6">
-          <h3 className="text-xl font-bold text-gray-800">Récapitulatif</h3>
+  <h3 className="text-xl font-bold text-gray-800">Récapitulatif</h3>
 
-          {(() => {
-            const montantFranc = montantDollar * tauxFranc;
-            const produits = watch('produits') || [];
-            const totalMontant = produits.reduce((acc, item) => {
-              const produit = allProduits.find((p) => p._id === item.produit);
-              const prix = produit
-                ? ['Livraison', 'Entrée'].includes(type)
-                  ? produit.prix
-                  : produit.prixVente
-                : 0;
-              return acc + item.quantite * prix;
-            }, 0);
+  {(() => {
+    const montantFranc = montantDollar * tauxFranc;
+    const produits = watch('produits') || [];
+    const totalMontant = produits.reduce((acc, item) => {
+      const produit = allProduits.find((p) => p._id === item.produit);
+      const prix = produit
+        ? ['Livraison', 'Entrée'].includes(type)
+          ? produit.prix
+          : produit.prixVente
+        : 0;
+      return acc + item.quantite * prix;
+    }, 0);
 
-            const valeurRabais = (totalMontant * rabais) / 100;
-            const valeurRemise = ((totalMontant - valeurRabais) * remise) / 100;
-            const netAPayer = totalMontant - valeurRabais - valeurRemise;
-            const reste = montantRecu - netAPayer;
+    const valeurRabais = Number(((totalMontant * rabais) / 100).toFixed(2));
+    const valeurRemise = Number(
+      (((totalMontant - valeurRabais) * remise) / 100).toFixed(2)
+    );
+    const netAPayer = Number((totalMontant - valeurRabais - valeurRemise).toFixed(2));
+    const reste = Number((montantRecu - netAPayer).toFixed(2));
 
-            return (
-              <>
-                {type !== 'Entrée' && (
-                  <>
-                    {/* Ligne 1: Taux et conversion */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Taux du jour en dollar
-                        </label>
-                        <InputText
-                          type="number"
-                          // @ts-ignore
-                          value={watch('tauxDollar') ?? ''}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            if (!isNaN(value)) {
-                              setValue('tauxDollar', value);
-                              localStorage.setItem('tauxDollar', value.toString());
-                            } else {
-                              // @ts-ignore
-                              setValue('tauxDollar', '');
-                              localStorage.removeItem('tauxDollar');
-                            }
-                          }}
-                          className="w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Taux en franc
-                        </label>
-// @ts-ignore
-                        <InputText
-                          type="number"
-                          // @ts-ignore
-                          value={watch('tauxFranc') ?? ''}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            if (!isNaN(value)) {
-                              setValue('tauxFranc', value);
-                              localStorage.setItem('tauxFranc', value.toString());
-                            } else {
-                              // @ts-ignore
-                              setValue('tauxFranc', '');
-                              localStorage.removeItem('tauxFranc');
-                            }
-                          }}
-                          className="w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Montant en dollar
-                        </label>
-                        <InputText
-                          type="number"
-                          {...register('montantDollar')}
-                          className="w-full"
-                          onBlur={() => setValue('montantFranc', montantFranc)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') setValue('montantFranc', montantFranc);
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Montant en francs
-                        </label>
-                        <div className="w-full border rounded-md p-2 bg-gray-100 text-gray-800">
-                          {montantFranc} FC
-                        </div>
-                      </div>
-                    </div>
+    return (
+      <>
+        {type !== 'Entrée' && (
+          <>
+            {['Livraison', 'Commande'].includes(type) && pointVente && (
+              <div className="border p-3 rounded-lg bg-gray-50 text-gray-700">
+                <div className="font-semibold">Point de vente sélectionné :</div>
+                <div>Nom : {pointVente.nom}</div>
+                <div>Adresse : {pointVente.adresse}</div>
+                <div>Région : {pointVente.region?.nom}</div>
+                <div>Ville : {pointVente.region?.ville}</div>
+              </div>
+            )}
+          </>
+        )}
 
-                    {/* Ligne Infos point de vente (Livraison) */}
-                    {type === 'Livraison' && pointVente && (
-                      <div className="border p-3 rounded-lg bg-gray-50 text-gray-700">
-                        <div className="font-semibold">Point de vente sélectionné :</div>
-                        <div>Nom : {pointVente.nom}</div>
-                        <div>Adresse : {pointVente.adresse}</div>
-                        <div>Région : {pointVente.region?.nom}</div>
-                        <div>Ville : {pointVente.region?.ville}</div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Détails produits (visible aussi pour Entrée) */}
-                <div>
-                  <h4 className="font-semibold text-gray-700">Détails par produit</h4>
-                  <ul className="space-y-2">
-                    {produits.map((item, idx) => {
-                      const produit = allProduits.find((p) => p._id === item.produit);
-                      const prix = produit
-                        ? ['Livraison', 'Entrée'].includes(type)
-                          ? produit.prix
-                          : produit.prixVente
-                        : 0;
-                      if (!produit) return null;
-                      return (
-                        <li key={idx} className="flex justify-between text-gray-700">
-                          <span>{produit.nom}</span>
-                          <span>
-                            {item.quantite} x {prix} = {item.quantite * prix} FC
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-
-                {/* Ligne 3: Total */}
-                <div className="text-right text-lg font-semibold text-gray-800">
-                  Total : {totalMontant} FC
-                </div>
-
-                {/* Ligne 4: Rabais et remise (caché si Livraison ou Entrée) */}
-                {type !== 'Livraison' && type !== 'Entrée' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="grid grid-cols-2 gap-2 items-end">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Rabais (%)
-                        </label>
-                        <InputText type="number" {...register('rabais')} className="w-full" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Valeur rabais
-                        </label>
-                        <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
-                          {valeurRabais} FC
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 items-end">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Remise (%)
-                        </label>
-                        <InputText type="number" {...register('remise')} className="w-full" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Valeur remise
-                        </label>
-                        <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
-                          {valeurRemise} FC
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Ligne 5: Net à payer (caché si Livraison ou Entrée) */}
-                {type !== 'Livraison' && type !== 'Entrée' && (
-                  <div className="text-right text-lg font-bold text-green-700">
-                    Net à payer : {netAPayer} FC
-                  </div>
-                )}
-
-                {/* Ligne 6: Paiement (caché si Livraison ou Entrée) */}
-                {type !== 'Livraison' && type !== 'Entrée' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Montant reçu
-                      </label>
-                      <InputText type="number" {...register('montantRecu')} className="w-full" />
-                    </div>
-                    <div className="text-right">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Reste / à retourner
-                      </label>
-                      <div className="w-full border rounded-md p-2 bg-gray-100">{reste} FC</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Bouton de validation toujours visible */}
-                <div className="flex justify-end pt-4 border-t mt-4">
-                  <Button
-                    className="mt-4"
-                    label="Valider l'opération"
-                    icon="pi pi-check"
-                    onClick={handleSubmit(onSubmit)}
-                  />
-                </div>
-              </>
-            );
-          })()}
+        <div>
+          <h4 className="font-semibold text-gray-700">Détails par produit</h4>
+          <Accordion>
+            <AccordionTab header="Opérations effectuées">
+              <DataTable value={produits} responsiveLayout="scroll">
+                <Column header="#" body={(_, i) => i.rowIndex + 1} />
+                <Column
+                  field="produit"
+                  header="Produit"
+                  body={(rowData) => {
+                    const produit = allProduits.find((p) => p._id === rowData.produit);
+                    return produit?.nom || '-';
+                  }}
+                />
+                <Column
+                  field="quantite"
+                  header="Quantité"
+                  body={(rowData) => rowData.quantite || '-'}
+                />
+                <Column
+                  header="Prix unitaire"
+                  body={(rowData) => {
+                    const produit = allProduits.find((p) => p._id === rowData.produit);
+                    if (!produit) return '-';
+                    const prix = ['Livraison', 'Entrée'].includes(type)
+                      ? produit.prix
+                      : produit.prixVente;
+                    return `${prix} FC`;
+                  }}
+                />
+                <Column
+                  header="Total"
+                  body={(rowData) => {
+                    const produit = allProduits.find((p) => p._id === rowData.produit);
+                    if (!produit) return '-';
+                    const prix = ['Livraison', 'Entrée'].includes(type)
+                      ? produit.prix
+                      : produit.prixVente;
+                    return `${rowData.quantite * prix} FC`;
+                  }}
+                />
+              </DataTable>
+            </AccordionTab>
+          </Accordion>
         </div>
+
+        <div className="text-right text-lg font-semibold text-gray-800">
+          Total : {totalMontant} FC
+        </div>
+
+        {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Rabais (%)</label>
+              <InputText type="number" {...register('rabais')} className="w-full" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Remise (%)</label>
+              <InputText type="number" {...register('remise')} className="w-full" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Valeur rabais</label>
+              <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
+                {valeurRabais} FC
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Valeur remise</label>
+              <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
+                {valeurRemise} FC
+              </div>
+            </div>
+          </div>
+        )}
+
+        {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+          <div className="text-right text-lg font-bold text-green-700">
+            Net à payer : {netAPayer} FC
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+          {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Montant reçu en dollar
+                </label>
+                <InputText
+                  type="number"
+                  {...register('montantDollar')}
+                  className="w-full"
+                  onBlur={() => setValue('montantFranc', montantFranc)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') setValue('montantFranc', montantFranc);
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Montant converti en francs
+                </label>
+                <div className="w-full border rounded-md p-2 bg-gray-100 text-gray-800">
+                  {montantFranc} FC
+                </div>
+              </div>
+            </>
+          )}
+
+          {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Montant reçu en franc
+              </label>
+              <InputText type="number" {...register('montantRecu')} className="w-full" />
+            </div>
+          )}
+
+          {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Reste / à retourner
+              </label>
+              <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
+                {reste} FC
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end pt-4 border-t mt-4">
+          <Button
+            className="mt-4"
+            label="Valider l'opération"
+            icon="pi pi-check"
+            onClick={handleSubmit(onSubmit)}
+          />
+        </div>
+      </>
+    );
+  })()}
+</div>
+
       </div>
       <ConfirmDialog />
     </div>
