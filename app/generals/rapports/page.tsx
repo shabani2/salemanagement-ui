@@ -3,7 +3,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-
 /* eslint-disable react-hooks/rules-of-hooks */
 import { OperationType } from '@/lib/operationType';
 import {
@@ -35,7 +34,7 @@ import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportE
 import { saveAs } from 'file-saver';
 import { Toast } from 'primereact/toast';
 import { useZebraRowClassName } from '@/hooks/useZebraRowClassName';
-
+import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
 
 const typeOptions = Object.values(OperationType).map((op) => ({
   label: op,
@@ -112,7 +111,6 @@ const page = () => {
     return types;
   }, [user?.role]);
 
-  
   const mvtStocks = useMemo(() => {
     return allMvtStocks.filter((mvt) => allowedTypes.includes(mvt.type));
   }, [allMvtStocks, allowedTypes]);
@@ -206,13 +204,7 @@ const page = () => {
     }
   };
 
-  const rowClassName = useZebraRowClassName<MouvementStock>(
-    filteredMvtStocks,
-    '_id',      // champ unique
-    first,
-    rows
-  );
-  
+  const [categorie, setCategorie] = useState<Categorie | null>(null);
 
   return (
     <div className="  min-h-screen ">
@@ -227,33 +219,47 @@ const page = () => {
       <div className="bg-white p-4 rounded-lg shadow-md">
         <div className="flex mb-4 gap-4">
           {/* Partie gauche : 50% de la largeur */}
-          <div className="w-1/2 flex gap-3">
+          <div className="w-1/2 flex flex-row gap-2">
             {/* Champ de recherche */}
-            <div className="w-1/2">
-              <InputText
-                className="p-2 pl-10 border rounded w-full"
-                placeholder="Rechercher..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
+
+            <InputText
+              className="p-2 pl-10 border rounded w-full"
+              placeholder="Rechercher..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
 
             {/* Dropdown */}
-            <div className="w-1/2">
-              <Dropdown
-                value={selectedType}
-                onChange={(e) => {
-                  setSelectedType(e.value);
-                  setFilteredMvtStocks(
-                    e.value ? mvtStocks.filter((s) => s.type === e.value) : mvtStocks
-                  );
-                }}
-                options={mvtOptions}
-                optionLabel="label"
-                placeholder="Sélectionner le type d'opération"
-                className="w-full !bg-green-700 !text-gray-100 font-semibold rounded-md border-none"
-              />
-            </div>
+
+            <Dropdown
+              value={selectedType}
+              onChange={(e) => {
+                setSelectedType(e.value);
+                setFilteredMvtStocks(
+                  e.value ? mvtStocks.filter((s) => s.type === e.value) : mvtStocks
+                );
+              }}
+              options={mvtOptions}
+              optionLabel="label"
+              placeholder="Sélectionner le type d'opération"
+              className="w-full !bg-green-700 !text-gray-100 font-semibold rounded-md border-none"
+            />
+            <DropdownCategorieFilter
+              onSelect={(categorie) => {
+                setCategorie(categorie);
+
+                if (categorie === null) {
+                  setFilteredMvtStocks(mvtStocks); // reset complet
+                  return;
+                }
+
+                const filtered = mvtStocks.filter((p) => {
+                  return p.produit.categorie?._id === categorie._id;
+                });
+
+                setFilteredMvtStocks(filtered);
+              }}
+            />
           </div>
 
           {/* Partie droite : 50% de la largeur, alignée à droite */}
@@ -264,54 +270,65 @@ const page = () => {
 
         {/* datatable zone */}
         <DataTable
-          value={filteredMvtStocks}
-          dataKey="_id"          
+          value={Array.isArray(filteredMvtStocks[0]) ? filteredMvtStocks.flat() : filteredMvtStocks}
+          dataKey="_id"
           paginator
           loading={loading}
-          rows={rows}          
+          rows={rows}
           first={first}
           onPage={onPageChange}
-          className="rounded-lg custom-datatable text-[12px]"
-          // @ts-ignore
+          className="rounded-lg custom-datatable text-[14px]"
           tableStyle={{ minWidth: '60rem' }}
-          // @ts-ignore
           rowClassName={(rowData, options) => {
             const index = options?.index ?? 0;
             const globalIndex = first + index;
-          
-            console.log({ index, first, globalIndex, id: rowData._id });
-          
             return globalIndex % 2 === 0
               ? '!bg-gray-300 !text-gray-900'
               : '!bg-green-900 !text-white';
           }}
-          
-          
-          
-          
-          
-          
-          
-          
         >
           <Column
             field="_id"
             header="#"
-            body={(_, options) => options.rowIndex + 1}
-            headerClassName="text-[16px] !bg-green-900 !text-white "
+            body={(_, options) => <span className="text-[14px]">{options.rowIndex + 1}</span>}
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
+
+          {/* <Column
+    field="produit.categorie.nom"
+    header="Catégorie"
+    filter
+    body={(rowData: MouvementStock) => {
+      const categorie = rowData?.produit?.categorie;
+      if (!categorie) return <span className="text-[14px]">—</span>;
+      const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
+      return (
+        <div className="flex items-center gap-2 text-[14px]">
+          {categorie.image && (
+            <img
+              src={imageUrl}
+              alt={categorie.nom}
+              className="w-8 h-8 rounded-full object-cover border border-gray-100"
+            />
+          )}
+          <span>{categorie.nom}</span>
+        </div>
+      );
+    }}
+    className="px-4 py-1 text-[14px]"
+    headerClassName="text-[14px] !bg-green-900 !text-white"
+  /> */}
 
           <Column
             field="produit.categorie.nom"
-            header="Catégorie"
-            filter
+            header=""
             body={(rowData: MouvementStock) => {
               const categorie = rowData?.produit?.categorie;
-              if (!categorie) return '—';
+              if (!categorie) return <span className="text-[14px]">—</span>;
               const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
-
               return (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-[14px]">
                   {categorie.image && (
                     <img
                       src={imageUrl}
@@ -319,50 +336,49 @@ const page = () => {
                       className="w-8 h-8 rounded-full object-cover border border-gray-100"
                     />
                   )}
-                  <span>{categorie.nom}</span>
                 </div>
               );
             }}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
             field="produit.nom"
             header="Produit"
             filter
-            body={(rowData: MouvementStock) => rowData.produit?.nom}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            body={(rowData: MouvementStock) => (
+              <span className="text-[14px]">{rowData.produit?.nom}</span>
+            )}
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
-          <Column
-            field="pointVente.nom"
-            header="Point de Vente"
-            filter
-            body={(rowData) => rowData.pointVente?.nom || 'Depot Central'}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
-          />
-
-          {/* <Column field="type" header="Type" filter className="px-4 py-1" headerClassName="text-[16px]" /> */}
+          {/* <Column
+    field="pointVente.nom"
+    header="Point de Vente"
+    filter
+    body={(rowData) => <span className="text-[14px]">{rowData.pointVente?.nom || 'Depot Central'}</span>}
+    className="px-4 py-1 text-[14px]"
+    headerClassName="text-[14px] !bg-green-900 !text-white"
+  /> */}
 
           <Column
             field="quantite"
             header="Quantité"
             filter
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
+
           <Column
             header="Prix Unitaire"
             body={(rowData: MouvementStock) => {
               const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
                 ? rowData.produit?.prix
                 : rowData.produit?.prixVente;
-
               return (
-                <span className="text-blue-700 font-medium">
+                <span className="text-blue-700 font-medium text-[14px]">
                   {prix?.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -370,8 +386,8 @@ const page = () => {
                 </span>
               );
             }}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -383,7 +399,7 @@ const page = () => {
               const quantite = rowData.quantite ?? 0;
               const totalAcquisition = prix * quantite;
               return (
-                <span className="text-blue-700 font-semibold">
+                <span className="text-blue-700 font-semibold text-[14px]">
                   {totalAcquisition.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -391,8 +407,8 @@ const page = () => {
                 </span>
               );
             }}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -404,10 +420,12 @@ const page = () => {
               const marge = rowData.produit?.marge ?? 0;
               const quantite = rowData.quantite ?? 0;
               const valeur = ((prix * marge) / 100) * quantite;
-              return <span className="text-orange-600 font-medium">{valeur.toFixed(2)}</span>;
+              return (
+                <span className="text-orange-600 font-medium text-[14px]">{valeur.toFixed(2)}</span>
+              );
             }}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -416,18 +434,15 @@ const page = () => {
               const net = rowData.produit?.netTopay ?? 0;
               const quantite = rowData.quantite ?? 0;
               const totalNet = net * quantite;
-              return <span className="text-purple-700 font-semibold">{totalNet.toFixed(2)}</span>;
+              return (
+                <span className="text-purple-700 font-semibold text-[14px]">
+                  {totalNet.toFixed(2)}
+                </span>
+              );
             }}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
-
-          {/* <Column
-    header="TVA (%)"
-    body={(rowData) => <span className="text-yellow-800 font-medium">{rowData.produit?.tva ?? '—'}%</span>}
-    className="px-4 py-1"
-    headerClassName="text-[16px]"
-  /> */}
 
           <Column
             header="Valeur TVA"
@@ -436,10 +451,14 @@ const page = () => {
               const tva = rowData.produit?.tva ?? 0;
               const quantite = rowData.quantite ?? 0;
               const valeurTVA = ((net * tva) / 100) * quantite;
-              return <span className="text-yellow-600 font-medium">{valeurTVA.toFixed(2)}</span>;
+              return (
+                <span className="text-yellow-600 font-medium text-[14px]">
+                  {valeurTVA.toFixed(2)}
+                </span>
+              );
             }}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -451,30 +470,28 @@ const page = () => {
               const prixVente = rowData.produit?.prixVente ?? 0;
               const quantite = rowData.quantite ?? 0;
               const totalVente = prixVente * quantite;
-
               let colorClass = 'text-blue-600';
               if (prixVente > prix) colorClass = 'text-green-600 font-bold';
               else if (prixVente < prix) colorClass = 'text-red-600 font-bold';
-
-              return <span className={colorClass}>{totalVente.toFixed(2)}</span>;
+              return <span className={`${colorClass} text-[14px]`}>{totalVente.toFixed(2)}</span>;
             }}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
             field="statut"
             header="Statut"
             filter
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
             body={(rowData) => {
               const isValide = rowData.statut === true;
               return (
                 <Badge
                   value={isValide ? 'Validé' : 'En attente'}
                   severity={isValide ? 'success' : 'warning'}
-                  className="text-sm px-2 py-1"
+                  className="text-sm px-2 py-1 text-[14px]"
                 />
               );
             }}
@@ -484,16 +501,20 @@ const page = () => {
             field="createdAt"
             filter
             header="Créé le"
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
-            body={(rowData) => new Date(rowData.createdAt || '').toLocaleDateString()}
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
+            body={(rowData) => (
+              <span className="text-[14px]">
+                {new Date(rowData.createdAt || '').toLocaleDateString()}
+              </span>
+            )}
           />
 
           <Column
             header="Actions"
             body={actionBodyTemplate}
-            className="px-4 py-1"
-            headerClassName="text-[16px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
         </DataTable>
       </div>

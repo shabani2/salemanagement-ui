@@ -127,3 +127,36 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* app/globals.css */
+.p-dropdown {
+  @apply bg-green-700 text-white;
+}
+
+.p-dropdown-label,
+.p-dropdown-label-empty,
+.p-placeholder {
+  @apply text-white;
+}
+
+.p-dropdown-panel {
+  @apply bg-green-700;
+}
+
+.p-dropdown-item {
+  @apply text-white bg-green-700;
+}
+
+.p-dropdown-item:hover {
+  @apply bg-green-800;
+}
+
+/* Chevrons, icônes etc */
+.p-dropdown-trigger {
+  @apply text-white;
+}
+
+.p-dropdown-trigger-icon {
+  color: white !important;
+  fill: white !important;
+}

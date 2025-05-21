@@ -23,10 +23,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { Produit } from '@/Models/produitsType';
+import { Categorie, Produit } from '@/Models/produitsType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
 import { saveAs } from 'file-saver';
 import { Toast } from 'primereact/toast';
+import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
 const page = () => {
   const menuRef = useRef<any>(null);
   const dispatch = useDispatch<AppDispatch>();
@@ -165,7 +166,7 @@ const page = () => {
   // traitement de la recherche de produit
   const [searchProd, setSearchProd] = useState('');
   const [filteredProduits, setFilteredProduits] = useState(produits || []);
-
+  const [first, setFirst] = useState(0);
   useEffect(() => {
     const filtered = produits.filter((p) => {
       const query = searchProd.toLowerCase();
@@ -224,7 +225,7 @@ const page = () => {
       });
     }
   };
-
+  const [categorie, setCategorie] = useState<Categorie | null>(null);
   return (
     <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -237,18 +238,31 @@ const page = () => {
       </div>
       <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row">
         <div className=" bg-white p-2 rounded-lg">
-          <div className="gap-4 mb-4   flex justify-between">
-            <div className="relative w-2/3 flex flex-row ">
+          <div className="gap-4 mb-4 w-full  flex justify-between">
+            <div className="relative w-2/3 flex flex-row gap-2">
               <InputText
                 className="p-2 pl-10 border rounded w-full"
                 placeholder="Rechercher un produit..."
                 value={searchProd}
                 onChange={(e) => setSearchProd(e.target.value)}
               />
-              <div className="ml-3 flex gap-2 w-2/5">
-                <DropdownImportExport onAction={handleFileManagement} />
-              </div>
+
+              <DropdownCategorieFilter
+                onSelect={(categorie) => {
+                  setCategorie(categorie);
+                  if (categorie === null) {
+                    setFilteredProduits(allProduits);
+                  }
+                  const filtered = allProduits.filter((p) => {
+                    if (!categorie) return true;
+                    return p.categorie?._id === categorie._id;
+                  });
+                  setFilteredProduits(filtered);
+                }}
+              />
+              <DropdownImportExport onAction={handleFileManagement} />
             </div>
+            <div className="ml-3 flex gap-2 w-2/5"></div>
             <Button
               label="nouveau"
               icon="pi pi-plus"
@@ -261,18 +275,61 @@ const page = () => {
             <DataTable
               value={filteredProduits}
               paginator
-              
               rows={5}
               className="rounded-lg"
               tableStyle={{ minWidth: '70rem' }}
+              rowClassName={(rowData, options) => {
+                const index = options?.index ?? 0;
+                const globalIndex = first + index;
+                return globalIndex % 2 === 0
+                  ? '!bg-gray-300 !text-gray-900'
+                  : '!bg-green-900 !text-white';
+              }}
             >
-              <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
-              <Column field="nom" header="Nom" sortable />
-              <Column field="prix" header="cout unitaire" />
+              <Column
+                field="_id"
+                header="#"
+                body={(_, options) => options.rowIndex + 1}
+                headerClassName=" !bg-green-900 !text-white"
+              />
+              <Column
+                field="produit.categorie.nom"
+                header=""
+                body={(rowData: Produit) => {
+                  const categorie = rowData?.categorie;
+                  if (!categorie) return <span className="text-[14px]">—</span>;
+                  const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
+                  return (
+                    <div className="flex items-center gap-2 text-[14px]">
+                      {categorie.image && (
+                        <img
+                          src={imageUrl}
+                          alt={categorie.nom}
+                          className="w-8 h-8 rounded-full object-cover border border-gray-100"
+                        />
+                      )}
+                    </div>
+                  );
+                }}
+                className="px-4 py-1 text-[14px]"
+                headerClassName="text-[14px] !bg-green-900 !text-white"
+              />
+              <Column
+                field="nom"
+                header="Nom"
+                sortable
+                headerClassName=" !bg-green-900 !text-white"
+              />
+              <Column
+                field="prix"
+                header="cout unitaire"
+                headerClassName=" !bg-green-900 !text-white"
+              />
               <Column
                 field="marge"
                 header="Marge (%)"
                 body={(rowData: Produit) => rowData.marge ?? 'N/A'}
+                headerClassName=" !bg-green-900 !text-white"
               />
               <Column
                 header="Valeur Marge"
@@ -281,13 +338,15 @@ const page = () => {
                     ? ((rowData.prix * rowData.marge) / 100).toFixed(2)
                     : 'N/A'
                 }
+                headerClassName=" !bg-green-900 !text-white"
               />
               <Column
                 field="netTopay"
                 header="Net à Payer"
                 body={(rowData: Produit) => rowData.netTopay?.toFixed(2) ?? 'N/A'}
+                headerClassName=" !bg-green-900 !text-white"
               />
-              <Column field="tva" header="TVA (%)" />
+              <Column field="tva" header="TVA (%)" headerClassName=" !bg-green-900 !text-white" />
               <Column
                 header="Valeur TVA"
                 body={(rowData: Produit) =>
@@ -295,19 +354,27 @@ const page = () => {
                     ? ((rowData.netTopay * rowData.tva) / 100).toFixed(2)
                     : 'N/A'
                 }
+                headerClassName=" !bg-green-900 !text-white"
               />
               <Column
                 field="prixVente"
                 header="Prix de Vente"
                 body={(rowData: Produit) => rowData.prixVente?.toFixed(2) ?? 'N/A'}
+                headerClassName=" !bg-green-900 !text-white"
               />
               <Column
                 field="unite"
                 header="Unité"
                 body={(rowData: Produit) => rowData.unite || 'N/A'}
+                headerClassName=" !bg-green-900 !text-white"
               />
 
-              <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
+              <Column
+                body={actionBodyTemplate}
+                header="Actions"
+                className="px-4 py-1"
+                headerClassName=" !bg-green-900 !text-white"
+              />
             </DataTable>
           </div>
         </div>

@@ -49,9 +49,8 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
         isOpen ? 'translate-x-0' : '-translate-x-64'
       }`}
     >
-      <div className="flex justify-between items-center p-4 border-b border-gray-700">
+      <div className="flex justify-between items-center p-3">
         <span className="text-lg font-bold">AgriCap</span>
-
         <img
           src={org && `http://localhost:8000/${org?.logo.replace('../', '')}`}
           width={64}
@@ -60,9 +59,10 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
           alt="User"
         />
         <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="w-5 h-5" />
+          <X className="w-5 h-5 " />
         </Button>
       </div>
+      <div className="h-[5px] bg-green-700" />
 
       <nav className="flex-1 p-4 overflow-y-auto">
         <ul className="space-y-1">

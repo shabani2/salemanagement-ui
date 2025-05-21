@@ -318,48 +318,48 @@ const Page = () => {
     );
   }, [search, users]);
 
-   //file management
-    const toast = useRef<Toast>(null);
-  
-    const handleFileManagement = ({
-      type,
-      format,
-      file,
-    }: {
-      type: 'import' | 'export';
-      format: 'csv' | 'pdf';
-      file?: File;
-    }) => {
-      if (type === 'import' && file) {
-        setImportedFiles((prev) => [...prev, { name: file.name, format }]);
-        toast.current?.show({
-          severity: 'info',
-          summary: `Import ${format.toUpperCase()}`,
-          detail: `File imported: ${file.name}`,
-          life: 3000,
-        });
-        return;
-      }
-  
-      if (type === 'export') {
-        const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-        const blob = new Blob([content], {
-          type:
-            format === 'csv'
-              ? 'text/csv;charset=utf-8'
-              : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-        saveAs(blob, filename);
-  
-        toast.current?.show({
-          severity: 'success',
-          summary: `Export ${format.toUpperCase()}`,
-          detail: `File downloaded: ${filename}`,
-          life: 3000,
-        });
-      }
-    };
+  //file management
+  const toast = useRef<Toast>(null);
+
+  const handleFileManagement = ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'pdf';
+    file?: File;
+  }) => {
+    if (type === 'import' && file) {
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+      toast.current?.show({
+        severity: 'info',
+        summary: `Import ${format.toUpperCase()}`,
+        detail: `File imported: ${file.name}`,
+        life: 3000,
+      });
+      return;
+    }
+
+    if (type === 'export') {
+      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+      const blob = new Blob([content], {
+        type:
+          format === 'csv'
+            ? 'text/csv;charset=utf-8'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+      saveAs(blob, filename);
+
+      toast.current?.show({
+        severity: 'success',
+        summary: `Export ${format.toUpperCase()}`,
+        detail: `File downloaded: ${filename}`,
+        life: 3000,
+      });
+    }
+  };
 
   return (
     <div className="  h-screen-min">
@@ -377,42 +377,47 @@ const Page = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
             <div className="ml-3 flex gap-2 w-2/5">
-                <DropdownImportExport onAction={handleFileManagement} />
+              <DropdownImportExport onAction={handleFileManagement} />
             </div>
             {/* <i className="pi pi-search absolute -3 top-1/2 transform -translate-y-1/2 text-gray-400"></i> */}
           </div>
           {!(user.role === 'Gerant' || user.role === 'Vendeur') && (
             <Button
-            severity={undefined}
-               icon="pi pi-plus"
+              severity={undefined}
+              icon="pi pi-plus"
               label="nouveau"
               className="!bg-green-700 text-white p-2 rounded"
               onClick={() => setDialogType('create')}
-             
             />
           )}
         </div>
         <div className=" p-1 rounded-lg shadow-md ">
           <DataTable
-            value={filteredUsers}
+            value={Array.isArray(filteredUsers[0]) ? filteredUsers.flat() : filteredUsers}
             dataKey="_id"
             paginator
             loading={loading}
             rows={rows}
-            
             first={first}
             onPage={onPageChange}
-            className="rounded-lg  custom-datatable"
+            className="rounded-lg custom-datatable text-[14px]"
             tableStyle={{ minWidth: '50rem' }}
-            rowClassName={(data, options) => {
-              const index = options?.props.rows; //rowIndexes[data._id]; // 🔹 Récupérer l'index de l'état
-              console.log('Row Index in rowClassName:', index);
-              return index && index % 2 === 0
-                ? 'bg-gray-300 text-gray-900'
-                : '!bg-green-700 text-white';
+            rowClassName={(rowData, options) => {
+              const index = options?.index ?? 0;
+              const globalIndex = first + index;
+              return globalIndex % 2 === 0
+                ? '!bg-gray-300 !text-gray-900'
+                : '!bg-green-900 !text-white';
             }}
           >
-            <Column field="_id" header="#" body={(_data, options) => options.rowIndex + 1} />
+            <Column
+              field="_id"
+              header="#"
+              body={(_data, options) => <span className="text-[14px]">{options.rowIndex + 1}</span>}
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
+
             <Column
               header=""
               body={(data) => (
@@ -422,31 +427,81 @@ const Page = () => {
                   className="w-10 h-10 rounded-full object-cover border border-gray-300"
                 />
               )}
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
             />
-            <Column field="nom" header="Nom" sortable filter className="px-4 py-1" />
-            <Column field="prenom" header="Prénom" sortable filter className="px-4 py-1" />
-            <Column field="email" header="Email" sortable filter className="px-4 py-1" />
-            <Column field="telephone" header="Téléphone" className="px-4 py-1" />
+
+            <Column
+              field="nom"
+              header="Nom"
+              sortable
+              filter
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
+
+            <Column
+              field="prenom"
+              header="Prénom"
+              sortable
+              filter
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
+
+            <Column
+              field="email"
+              header="Email"
+              sortable
+              filter
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
+
+            <Column
+              field="telephone"
+              header="Téléphone"
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
 
             <Column
               field="region.nom"
               header="Region"
               filter
-              body={(rowData) =>
-                rowData?.region?.nom || rowData?.pointVente?.region.nom || 'Depot Central'
-              }
-              className="px-4 py-1"
+              body={(rowData) => (
+                <span className="text-[14px]">
+                  {rowData?.region?.nom || rowData?.pointVente?.region.nom || 'Depot Central'}
+                </span>
+              )}
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
             />
+
             <Column
               field="pointVente.nom"
               header="point vente"
               filter
-              body={(rowData) => rowData?.pointVente?.nom || 'Depot Central'}
-              className="px-4 py-1"
+              body={(rowData) => (
+                <span className="text-[14px]">{rowData?.pointVente?.nom || 'Depot Central'}</span>
+              )}
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
             />
 
-            <Column field="role" header="Rôle" className="px-4 py-1" />
-            <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
+            <Column
+              field="role"
+              header="Rôle"
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
+
+            <Column
+              body={actionBodyTemplate}
+              header="Actions"
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
           </DataTable>
         </div>
       </div>

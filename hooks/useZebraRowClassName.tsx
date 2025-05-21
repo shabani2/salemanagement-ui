@@ -16,7 +16,7 @@ export function useZebraRowClassName<T extends { [key: string]: any }>(
       const rowIndex = pageData.findIndex((item) => item[keyField] === rowData[keyField]);
 
       if (rowIndex === -1) return '';
-console.log('rowIndex', rowIndex);
+      console.log('rowIndex', rowIndex);
       const globalIndex = first + rowIndex;
       return globalIndex % 2 === 0 ? evenClass : oddClass;
     },

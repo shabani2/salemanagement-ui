@@ -31,6 +31,15 @@ export default function RegionManagement() {
     nom: '',
     ville: '',
   });
+
+  // const [loading, setLoading] = useState(false);
+  // const [rows, setRows] = useState(10);
+  // const [rowIndexes, setRowIndexes] = useState<{ [key: string]: number }>({});
+  const [first, setFirst] = useState(0);
+  // const onPageChange = (event: { first: SetStateAction<number>; rows: SetStateAction<number> }) => {
+  //   setFirst(event.first);
+  //   setRows(event.rows);
+  // };
   const menuRef = useRef<any>(null);
   const initialRegion = { nom: '', ville: '' };
 
@@ -113,48 +122,48 @@ export default function RegionManagement() {
     setFilteredRegions(filtered);
   }, [search, regions]);
 
-    //file management
-      const toast = useRef<Toast>(null);
-    
-      const handleFileManagement = ({
-        type,
-        format,
-        file,
-      }: {
-        type: 'import' | 'export';
-        format: 'csv' | 'pdf';
-        file?: File;
-      }) => {
-        if (type === 'import' && file) {
-          setImportedFiles((prev) => [...prev, { name: file.name, format }]);
-          toast.current?.show({
-            severity: 'info',
-            summary: `Import ${format.toUpperCase()}`,
-            detail: `File imported: ${file.name}`,
-            life: 3000,
-          });
-          return;
-        }
-    
-        if (type === 'export') {
-          const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-          const blob = new Blob([content], {
-            type:
-              format === 'csv'
-                ? 'text/csv;charset=utf-8'
-                : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          });
-          const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-          saveAs(blob, filename);
-    
-          toast.current?.show({
-            severity: 'success',
-            summary: `Export ${format.toUpperCase()}`,
-            detail: `File downloaded: ${filename}`,
-            life: 3000,
-          });
-        }
-      };
+  //file management
+  const toast = useRef<Toast>(null);
+
+  const handleFileManagement = ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'pdf';
+    file?: File;
+  }) => {
+    if (type === 'import' && file) {
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+      toast.current?.show({
+        severity: 'info',
+        summary: `Import ${format.toUpperCase()}`,
+        detail: `File imported: ${file.name}`,
+        life: 3000,
+      });
+      return;
+    }
+
+    if (type === 'export') {
+      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+      const blob = new Blob([content], {
+        type:
+          format === 'csv'
+            ? 'text/csv;charset=utf-8'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+      saveAs(blob, filename);
+
+      toast.current?.show({
+        severity: 'success',
+        summary: `Export ${format.toUpperCase()}`,
+        detail: `File downloaded: ${filename}`,
+        life: 3000,
+      });
+    }
+  };
 
   return (
     <div className="  min-h-screen ">
@@ -176,7 +185,7 @@ export default function RegionManagement() {
               onChange={(e) => setSearch(e.target.value)}
             />
             <div className="ml-3 flex gap-2 w-2/5">
-               <DropdownImportExport onAction={handleFileManagement} />
+              <DropdownImportExport onAction={handleFileManagement} />
             </div>
           </div>
 
@@ -189,18 +198,52 @@ export default function RegionManagement() {
         </div>
         <div className=" rounded-lg shadow-md">
           <DataTable
-            value={filteredRegions}
+            value={Array.isArray(filteredRegions[0]) ? filteredRegions.flat() : filteredRegions}
             paginator
-            
             rows={5}
-            className="rounded-lg"
+            className="rounded-lg text-[14px]"
             tableStyle={{ minWidth: '50rem' }}
+            rowClassName={(rowData, options) => {
+              const index = options?.index ?? 0;
+              const globalIndex = first + index;
+              return globalIndex % 2 === 0
+                ? '!bg-gray-300 !text-gray-900'
+                : '!bg-green-900 !text-white';
+            }}
           >
-            <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
-            <Column field="nom" header="Nom" sortable />
-            <Column field="pointVenteCount" header="Points de vente" />
-            <Column field="ville" header="Ville" sortable />
-            <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
+            <Column
+              field="_id"
+              header="#"
+              body={(_, options) => <span className="text-[14px]">{options.rowIndex + 1}</span>}
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
+            <Column
+              field="nom"
+              header="Nom"
+              sortable
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
+            <Column
+              field="pointVenteCount"
+              header="Points de vente"
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
+            <Column
+              field="ville"
+              header="Ville"
+              sortable
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
+            <Column
+              body={actionBodyTemplate}
+              header="Actions"
+              className="px-4 py-1 text-[14px]"
+              headerClassName="text-[14px] !bg-green-900 !text-white"
+            />
           </DataTable>
         </div>
       </div>
@@ -234,12 +277,16 @@ export default function RegionManagement() {
             </div>
           ))}
           <div className="flex justify-end mt-4">
-            <Button label="Modifier" className="bg-blue-700 text-white" onClick={handleUpdate} severity={undefined} />
+            <Button
+              label="Modifier"
+              className="bg-blue-700 text-white"
+              onClick={handleUpdate}
+              severity={undefined}
+            />
           </div>
         </div>
       </Dialog>
       <ConfirmDeleteDialog
-        
         visible={deleteDialogType}
         onHide={() => setDeleteDialogType(false)}
         onConfirm={(item) => {
@@ -276,7 +323,12 @@ export default function RegionManagement() {
             </div>
           ))}
           <div className="flex justify-end mt-4">
-            <Button label="Ajouter" className="!bg-green-700 text-white" onClick={handleCreate} severity={undefined} />
+            <Button
+              label="Ajouter"
+              className="!bg-green-700 text-white"
+              onClick={handleCreate}
+              severity={undefined}
+            />
           </div>
         </div>
       </Dialog>

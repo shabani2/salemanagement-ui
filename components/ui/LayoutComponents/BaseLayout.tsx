@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ReactNode, useEffect } from 'react';
+import { useState, ReactNode, useEffect, useRef } from 'react';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
 import { Footer } from './Footer';
@@ -10,11 +10,9 @@ import { selectAuthUser } from '@/stores/slices/auth/authSlice';
 import { ClipLoader } from 'react-spinners';
 import { AppDispatch, RootState } from '@/stores/store';
 import {
-  fetchOrganisationById,
   fetchOrganisations,
   selectCurrentOrganisation,
 } from '@/stores/slices/organisation/organisationSlice';
-
 
 interface LayoutProps {
   children: ReactNode;
@@ -25,19 +23,36 @@ export default function BaseLayout({ children }: LayoutProps) {
   const [loading, setLoading] = useState(false);
   const pathname = usePathname();
   const noLayoutPages = ['/login'];
-  const user = useSelector(selectAuthUser);
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
   const currentOrganisation = useSelector((state: RootState) => selectCurrentOrganisation(state));
+  const mainRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     dispatch(fetchOrganisations());
   }, [dispatch, currentOrganisation]);
+
   useEffect(() => {
     if (loading) {
       setLoading(false);
     }
-  }, [pathname]); // 🔥 ECOUTER PATHNAME pour désactiver le loader
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mainRef.current) return;
+    const mainEl = mainRef.current;
+    const handleResize = () => {
+      if (mainEl.scrollWidth > mainEl.clientWidth) {
+        mainEl.style.width = '100%';
+      } else {
+        mainEl.style.width = 'auto';
+      }
+    };
+    handleResize();
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(mainEl);
+    return () => resizeObserver.disconnect();
+  }, [sidebarOpen]);
 
   if (noLayoutPages.includes(pathname)) {
     return <div className="w-full h-full">{children}</div>;
@@ -51,13 +66,13 @@ export default function BaseLayout({ children }: LayoutProps) {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-200 w-full">
+    <div className="flex flex-col min-h-screen bg-gray-200 w-full text-[14px]">
       <Navbar
         isOpen={sidebarOpen}
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
         onNavigate={handleNavigation}
       />
-      <div className="flex flex-1">
+      <div className="flex flex-1 min-w-0">
         <Sidebar
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
@@ -66,7 +81,7 @@ export default function BaseLayout({ children }: LayoutProps) {
         <div
           className={`flex flex-col flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}
         >
-          <main className="flex-1 overflow-auto p-6 mt-16 ">
+          <main ref={mainRef} className="flex-1 p-6 mt-16">
             {loading ? (
               <div className="flex justify-center items-center h-full">
                 <ClipLoader color="#22c55e" size={60} />

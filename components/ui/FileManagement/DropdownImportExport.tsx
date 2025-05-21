@@ -128,7 +128,13 @@ const DropdownImportExport: React.FC<DropdownImportExportProps> = ({ onAction })
               className=" p-button-danger"
               severity={undefined}
             />
-            <Button label="enregistrer" icon="pi pi-check" onClick={confirmExport} autoFocus className='!bg-green-900' />
+            <Button
+              label="enregistrer"
+              icon="pi pi-check"
+              onClick={confirmExport}
+              autoFocus
+              className="!bg-green-900"
+            />
           </>
         }
       >

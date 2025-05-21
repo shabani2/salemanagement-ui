@@ -34,7 +34,10 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
   return (
     <div className="flex flex-col gap-4">
       {/* Tout */}
-      <div key="all" className="flex items-center justify-between bg-white shadow p-4 rounded-xl">
+      <div
+        key="all"
+        className="flex items-center justify-between bg-white shadow p-4 rounded-xl !bg-gray-100"
+      >
         <div className="flex items-center gap-4">
           <InputSwitch
             checked={!!activeSwitches['all']}
@@ -62,7 +65,7 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
         return (
           <div
             key={categorie._id}
-            className="flex items-center justify-between bg-white shadow p-4 rounded-xl"
+            className="flex items-center justify-between bg-white shadow p-4 rounded-xl !bg-gray-100"
           >
             <div className="flex items-center gap-4">
               <InputSwitch

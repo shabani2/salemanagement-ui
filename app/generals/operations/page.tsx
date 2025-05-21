@@ -781,9 +781,7 @@ const Page = () => {
                       <label className="block text-sm font-medium  text-gray-500">
                         Reste / à retourner
                       </label>
-                      <div className="w-full border rounded-md p-2   text-right">
-                        {reste} FC
-                      </div>
+                      <div className="w-full border rounded-md p-2   text-right">{reste} FC</div>
                     </div>
                   )}
                 </div>

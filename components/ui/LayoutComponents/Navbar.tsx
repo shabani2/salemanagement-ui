@@ -8,12 +8,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from '@/components/ui/dropdowns/dropdown-menu';
 import { Menu } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '@/stores/store';
 import { logoutUser } from '@/stores/slices/auth/authSlice';
-import {  usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { User, isRegion, isPointVente } from '../../../Models/UserType';
 import { isUserRole } from '@/lib/utils';
 
@@ -94,7 +94,6 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
           variant="ghost"
           size="icon"
           onClick={onMenuClick}
-         
           className="mr-2 outline-none cursor-pointer"
         >
           <Menu className="w-6 h-6 cursor-pointer" />

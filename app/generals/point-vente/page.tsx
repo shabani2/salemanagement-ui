@@ -166,6 +166,7 @@ export default function PointVenteManagement() {
       });
     }
   };
+  const [first, setFirst] = useState(0);
   return (
     <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -200,10 +201,16 @@ export default function PointVenteManagement() {
         <DataTable
           value={filteredPointsVente}
           paginator
-          
           rows={5}
           className="rounded-lg"
           tableStyle={{ minWidth: '50rem' }}
+          rowClassName={(rowData, options) => {
+            const index = options?.index ?? 0;
+            const globalIndex = first + index;
+            return globalIndex % 2 === 0
+              ? '!bg-gray-300 !text-gray-900'
+              : '!bg-green-900 !text-white';
+          }}
         >
           <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
           <Column
@@ -252,7 +259,12 @@ export default function PointVenteManagement() {
             />
           </div>
           <div className="flex justify-end mt-4">
-            <Button label="Ajouter" className="!bg-green-700 text-white" onClick={handleCreate} severity={undefined}/>
+            <Button
+              label="Ajouter"
+              className="!bg-green-700 text-white"
+              onClick={handleCreate}
+              severity={undefined}
+            />
           </div>
         </div>
       </Dialog>
@@ -272,9 +284,13 @@ export default function PointVenteManagement() {
               label="Annuler"
               className="p-button-secondary"
               onClick={() => setDialogType(null)}
-             
             />
-            <Button label="Supprimer" className="bg-red-700 text-white" onClick={handleDelete} severity={undefined}/>
+            <Button
+              label="Supprimer"
+              className="bg-red-700 text-white"
+              onClick={handleDelete}
+              severity={undefined}
+            />
           </div>
         </div>
       </Dialog>

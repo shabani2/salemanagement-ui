@@ -4,8 +4,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/rules-of-hooks */
 'use client';
+import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
+import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
+import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
 import { OperationType } from '@/lib/operationType';
 import { MouvementStock } from '@/Models/mouvementStockType';
+import { PointVente } from '@/Models/pointVenteType';
 import { Stock } from '@/Models/stock';
 import {
   fetchStockByPointVenteId,
@@ -21,6 +25,7 @@ import { DataTable } from 'primereact/datatable';
 import { Dropdown } from 'primereact/dropdown';
 import { InputText } from 'primereact/inputtext';
 import { Menu } from 'primereact/menu';
+import { Toast } from 'primereact/toast';
 import React, { SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -61,10 +66,12 @@ const page = () => {
 
   // traitement de la recherche dans le stock
   const [search, setSearch] = useState('');
+  const [filteredBase, setFilteredBase] = useState<Stock[]>(stocks);
+  const [categorie, setCategorie] = useState<any>(null);
 
   const filteredStocks = useMemo(() => {
     const lowerSearch = search.toLowerCase();
-    return stocks.filter((s) => {
+    return filteredBase.filter((s) => {
       const cat = s.produit?.categorie?.nom?.toLowerCase() || '';
       const prod = s.produit?.nom?.toLowerCase() || '';
       const pv = s.pointVente?.nom?.toLowerCase() || 'depot central';
@@ -73,8 +80,77 @@ const page = () => {
       const date = new Date(s.createdAt || '').toLocaleDateString().toLowerCase();
       return [cat, prod, pv, quantite, montant, date].some((field) => field.includes(lowerSearch));
     });
-  }, [search, stocks]);
+  }, [search, filteredBase]);
 
+  //file management
+  const toast = useRef<Toast>(null);
+
+  const handleFileManagement = ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'pdf';
+    file?: File;
+  }) => {
+    if (type === 'import' && file) {
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+      toast.current?.show({
+        severity: 'info',
+        summary: `Import ${format.toUpperCase()}`,
+        detail: `File imported: ${file.name}`,
+        life: 3000,
+      });
+      return;
+    }
+
+    if (type === 'export') {
+      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
+      const blob = new Blob([content], {
+        type:
+          format === 'csv'
+            ? 'text/csv;charset=utf-8'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+      saveAs(blob, filename);
+
+      toast.current?.show({
+        severity: 'success',
+        summary: `Export ${format.toUpperCase()}`,
+        detail: `File downloaded: ${filename}`,
+        life: 3000,
+      });
+    }
+  };
+
+  // 1. Charger les données une seule fois au mount
+  useEffect(() => {
+    if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
+      dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
+    } else {
+      dispatch(fetchStocks());
+    }
+  }, [dispatch, user?.role]);
+
+  // 2. Initialiser filteredBase après que stocks ait été rempli
+  useEffect(() => {
+    if (stocks.length > 0) {
+      setFilteredBase(stocks);
+    }
+  }, [stocks]);
+
+  console.log('filteredBase');
+  const handlePointVenteSelect = (pointVente: PointVente | null) => {
+    if (!pointVente) {
+      setFilteredBase(stocks);
+      return;
+    }
+
+    const filtered = stocks.filter((s) => s.pointVente?._id === pointVente._id);
+    setFilteredBase(filtered);
+  };
   return (
     <div className=" min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -88,79 +164,84 @@ const page = () => {
       <div className="bg-white p-4 rounded-lg shadow-md">
         <div className="flex mb-4 gap-4">
           {/* Partie gauche - champ de recherche */}
-          <div className="w-1/2">
+          <div className="w-2/3 flex flex-row items-center gap-2">
             <InputText
               className="p-2 pl-10 border rounded w-full"
               placeholder="Rechercher..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-          </div>
+            <DropdownPointVenteFilter onSelect={handlePointVenteSelect} />
+            <DropdownCategorieFilter
+              onSelect={(categorie) => {
+                setCategorie(categorie);
 
-          {/* Partie droite - boutons alignés à droite */}
-          <div className="w-1/2 flex justify-end items-end gap-2">
-            <Button
-              label="upload"
-              icon="pi pi-upload"
-              className="p-button-primary text-[16px] h-[46px]"
+                if (categorie === null) {
+                  setFilteredBase(stocks); // doit repartir de stocks (pas filteredBase !)
+                  return;
+                }
+
+                const filtered = stocks.filter((p) => {
+                  return p.produit.categorie?._id === categorie._id;
+                });
+
+                setFilteredBase(filtered);
+              }}
             />
-            <Button
-              label="download"
-              icon="pi pi-download"
-              className="!bg-green-900 text-[16px] h-[46px]"
-            />
+
+            <DropdownImportExport onAction={handleFileManagement} />
           </div>
         </div>
 
         {/* dataTable */}
         <DataTable
-          value={filteredStocks}
+          value={Array.isArray(filteredStocks[0]) ? filteredStocks.flat() : filteredStocks}
           dataKey="_id"
           paginator
           loading={loading}
           rows={rows}
           first={first}
           onPage={onPageChange}
-          
           className="rounded-lg custom-datatable text-[14px]"
-          // @ts-ignore
           tableStyle={{ minWidth: '60rem' }}
-          // @ts-ignore
-          rowClassName={(_, index: number) =>
-            index % 2 === 0 ? 'bg-gray-300 text-gray-900' : '!bg-green-700 text-white'
-          }
+          rowClassName={(rowData, options) => {
+            const index = options?.index ?? 0;
+            const globalIndex = first + index;
+
+            return globalIndex % 2 === 0
+              ? '!bg-gray-300 !text-gray-900'
+              : '!bg-green-900 !text-white';
+          }}
         >
           <Column
             field="_id"
             header="#"
             body={(_, options) => options.rowIndex + 1}
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
             field="produit.categorie.nom"
-            header="Catégorie"
-            filter
+            header=""
             body={(rowData: Stock) => {
-              const categorie = rowData.produit?.categorie;
-              if (!categorie) return '—';
+              const categorie = rowData?.produit?.categorie;
+              if (!categorie) return <span className="text-[14px]">—</span>;
               const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
-
               return (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-[14px]">
                   {categorie.image && (
                     <img
                       src={imageUrl}
                       alt={categorie.nom}
-                      className="w-8 h-8 rounded-full object-cover border border-gray-300"
+                      className="w-8 h-8 rounded-full object-cover border border-gray-100"
                     />
                   )}
-                  <span>{categorie.nom}</span>
                 </div>
               );
             }}
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -168,45 +249,43 @@ const page = () => {
             header="Produit"
             filter
             body={(rowData: Stock) => rowData.produit?.nom || '—'}
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
-          <Column
-            field="pointVente.nom"
-            header="Point de Vente"
-            filter
-            body={(rowData: Stock) => rowData.pointVente?.nom || 'Depot Central'}
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
-          />
+          {/* <Column
+    field="pointVente.nom"
+    header="Point de Vente"
+    filter
+    body={(rowData: Stock) => rowData.pointVente?.nom || 'Depot Central'}
+    className="px-4 py-1 text-[14px]"
+    headerClassName="text-[14px] !bg-green-900 !text-white"
+/> */}
 
           <Column
             field="quantite"
-            sortable
             header="Quantité"
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
             field="montant"
-            sortable
             header="Montant"
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
             body={(rowData: Stock) => rowData.montant.toLocaleString()}
           />
 
           <Column
             header="Prix acquisition"
             body={(rowData) => (
-              <span className="text-blue-700 font-semibold">
+              <span className="text-blue-700 font-semibold text-[14px]">
                 {rowData.produit?.prix?.toLocaleString() ?? 'N/A'}
               </span>
             )}
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -216,10 +295,10 @@ const page = () => {
               const marge = rowData.produit?.marge;
               const valeur =
                 prix && marge !== undefined ? ((prix * marge) / 100).toFixed(2) : 'N/A';
-              return <span className="text-orange-600 font-medium">{valeur}</span>;
+              return <span className="text-orange-600 font-medium text-[14px]">{valeur}</span>;
             }}
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -227,20 +306,24 @@ const page = () => {
             body={(rowData) => {
               const net = rowData.produit?.netTopay;
               return (
-                <span className="text-purple-700 font-semibold">{net?.toFixed(2) ?? 'N/A'}</span>
+                <span className="text-purple-700 font-semibold text-[14px]">
+                  {net?.toFixed(2) ?? 'N/A'}
+                </span>
               );
             }}
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
             header="TVA (%)"
             body={(rowData: MouvementStock) => (
-              <span className="text-yellow-800 font-medium">{rowData.produit?.tva ?? '—'}%</span>
+              <span className="text-yellow-800 font-medium text-[14px]">
+                {rowData.produit?.tva ?? '—'}%
+              </span>
             )}
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -249,29 +332,29 @@ const page = () => {
               const net = rowData.produit?.netTopay;
               const tva = rowData.produit?.tva;
               const value = net && tva !== undefined ? ((net * tva) / 100).toFixed(2) : 'N/A';
-              return <span className="text-yellow-600 font-medium">{value}</span>;
+              return <span className="text-yellow-600 font-medium text-[14px]">{value}</span>;
             }}
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
             header="Prix de Vente"
             body={(rowData) => (
-              <span className="text-green-600 font-bold">
+              <span className="text-green-600 font-bold text-[14px]">
                 {rowData.produit?.prixVente?.toFixed(2) ?? 'N/A'}
               </span>
             )}
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
           />
 
           <Column
             field="createdAt"
             filter
             header="Créé le"
-            className="px-4 py-1"
-           headerClassName = "text-[16px] !bg-green-900 !text-white" 
+            className="px-4 py-1 text-[14px]"
+            headerClassName="text-[14px] !bg-green-900 !text-white"
             body={(rowData: Stock) => new Date(rowData.createdAt || '').toLocaleDateString()}
             sortable
           />
