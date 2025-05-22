@@ -16,6 +16,7 @@ import { logoutUser } from '@/stores/slices/auth/authSlice';
 import { usePathname } from 'next/navigation';
 import { User, isRegion, isPointVente } from '../../../Models/UserType';
 import { isUserRole } from '@/lib/utils';
+import ThemeSwitcher from '@/components/ThemeSwitcher';
 
 // interface NavbarProps {
 //   onMenuClick: () => void;
@@ -101,40 +102,45 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
         <h1 className="text-xl font-semibold">{getHeaderTitle()}</h1>
       </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger className="outline-none flex flex-row items-center">
-          <h3 className="mr-2">{user ? `${user.nom} ${user.prenom}` : ''}</h3>
-          {user?.image && (
-            <img
-              src={`http://localhost:8000/${user.image.replace('../', '')}`}
-              width={32}
-              height={32}
-              className="rounded-full cursor-pointer"
-              alt="User"
-            />
-          )}
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onClick={() => onNavigate('/generals/profile')}
-            className="cursor-pointer"
-          >
-            <i className="pi pi-user text-blue-600 mr-2" />
-            Profil
-          </DropdownMenuItem>
-          {/* <DropdownMenuItem
+      <div className="flex items-center">
+        <div className="hidden md:flex items-center mr-4">
+          <ThemeSwitcher />
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger className="outline-none flex flex-row items-center">
+            <h3 className="mr-2">{user ? `${user.nom} ${user.prenom}` : ''}</h3>
+            {user?.image && (
+              <img
+                src={`http://localhost:8000/${user.image.replace('../', '')}`}
+                width={32}
+                height={32}
+                className="rounded-full cursor-pointer"
+                alt="User"
+              />
+            )}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => onNavigate('/generals/profile')}
+              className="cursor-pointer"
+            >
+              <i className="pi pi-user text-blue-600 mr-2" />
+              Profil
+            </DropdownMenuItem>
+            {/* <DropdownMenuItem
             onClick={() => onNavigate('/superAdmin/Parametres/')}
             className="cursor-pointer"
           >
             <i className="pi pi-cog text-gray-600 mr-2" />
             Paramètres
           </DropdownMenuItem> */}
-          <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-            <i className="pi pi-sign-out text-red-600 mr-2" />
-            Déconnexion
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+              <i className="pi pi-sign-out text-red-600 mr-2" />
+              Déconnexion
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </nav>
   );
 }

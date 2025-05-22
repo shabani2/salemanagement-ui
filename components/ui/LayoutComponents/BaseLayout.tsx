@@ -13,6 +13,7 @@ import {
   fetchOrganisations,
   selectCurrentOrganisation,
 } from '@/stores/slices/organisation/organisationSlice';
+import { ThemeProvider } from '@/app/providers/ThemeProvider';
 
 interface LayoutProps {
   children: ReactNode;
@@ -66,35 +67,37 @@ export default function BaseLayout({ children }: LayoutProps) {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-200 w-full text-[14px]">
-      <Navbar
-        isOpen={sidebarOpen}
-        onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-        onNavigate={handleNavigation}
-      />
-      <div className="flex flex-1 min-w-0">
-        <Sidebar
+    <ThemeProvider>
+      <div className="flex flex-col min-h-screen bg-gray-200 w-full text-[14px]">
+        <Navbar
           isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          setLoading={setLoading}
+          onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+          onNavigate={handleNavigation}
         />
-        <div
-          className={`flex flex-col flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}
-        >
-          <main ref={mainRef} className="flex-1 p-6 mt-16">
-            {loading ? (
-              <div className="flex justify-center items-center h-full">
-                <ClipLoader color="#22c55e" size={60} />
-              </div>
-            ) : (
-              children
-            )}
-          </main>
-          <footer className="h-[72px] w-full bg-gray-50 dark:bg-gray-800 flex items-center justify-center border-t">
-            <Footer />
-          </footer>
+        <div className="flex flex-1 min-w-0">
+          <Sidebar
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            setLoading={setLoading}
+          />
+          <div
+            className={`flex flex-col flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}
+          >
+            <main ref={mainRef} className="flex-1 p-6 mt-16">
+              {loading ? (
+                <div className="flex justify-center items-center h-full">
+                  <ClipLoader color="#22c55e" size={60} />
+                </div>
+              ) : (
+                children
+              )}
+            </main>
+            <footer className="h-[72px] w-full bg-gray-50 dark:bg-gray-800 flex items-center justify-center border-t">
+              <Footer />
+            </footer>
+          </div>
         </div>
       </div>
-    </div>
+    </ThemeProvider>
   );
 }

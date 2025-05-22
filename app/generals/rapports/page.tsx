@@ -321,20 +321,22 @@ const page = () => {
   /> */}
 
           <Column
-            field="produit.categorie.nom"
+            field=""
             header=""
             body={(rowData: MouvementStock) => {
               const categorie = rowData?.produit?.categorie;
               if (!categorie) return <span className="text-[14px]">—</span>;
               const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
               return (
-                <div className="flex items-center gap-2 text-[14px]">
+                <div className="flex items-center  text-[14px]">
                   {categorie.image && (
-                    <img
-                      src={imageUrl}
-                      alt={categorie.nom}
-                      className="w-8 h-8 rounded-full object-cover border border-gray-100"
-                    />
+                    <div className="w-10 h-10">
+                      <img
+                        src={imageUrl}
+                        alt={categorie.nom}
+                        className="rounded-full w-full h-full object-cover border border-gray-100"
+                      />
+                    </div>
                   )}
                 </div>
               );

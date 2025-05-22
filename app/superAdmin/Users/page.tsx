@@ -33,6 +33,8 @@ import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import UserDialog from '@/components/ui/userComponent/UserDialog';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
 import { saveAs } from 'file-saver';
+import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
+import { PointVente } from '@/Models/pointVenteType';
 
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 
@@ -361,6 +363,20 @@ const Page = () => {
     }
   };
 
+  //zone pour filtrer par point de vente
+  const [filteredByPV, setFilteredByPV] = useState<User[]>([]);
+
+  const handlePointVenteSelect = (pointVente: PointVente | null) => {
+    if (!pointVente) {
+      // Réinitialiser avec tous les utilisateurs filtrés par la recherche
+      setFilteredByPV(filteredUsers);
+      return;
+    }
+
+    const filtered = filteredUsers.filter((u) => u?.pointVente?._id === pointVente._id);
+    setFilteredByPV(filtered);
+  };
+
   return (
     <div className="  h-screen-min">
       <div className="flex items-center justify-between mb-4">
@@ -369,16 +385,17 @@ const Page = () => {
       </div>
       <div className="bg-white p-2 rounded-lg">
         <div className="flex justify-between my-4">
-          <div className="relative w-2/3 flex justify-between">
+          <div className="relative w-2/3 flex justify-between gap-2">
             <InputText
               className="p-2 pl-10 border rounded w-full"
               placeholder="Rechercher..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <div className="ml-3 flex gap-2 w-2/5">
-              <DropdownImportExport onAction={handleFileManagement} />
-            </div>
+
+            <DropdownPointVenteFilter onSelect={handlePointVenteSelect} />
+            <DropdownImportExport onAction={handleFileManagement} />
+
             {/* <i className="pi pi-search absolute -3 top-1/2 transform -translate-y-1/2 text-gray-400"></i> */}
           </div>
           {!(user.role === 'Gerant' || user.role === 'Vendeur') && (
@@ -393,7 +410,7 @@ const Page = () => {
         </div>
         <div className=" p-1 rounded-lg shadow-md ">
           <DataTable
-            value={Array.isArray(filteredUsers[0]) ? filteredUsers.flat() : filteredUsers}
+            value={Array.isArray(filteredByPV[0]) ? filteredByPV.flat() : filteredUsers}
             dataKey="_id"
             paginator
             loading={loading}

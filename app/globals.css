@@ -160,3 +160,9 @@
   color: white !important;
   fill: white !important;
 }
+
+.p-button {
+  border: none !important;
+  outline: none !important;
+  /* box-shadow: none !important; */
+}

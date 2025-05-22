@@ -11,6 +11,8 @@ import { BreadCrumb } from 'primereact/breadcrumb';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   addOrganisation,
+  fetchOrganisations,
+  Organisation,
   selectCurrentOrganisation,
   updateOrganisation,
 } from '@/stores/slices/organisation/organisationSlice';
@@ -20,26 +22,17 @@ import { User } from '@/Models/UserType';
 
 const page = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const org = useSelector((state: RootState) => selectCurrentOrganisation(state));
-  // @ts-ignore
+  const [org, setOrg] = useState<Organisation[]>([]);
   const [user, setUser] = useState<User>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('user-agricap');
-      console.log('localStorage[user-agricap] =', storedUser);
-
-      if (storedUser) {
-        try {
-          const parsed = JSON.parse(storedUser);
-          console.log('parsed user:', parsed);
-          setUser(parsed);
-        } catch (e) {
-          console.error('Erreur de parsing localStorage:', e);
-        }
+    dispatch(fetchOrganisations()).then((data) => {
+      if (data) {
+        setOrg(data.payload);
       }
-    }
-  }, []);
+    });
+  }, [dispatch]);
+
   useEffect(() => {
     if (user?._id) {
       setFormData((prev) => ({
@@ -68,14 +61,15 @@ const page = () => {
       setFormData(
         // @ts-ignore
         {
-          nom: org.nom,
-          rccm: org.rccm,
-          contact: org.contact,
-          siegeSocial: org.siegeSocial,
-          devise: org.devise,
-          pays: org.pays,
-          emailEntreprise: org.emailEntreprise,
-          logo: org.logo || null,
+          nom: org[0]?.nom,
+          rccm: org[0]?.rccm,
+          contact: org[0]?.contact,
+          siegeSocial: org[0]?.siegeSocial,
+          devise: org[0]?.devise,
+          pays: org[0]?.pays,
+          emailEntreprise: org[0]?.emailEntreprise,
+          logo: org[0]?.logo || null,
+          superAdmin: org[0]?.superAdmin._id,
         }
       );
     }
@@ -103,11 +97,11 @@ const page = () => {
     });
 
     try {
-      if (org?._id) {
+      if (org[0]?._id) {
         await dispatch(
           updateOrganisation({
             // @ts-ignore
-            id: org._id,
+            id: org[0]._id,
             // @ts-ignore
             data,
           })
@@ -139,7 +133,8 @@ const page = () => {
       });
     }
   };
-
+  console.log('org', org);
+  console.log('formData', formData);
   return (
     <div className="p-3 space-y-6">
       <Toast ref={toast} />
@@ -194,7 +189,7 @@ const page = () => {
                 accept="image/*"
                 maxFileSize={1000000}
                 chooseLabel="Choisir une image"
-                className="w-full max-w-xs"
+                className="w-full max-w-xs [&>.p-button]:!bg-green-700 [&>.p-button]:hover:bg-green-800 [&>.p-button]:text-white"
                 customUpload
                 uploadHandler={() => {}}
                 onSelect={handleFileSelect}
@@ -206,9 +201,9 @@ const page = () => {
                   alt="Aperçu sélectionné"
                   className="h-16 w-16 object-contain border rounded"
                 />
-              ) : org?.logo ? (
+              ) : org[0]?.logo ? (
                 <img
-                  src={`http://localhost:8000/${org.logo.replace('../', '')}`}
+                  src={`http://localhost:8000/${org[0].logo.replace('../', '')}`}
                   alt="Image actuelle"
                   className="h-16 w-16 object-contain border rounded"
                 />
@@ -223,7 +218,7 @@ const page = () => {
           <Button
             label={org ? 'Mettre à jour' : 'Créer'}
             icon={org ? 'pi pi-refresh' : 'pi pi-plus'}
-            className="w-full sm:w-auto"
+            className="w-full sm:w-auto !bg-green-700"
             onClick={handleSubmit}
             severity={undefined}
           />
