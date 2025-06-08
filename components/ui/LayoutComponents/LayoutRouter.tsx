@@ -8,9 +8,10 @@ import BaseLayout from './BaseLayout';
 
 export default function LayoutRouter({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isLoginPage = pathname === '/login/';
+  const isLoginPage = pathname === '/login/' || pathname === '/login';
+  const isSubscriptionPage = pathname === '/subscription/' || pathname === '/subscription';
 
-  if (isLoginPage) {
+  if (isLoginPage || isSubscriptionPage) {
     return <>{children}</>;
   }
 

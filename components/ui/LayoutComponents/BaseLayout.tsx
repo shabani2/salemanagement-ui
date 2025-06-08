@@ -6,7 +6,7 @@ import { Sidebar } from './Sidebar';
 import { Footer } from './Footer';
 import { usePathname, useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
-import { selectAuthUser } from '@/stores/slices/auth/authSlice';
+//import { selectAuthUser } from '@/stores/slices/auth/authSlice';
 import { ClipLoader } from 'react-spinners';
 import { AppDispatch, RootState } from '@/stores/store';
 import {
@@ -68,7 +68,7 @@ export default function BaseLayout({ children }: LayoutProps) {
 
   return (
     <ThemeProvider>
-      <div className="flex flex-col min-h-screen bg-gray-200 w-full text-[14px]">
+      <div className="flex flex-col min-h-screen bg-gray-200 w-full text-[10px]">
         <Navbar
           isOpen={sidebarOpen}
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}

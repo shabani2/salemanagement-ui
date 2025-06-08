@@ -46,7 +46,11 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-
+  const handleCreateAccount = () => {
+    // Logic to handle account creation
+    console.log('Redirecting to account creation page...');
+    router.push('/subscription');
+  };
   return (
     <div className="flex min-h-screen items-center justify-center   p-6">
       <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg border border-gray-300">
@@ -81,7 +85,6 @@ export default function LoginPage() {
             />
             <button
               type="button"
-              severity={undefined}
               className="absolute inset-y-0 right-3 flex items-center  text-gray-500 cursor-pointer"
               onClick={() => setShowPassword(!showPassword)}
             >
@@ -109,6 +112,10 @@ export default function LoginPage() {
 
         {/* Message d'erreur */}
         {error && <p className="text-red-700 text-sm mb-4">{String(error)}</p>}
+
+        <div className="flex justify-end gap-2 mb-3">
+          <Button label="creer un compte" severity="info" text onClick={handleCreateAccount} />
+        </div>
 
         {/* Bouton de connexion avec spinner */}
         <Button

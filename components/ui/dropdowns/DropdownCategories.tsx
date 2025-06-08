@@ -22,7 +22,7 @@ const DropdownCategorieFilter: React.FC<DropdownCategorieFilterProps> = ({ onSel
     dispatch(fetchCategories());
   }, [dispatch]);
 
-  const options: Categorie[] = [{ id: '', nom: 'Tout' } as Categorie, ...categories];
+  const options: Categorie[] = [{ _id: '', nom: 'Tout', type: '' }, ...categories];
 
   const valueTemplate = (option: any, props: any) => {
     return (

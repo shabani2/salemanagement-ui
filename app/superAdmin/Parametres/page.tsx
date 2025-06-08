@@ -23,7 +23,7 @@ import { User } from '@/Models/UserType';
 const page = () => {
   const dispatch = useDispatch<AppDispatch>();
   const [org, setOrg] = useState<Organisation[]>([]);
-  const [user, setUser] = useState<User>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     dispatch(fetchOrganisations()).then((data) => {
@@ -69,7 +69,7 @@ const page = () => {
           pays: org[0]?.pays,
           emailEntreprise: org[0]?.emailEntreprise,
           logo: org[0]?.logo || null,
-          superAdmin: org[0]?.superAdmin._id,
+          superAdmin: org[0]?.superAdmin,
         }
       );
     }
@@ -149,9 +149,9 @@ const page = () => {
 
       <div className="bg-white rounded-2xl shadow-lg p-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-6">
+          <div className="space-y-6 p-3">
             {['nom', 'rccm', 'contact', 'siegeSocial'].map((field) => (
-              <span className="p-float-label" key={field}>
+              <span className="p-float-label p-3" key={field}>
                 <InputText
                   id={field}
                   name={field}
@@ -166,9 +166,9 @@ const page = () => {
             ))}
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 p-3">
             {['devise', 'pays', 'emailEntreprise'].map((field) => (
-              <span className="p-float-label" key={field}>
+              <span className="p-float-label p-3" key={field}>
                 <InputText
                   id={field}
                   name={field}
@@ -214,7 +214,7 @@ const page = () => {
           </div>
         </div>
 
-        <div className="mt-8 flex justify-end">
+        <div className="mt-8 flex justify-end p-3">
           <Button
             label={org ? 'Mettre à jour' : 'Créer'}
             icon={org ? 'pi pi-refresh' : 'pi pi-plus'}

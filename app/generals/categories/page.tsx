@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/rules-of-hooks */
@@ -23,6 +24,10 @@ import { FileUpload } from 'primereact/fileupload';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
 import { Toast } from 'primereact/toast';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 
 const page = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -30,7 +35,7 @@ const page = () => {
   const categories = useSelector((state: RootState) => selectAllCategories(state));
 
   const [selectedCategorie, setSelectedCategorie] = useState<Categorie | null>(null);
-
+  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
   //@ts-ignore
   // const [newCategory, setNewCategory] = useState<Categorie | null>(null);
   useEffect(() => {
@@ -113,13 +118,13 @@ const page = () => {
   //file management
   const toast = useRef<Toast>(null);
 
-  const handleFileManagement = ({
+  const handleFileManagement = async ({
     type,
     format,
     file,
   }: {
     type: 'import' | 'export';
-    format: 'csv' | 'pdf';
+    format: string;
     file?: File;
   }) => {
     if (type === 'import' && file) {
@@ -134,22 +139,44 @@ const page = () => {
     }
 
     if (type === 'export') {
-      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-      const blob = new Blob([content], {
-        type:
-          format === 'csv'
-            ? 'text/csv;charset=utf-8'
-            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-      saveAs(blob, filename);
+      // Only allow "csv" or "excel" as fileType
+      if (format !== 'csv' && format !== 'excel') {
+        toast.current?.show({
+          severity: 'warn',
+          summary: `Export ${format.toUpperCase()} non supporté`,
+          detail: `L'export ${format.toUpperCase()} n'est pas disponible pour ce module.`,
+          life: 3000,
+        });
+        return;
+      }
+      // Map "excel" to "xlsx" for backend compatibility
+      const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : format;
+      const result = await dispatch(
+        exportFile({
+          url: '/export/categories',
+          mouvements: categories,
+          fileType: exportFileType,
+        })
+      );
 
-      toast.current?.show({
-        severity: 'success',
-        summary: `Export ${format.toUpperCase()}`,
-        detail: `File downloaded: ${filename}`,
-        life: 3000,
-      });
+      if (exportFile.fulfilled.match(result)) {
+        const filename = `categories.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadExportedFile(result.payload, filename);
+
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: `Export ${format.toUpperCase()} Échoué`,
+          detail: String(result.payload || 'Une erreur est survenue.'),
+          life: 3000,
+        });
+      }
     }
   };
 

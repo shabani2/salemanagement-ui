@@ -12,6 +12,10 @@ import { MouvementStock } from '@/Models/mouvementStockType';
 import { PointVente } from '@/Models/pointVenteType';
 import { Stock } from '@/Models/stock';
 import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
+import {
   fetchStockByPointVenteId,
   fetchStocks,
   selectAllStocks,
@@ -72,7 +76,12 @@ const page = () => {
   const filteredStocks = useMemo(() => {
     const lowerSearch = search.toLowerCase();
     return filteredBase.filter((s) => {
-      const cat = s.produit?.categorie?.nom?.toLowerCase() || '';
+      const cat =
+        typeof s.produit?.categorie === 'object' &&
+        s.produit?.categorie !== null &&
+        'nom' in s.produit.categorie
+          ? (s.produit.categorie.nom as string)?.toLowerCase()
+          : '';
       const prod = s.produit?.nom?.toLowerCase() || '';
       const pv = s.pointVente?.nom?.toLowerCase() || 'depot central';
       const quantite = String(s.quantite || '').toLowerCase();
@@ -85,45 +94,7 @@ const page = () => {
   //file management
   const toast = useRef<Toast>(null);
 
-  const handleFileManagement = ({
-    type,
-    format,
-    file,
-  }: {
-    type: 'import' | 'export';
-    format: 'csv' | 'pdf';
-    file?: File;
-  }) => {
-    if (type === 'import' && file) {
-      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
-      toast.current?.show({
-        severity: 'info',
-        summary: `Import ${format.toUpperCase()}`,
-        detail: `File imported: ${file.name}`,
-        life: 3000,
-      });
-      return;
-    }
-
-    if (type === 'export') {
-      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-      const blob = new Blob([content], {
-        type:
-          format === 'csv'
-            ? 'text/csv;charset=utf-8'
-            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-      saveAs(blob, filename);
-
-      toast.current?.show({
-        severity: 'success',
-        summary: `Export ${format.toUpperCase()}`,
-        detail: `File downloaded: ${filename}`,
-        life: 3000,
-      });
-    }
-  };
+  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
 
   // 1. Charger les données une seule fois au mount
   useEffect(() => {
@@ -151,6 +122,59 @@ const page = () => {
     const filtered = stocks.filter((s) => s.pointVente?._id === pointVente._id);
     setFilteredBase(filtered);
   };
+  const handleFileManagement = async ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'excel';
+    file?: File;
+  }) => {
+    if (type === 'import' && file) {
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+      toast.current?.show({
+        severity: 'info',
+        summary: `Import ${format.toUpperCase()}`,
+        detail: `File imported: ${file.name}`,
+        life: 3000,
+      });
+      return;
+    }
+
+    if (type === 'export') {
+      // Map "excel" to "xlsx" to satisfy the type requirement
+      const exportFileType = format === 'excel' ? 'xlsx' : format;
+      const result = await dispatch(
+        exportFile({
+          url: '/export/stock',
+          mouvements: filteredStocks,
+          fileType: exportFileType,
+        })
+      );
+
+      if (exportFile.fulfilled.match(result)) {
+        const filename = `stock.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadExportedFile(result.payload, filename);
+
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: `Export ${format.toUpperCase()} Échoué`,
+          detail: String(result.payload || 'Une erreur est survenue.'),
+          life: 3000,
+        });
+      }
+    }
+  };
+  console.log('filteredStocks', filteredStocks);
+
   return (
     <div className=" min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -182,7 +206,12 @@ const page = () => {
                 }
 
                 const filtered = stocks.filter((p) => {
-                  return p.produit.categorie?._id === categorie._id;
+                  return (
+                    typeof p.produit.categorie === 'object' &&
+                    p.produit.categorie !== null &&
+                    '_id' in p.produit.categorie &&
+                    p.produit.categorie._id === categorie._id
+                  );
                 });
 
                 setFilteredBase(filtered);
@@ -202,12 +231,12 @@ const page = () => {
           rows={rows}
           first={first}
           onPage={onPageChange}
-          className="rounded-lg custom-datatable text-[14px]"
+          className="rounded-lg custom-datatable text-[11px]"
           tableStyle={{ minWidth: '60rem' }}
-          rowClassName={(rowData, options) => {
-            const index = options?.index ?? 0;
-            const globalIndex = first + index;
-
+          rowClassName={(_rowData: Stock, options) => {
+            //@ts-ignore
+            const rowIndex = options?.rowIndex ?? 0;
+            const globalIndex = first + rowIndex;
             return globalIndex % 2 === 0
               ? '!bg-gray-300 !text-gray-900'
               : '!bg-green-900 !text-white';
@@ -217,8 +246,8 @@ const page = () => {
             field="_id"
             header="#"
             body={(_, options) => options.rowIndex + 1}
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -226,22 +255,31 @@ const page = () => {
             header=""
             body={(rowData: Stock) => {
               const categorie = rowData?.produit?.categorie;
-              if (!categorie) return <span className="text-[14px]">—</span>;
-              const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
+              if (!categorie) return <span className="text-[11px]">—</span>;
+              const imageUrl =
+                typeof categorie === 'object' &&
+                categorie !== null &&
+                'image' in categorie &&
+                categorie.image
+                  ? `http://localhost:8000/${(categorie.image as string).replace('../', '')}`
+                  : '';
               return (
-                <div className="flex items-center gap-2 text-[14px]">
-                  {categorie.image && (
-                    <img
-                      src={imageUrl}
-                      alt={categorie.nom}
-                      className="w-8 h-8 rounded-full object-cover border border-gray-100"
-                    />
-                  )}
+                <div className="flex items-center gap-2 text-[11px]">
+                  {typeof categorie === 'object' &&
+                    categorie !== null &&
+                    'image' in categorie &&
+                    categorie.image && (
+                      <img
+                        src={imageUrl}
+                        alt={categorie.nom}
+                        className="w-8 h-8 rounded-full object-cover border border-gray-100"
+                      />
+                    )}
                 </div>
               );
             }}
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -249,81 +287,83 @@ const page = () => {
             header="Produit"
             filter
             body={(rowData: Stock) => rowData.produit?.nom || '—'}
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
-
-          {/* <Column
-    field="pointVente.nom"
-    header="Point de Vente"
-    filter
-    body={(rowData: Stock) => rowData.pointVente?.nom || 'Depot Central'}
-    className="px-4 py-1 text-[14px]"
-    headerClassName="text-[14px] !bg-green-900 !text-white"
-/> */}
+          <Column
+            field="pointVente.nom"
+            header="Point de Vente"
+            body={(rowData: Stock) => (
+              <span className="text-[11px]">
+                {rowData?.pointVente?.nom ? rowData?.pointVente?.nom : 'Depot Central'}
+              </span>
+            )}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
 
           <Column
             field="quantite"
             header="Quantité"
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
-          <Column
+          {/* <Column
             field="montant"
             header="Montant"
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
             body={(rowData: Stock) => rowData.montant.toLocaleString()}
-          />
+          /> */}
 
           <Column
             header="Prix acquisition"
             body={(rowData) => (
-              <span className="text-blue-700 font-semibold text-[14px]">
+              <span className="text-blue-700 font-semibold text-[11px]">
                 {rowData.produit?.prix?.toLocaleString() ?? 'N/A'}
               </span>
             )}
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
-          <Column
+          {/* <Column
             header="Valeur Marge"
             body={(rowData: MouvementStock) => {
               const prix = rowData.produit?.prix;
               const marge = rowData.produit?.marge;
               const valeur =
                 prix && marge !== undefined ? ((prix * marge) / 100).toFixed(2) : 'N/A';
-              return <span className="text-orange-600 font-medium text-[14px]">{valeur}</span>;
+              return <span className="text-orange-600 font-medium text-[11px]">{valeur}</span>;
             }}
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
-          />
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          /> */}
 
           <Column
             header="Net à Payer"
             body={(rowData) => {
               const net = rowData.produit?.netTopay;
               return (
-                <span className="text-purple-700 font-semibold text-[14px]">
+                <span className="text-purple-700 font-semibold text-[11px]">
                   {net?.toFixed(2) ?? 'N/A'}
                 </span>
               );
             }}
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column
             header="TVA (%)"
             body={(rowData: MouvementStock) => (
-              <span className="text-yellow-800 font-medium text-[14px]">
+              <span className="text-yellow-800 font-medium text-[11px]">
                 {rowData.produit?.tva ?? '—'}%
               </span>
             )}
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -332,29 +372,61 @@ const page = () => {
               const net = rowData.produit?.netTopay;
               const tva = rowData.produit?.tva;
               const value = net && tva !== undefined ? ((net * tva) / 100).toFixed(2) : 'N/A';
-              return <span className="text-yellow-600 font-medium text-[14px]">{value}</span>;
+              return <span className="text-yellow-600 font-medium text-[11px]">{value}</span>;
             }}
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column
             header="Prix de Vente"
             body={(rowData) => (
-              <span className="text-green-600 font-bold text-[14px]">
+              <span className="text-green-600 font-bold text-[11px]">
                 {rowData.produit?.prixVente?.toFixed(2) ?? 'N/A'}
               </span>
             )}
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
+          <Column
+            field="stock.produit.seuil"
+            header="seuil de stock"
+            filter
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+            body={(rowData: Stock) => {
+              const isValide = (rowData?.produit?.seuil ?? 0) < rowData.quantite;
+              return (
+                <span
+                  className="flex items-center gap-1 text-sm px-2 py-1 text-[11px]"
+                  style={{
+                    backgroundColor: isValide ? '#4caf50' : '#f44336',
+                    borderRadius: '9999px',
+                    color: '#fff',
+                  }}
+                  title={isValide ? 'Stock suffisant' : 'Stock insuffisant'}
+                  data-testid="stock-severity-badge"
+                  data-severity={isValide ? 'success' : 'warning'}
+                >
+                  <i
+                    className={isValide ? 'pi pi-check' : 'pi pi-exclamation-triangle'}
+                    style={{ fontSize: '0.75rem' }}
+                  />
+                  <span style={{ fontSize: '0.75rem' }}>{rowData?.produit?.seuil || 'N/A'}</span>
+                  <span style={{ fontSize: '0.75rem', marginLeft: '0.25rem' }}>
+                    {isValide ? 'Suffisant' : 'Insuffisant'}
+                  </span>
+                </span>
+              );
+            }}
           />
 
           <Column
             field="createdAt"
             filter
             header="Créé le"
-            className="px-4 py-1 text-[14px]"
-            headerClassName="text-[14px] !bg-green-900 !text-white"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
             body={(rowData: Stock) => new Date(rowData.createdAt || '').toLocaleDateString()}
             sortable
           />

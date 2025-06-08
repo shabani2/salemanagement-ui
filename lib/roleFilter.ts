@@ -7,7 +7,10 @@ export function filterRoutesByRole(role: UserRole) {
     case 'superadmin':
       return Routes;
     case 'adminregion':
-      return base.concat(Routes.filter((r) => r.title !== 'Paramètres' && r.title !== 'Dashboard'));
+      return base.concat(
+        Routes.filter((r) => !['Paramètres', 'Zones', 'Dashboard'].includes(r.title))
+      );
+
     case 'adminpointvente':
       return base.concat(
         Routes.filter((r) => ['Opérations', 'Stock', 'Rapports', 'Utilisateurs'].includes(r.title))

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/rules-of-hooks */
@@ -25,9 +26,13 @@ import { useDispatch, useSelector } from 'react-redux';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { Categorie, Produit } from '@/Models/produitsType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { saveAs } from 'file-saver';
+//import { saveAs } from 'file-saver';
 import { Toast } from 'primereact/toast';
 import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 const page = () => {
   const menuRef = useRef<any>(null);
   const dispatch = useDispatch<AppDispatch>();
@@ -48,6 +53,7 @@ const page = () => {
     prixVente: 0,
     tva: 0,
     marge: 0,
+    seuil: 0,
     netTopay: 0,
     unite: '',
   });
@@ -143,6 +149,7 @@ const page = () => {
         prixVente: selectedProduit.prixVente || 0,
         tva: selectedProduit.tva || 0,
         marge: selectedProduit.marge || 0,
+        seuil: selectedProduit?.seuil || 0,
         unite: selectedProduit.unite || '',
 
         _id: selectedProduit._id, // si tu en as besoin pour l'update
@@ -167,6 +174,7 @@ const page = () => {
   const [searchProd, setSearchProd] = useState('');
   const [filteredProduits, setFilteredProduits] = useState(produits || []);
   const [first, setFirst] = useState(0);
+  const [categorie, setCategorie] = useState<Categorie | null>(null);
   useEffect(() => {
     const filtered = produits.filter((p) => {
       const query = searchProd.toLowerCase();
@@ -185,14 +193,15 @@ const page = () => {
 
   //file management
   const toast = useRef<Toast>(null);
+  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
 
-  const handleFileManagement = ({
+  const handleFileManagement = async ({
     type,
     format,
     file,
   }: {
     type: 'import' | 'export';
-    format: 'csv' | 'pdf';
+    format: 'csv' | 'pdf' | 'excel';
     file?: File;
   }) => {
     if (type === 'import' && file) {
@@ -207,37 +216,58 @@ const page = () => {
     }
 
     if (type === 'export') {
-      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-      const blob = new Blob([content], {
-        type:
-          format === 'csv'
-            ? 'text/csv;charset=utf-8'
-            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-      saveAs(blob, filename);
+      // Only allow "csv" or "xlsx" as fileType
+      if (format === 'pdf') {
+        toast.current?.show({
+          severity: 'warn',
+          summary: 'Export PDF non supporté',
+          detail: "L'export PDF n'est pas disponible pour ce module.",
+          life: 3000,
+        });
+        return;
+      }
+      // Map "excel" to "xlsx" for backend compatibility
+      const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : format;
+      const result = await dispatch(
+        exportFile({
+          url: '/export/produits',
+          mouvements: filteredProduits,
+          fileType: exportFileType,
+        })
+      );
 
-      toast.current?.show({
-        severity: 'success',
-        summary: `Export ${format.toUpperCase()}`,
-        detail: `File downloaded: ${filename}`,
-        life: 3000,
-      });
+      if (exportFile.fulfilled.match(result)) {
+        const filename = `produits.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadExportedFile(result.payload, filename);
+
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: `Export ${format.toUpperCase()} Échoué`,
+          detail: String(result.payload || 'Une erreur est survenue.'),
+          life: 3000,
+        });
+      }
     }
   };
-  const [categorie, setCategorie] = useState<Categorie | null>(null);
   return (
     <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des Produits1' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Produits1' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
         <h2 className="text-2xl font-bold text-gray-500">Gestion des Produits</h2>
       </div>
-      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row">
-        <div className=" bg-white p-2 rounded-lg">
+      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row w-full ">
+        <div className=" bg-white p-2 rounded-lg w-full ">
           <div className="gap-4 mb-4 w-full  flex justify-between">
             <div className="relative w-2/3 flex flex-row gap-2">
               <InputText
@@ -255,10 +285,15 @@ const page = () => {
                   }
                   const filtered = allProduits.filter((p) => {
                     if (!categorie) return true;
-                    return p.categorie?._id === categorie._id;
+                    return typeof p.categorie === 'object' &&
+                      p.categorie !== null &&
+                      '_id' in p.categorie
+                      ? p.categorie._id === categorie._id
+                      : p.categorie === categorie._id;
                   });
                   setFilteredProduits(filtered);
                 }}
+                // @ts-ignore
               />
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
@@ -276,9 +311,10 @@ const page = () => {
               value={filteredProduits}
               paginator
               rows={5}
-              className="rounded-lg"
+              className="rounded-lg text-[11px] text-gray-900 w-full"
               tableStyle={{ minWidth: '70rem' }}
               rowClassName={(rowData, options) => {
+                // @ts-ignore
                 const index = options?.index ?? 0;
                 const globalIndex = first + index;
                 return globalIndex % 2 === 0
@@ -290,46 +326,62 @@ const page = () => {
                 field="_id"
                 header="#"
                 body={(_, options) => options.rowIndex + 1}
-                headerClassName=" !bg-green-900 !text-white"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+                className="text-[11px]"
               />
               <Column
-                field="produit.categorie.nom"
+                // field="produit.categorie.nom"
                 header=""
                 body={(rowData: Produit) => {
                   const categorie = rowData?.categorie;
-                  if (!categorie) return <span className="text-[14px]">—</span>;
-                  const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
+                  if (!categorie) return <span className="text-[11px]">—</span>;
+                  let imageUrl = '';
+                  if (
+                    typeof categorie === 'object' &&
+                    categorie !== null &&
+                    'image' in categorie &&
+                    categorie.image
+                  ) {
+                    imageUrl = `http://localhost:8000/${categorie.image.replace('../', '')}`;
+                  }
                   return (
-                    <div className="flex items-center gap-2 text-[14px]">
-                      {categorie.image && (
-                        <img
-                          src={imageUrl}
-                          alt={categorie.nom}
-                          className="w-8 h-8 rounded-full object-cover border border-gray-100"
-                        />
-                      )}
+                    <div className="flex items-center gap-2 text-[11px]">
+                      {typeof categorie === 'object' &&
+                        categorie !== null &&
+                        'image' in categorie &&
+                        categorie.image && (
+                          <img
+                            src={imageUrl}
+                            alt={categorie.nom}
+                            className="w-8 h-8 rounded-full object-cover border border-gray-100"
+                          />
+                        )}
+                      {/* <span>{categorie.nom}</span> */}
                     </div>
                   );
                 }}
-                className="px-4 py-1 text-[14px]"
-                headerClassName="text-[14px] !bg-green-900 !text-white"
+                className="px-4 py-1 text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 field="nom"
                 header="Nom"
                 sortable
-                headerClassName=" !bg-green-900 !text-white"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 field="prix"
-                header="cout unitaire"
-                headerClassName=" !bg-green-900 !text-white"
+                header="prix/U"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 field="marge"
                 header="Marge (%)"
                 body={(rowData: Produit) => rowData.marge ?? 'N/A'}
-                headerClassName=" !bg-green-900 !text-white"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 header="Valeur Marge"
@@ -338,15 +390,22 @@ const page = () => {
                     ? ((rowData.prix * rowData.marge) / 100).toFixed(2)
                     : 'N/A'
                 }
-                headerClassName=" !bg-green-900 !text-white"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 field="netTopay"
-                header="Net à Payer"
+                header="prix de vente/U"
                 body={(rowData: Produit) => rowData.netTopay?.toFixed(2) ?? 'N/A'}
-                headerClassName=" !bg-green-900 !text-white"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
-              <Column field="tva" header="TVA (%)" headerClassName=" !bg-green-900 !text-white" />
+              <Column
+                field="tva"
+                header="TVA (%)"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+              />
               <Column
                 header="Valeur TVA"
                 body={(rowData: Produit) =>
@@ -354,26 +413,35 @@ const page = () => {
                     ? ((rowData.netTopay * rowData.tva) / 100).toFixed(2)
                     : 'N/A'
                 }
-                headerClassName=" !bg-green-900 !text-white"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 field="prixVente"
-                header="Prix de Vente"
+                header="TTC/U"
                 body={(rowData: Produit) => rowData.prixVente?.toFixed(2) ?? 'N/A'}
-                headerClassName=" !bg-green-900 !text-white"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+              />
+              <Column
+                field="seuil"
+                header="Seuil de stock"
+                body={(rowData: Produit) => rowData.seuil?.toFixed(2) ?? 'N/A'}
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 field="unite"
                 header="Unité"
                 body={(rowData: Produit) => rowData.unite || 'N/A'}
-                headerClassName=" !bg-green-900 !text-white"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
-
               <Column
                 body={actionBodyTemplate}
                 header="Actions"
-                className="px-4 py-1"
-                headerClassName=" !bg-green-900 !text-white"
+                className="px-4 py-1 text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
             </DataTable>
           </div>
@@ -438,6 +506,7 @@ const page = () => {
                 className="w-full p-2 border rounded"
               />
             </div>
+
             <div className="flex-1">
               <label className="block mb-1 text-sm font-medium">TVA (%)</label>
               <InputText
@@ -445,6 +514,16 @@ const page = () => {
                 //@ts-ignore
                 value={newProduit.tva}
                 onChange={(e) => handleInputChange('tva', parseFloat(e.target.value) || 0)}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Seuil de stock</label>
+              <InputText
+                type="number"
+                //@ts-ignore
+                value={newProduit.seuil}
+                onChange={(e) => handleInputChange('seuil', parseFloat(e.target.value) || 0)}
                 className="w-full p-2 border rounded"
               />
             </div>

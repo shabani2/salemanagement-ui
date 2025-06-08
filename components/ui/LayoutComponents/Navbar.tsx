@@ -108,7 +108,7 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger className="outline-none flex flex-row items-center">
-            <h3 className="mr-2">{user ? `${user.nom} ${user.prenom}` : ''}</h3>
+            <h3 className="mr-2 text-[14px]">{user ? `${user.nom} ${user.prenom}` : ''}</h3>
             {user?.image && (
               <img
                 src={`http://localhost:8000/${user.image.replace('../', '')}`}
@@ -127,13 +127,16 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
               <i className="pi pi-user text-blue-600 mr-2" />
               Profil
             </DropdownMenuItem>
-            {/* <DropdownMenuItem
-            onClick={() => onNavigate('/superAdmin/Parametres/')}
-            className="cursor-pointer"
-          >
-            <i className="pi pi-cog text-gray-600 mr-2" />
-            Paramètres
-          </DropdownMenuItem> */}
+            {user?.role === 'SuperAdmin' && (
+              <DropdownMenuItem
+                onClick={() => onNavigate('/superAdmin/abonnements')}
+                className="cursor-pointer"
+              >
+                <i className="pi pi-users text-green-600 mr-2" />
+                Abonnements
+              </DropdownMenuItem>
+            )}
+
             <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
               <i className="pi pi-sign-out text-red-600 mr-2" />
               Déconnexion

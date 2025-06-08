@@ -35,10 +35,16 @@ import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportE
 import { saveAs } from 'file-saver';
 import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
 import { PointVente } from '@/Models/pointVenteType';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 
 const Page = () => {
+  //@ts-ignore
+  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
   const [loadingCreateOrUpdate, setLoadingCreateOrUpdate] = useState(false);
   const toastRef = useRef<Toast>(null);
   const [users, setUsers] = useState<User[] | null[]>([]); //useSelector((state: RootState) => selectAllUsers(state));
@@ -209,7 +215,7 @@ const Page = () => {
         formData.append('email', newUser.email);
         formData.append('adresse', newUser.adresse);
         formData.append('password', newUser.password);
-        formData.append('role', newUser.role);
+        formData.append('role', newUser?.role);
 
         if (newUser.region) {
           formData.append('region', isRegion(newUser.region) ? newUser.region._id : newUser.region);
@@ -310,9 +316,32 @@ const Page = () => {
         const email = u.email?.toLowerCase() || '';
         const tel = u.telephone?.toLowerCase() || '';
         const region =
-          u.region?.nom?.toLowerCase() || u.pointVente?.region?.nom?.toLowerCase() || '';
-        const pv = u.pointVente?.nom?.toLowerCase() || 'depot central';
-        const role = u.role?.toLowerCase() || '';
+          (typeof u.region === 'object' && u.region !== null && 'nom' in u.region
+            ? u.region.nom?.toLowerCase()
+            : typeof u.region === 'string'
+              ? u.region.toLowerCase()
+              : '') ||
+          (typeof u.pointVente === 'object' &&
+          u.pointVente !== null &&
+          'region' in u.pointVente &&
+          typeof u.pointVente.region === 'object' &&
+          u.pointVente.region !== null &&
+          'nom' in u.pointVente.region
+            ? u.pointVente.region.nom?.toLowerCase()
+            : typeof u.pointVente === 'object' &&
+                u.pointVente !== null &&
+                'region' in u.pointVente &&
+                typeof u.pointVente.region === 'string'
+              ? u.pointVente.region.toLowerCase()
+              : '') ||
+          '';
+        const pv =
+          typeof u.pointVente === 'object' && u.pointVente !== null && 'nom' in u.pointVente
+            ? u.pointVente.nom?.toLowerCase() || ''
+            : typeof u.pointVente === 'string'
+              ? u.pointVente.toLowerCase()
+              : 'depot central';
+        const role = u?.role?.toLowerCase() || '';
         return [nom, prenom, email, tel, region, pv, role].some((field) =>
           field.includes(lowerSearch)
         );
@@ -323,13 +352,13 @@ const Page = () => {
   //file management
   const toast = useRef<Toast>(null);
 
-  const handleFileManagement = ({
+  const handleFileManagement = async ({
     type,
     format,
     file,
   }: {
     type: 'import' | 'export';
-    format: 'csv' | 'pdf';
+    format: 'csv' | 'pdf' | 'excel';
     file?: File;
   }) => {
     if (type === 'import' && file) {
@@ -344,22 +373,44 @@ const Page = () => {
     }
 
     if (type === 'export') {
-      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-      const blob = new Blob([content], {
-        type:
-          format === 'csv'
-            ? 'text/csv;charset=utf-8'
-            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-      saveAs(blob, filename);
+      // Only allow "csv" or "xlsx" as fileType
+      if (format === 'pdf') {
+        toast.current?.show({
+          severity: 'warn',
+          summary: 'Export PDF non supporté',
+          detail: "L'export PDF n'est pas disponible pour ce module.",
+          life: 3000,
+        });
+        return;
+      }
+      // Map "excel" to "xlsx" for backend compatibility
+      const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : format;
+      const result = await dispatch(
+        exportFile({
+          url: '/export/users',
+          mouvements: users,
+          fileType: exportFileType,
+        })
+      );
 
-      toast.current?.show({
-        severity: 'success',
-        summary: `Export ${format.toUpperCase()}`,
-        detail: `File downloaded: ${filename}`,
-        life: 3000,
-      });
+      if (exportFile.fulfilled.match(result)) {
+        const filename = `utilisateurs.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadExportedFile(result.payload, filename);
+
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: `Export ${format.toUpperCase()} Échoué`,
+          detail: String(result.payload || 'Une erreur est survenue.'),
+          life: 3000,
+        });
+      }
     }
   };
 
@@ -373,7 +424,13 @@ const Page = () => {
       return;
     }
 
-    const filtered = filteredUsers.filter((u) => u?.pointVente?._id === pointVente._id);
+    const filtered = filteredUsers.filter(
+      (u) =>
+        typeof u?.pointVente === 'object' &&
+        u.pointVente !== null &&
+        '_id' in u.pointVente &&
+        u.pointVente._id === pointVente._id
+    );
     setFilteredByPV(filtered);
   };
 
@@ -398,7 +455,7 @@ const Page = () => {
 
             {/* <i className="pi pi-search absolute -3 top-1/2 transform -translate-y-1/2 text-gray-400"></i> */}
           </div>
-          {!(user.role === 'Gerant' || user.role === 'Vendeur') && (
+          {!(user?.role === 'Gerant' || user?.role === 'Vendeur') && (
             <Button
               severity={undefined}
               icon="pi pi-plus"
@@ -417,10 +474,11 @@ const Page = () => {
             rows={rows}
             first={first}
             onPage={onPageChange}
-            className="rounded-lg custom-datatable text-[14px]"
+            className="rounded-lg custom-datatable text-[11px]"
             tableStyle={{ minWidth: '50rem' }}
             rowClassName={(rowData, options) => {
-              const index = options?.index ?? 0;
+              //@ts-ignore
+              const index = options?.rowIndex ?? 0;
               const globalIndex = first + index;
               return globalIndex % 2 === 0
                 ? '!bg-gray-300 !text-gray-900'
@@ -430,9 +488,9 @@ const Page = () => {
             <Column
               field="_id"
               header="#"
-              body={(_data, options) => <span className="text-[14px]">{options.rowIndex + 1}</span>}
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              body={(_data, options) => <span className="text-[11px]">{options.rowIndex + 1}</span>}
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
 
             <Column
@@ -444,8 +502,8 @@ const Page = () => {
                   className="w-10 h-10 rounded-full object-cover border border-gray-300"
                 />
               )}
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
 
             <Column
@@ -453,8 +511,8 @@ const Page = () => {
               header="Nom"
               sortable
               filter
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
 
             <Column
@@ -462,8 +520,8 @@ const Page = () => {
               header="Prénom"
               sortable
               filter
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
 
             <Column
@@ -471,15 +529,15 @@ const Page = () => {
               header="Email"
               sortable
               filter
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
 
             <Column
               field="telephone"
               header="Téléphone"
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
 
             <Column
@@ -487,12 +545,12 @@ const Page = () => {
               header="Region"
               filter
               body={(rowData) => (
-                <span className="text-[14px]">
+                <span className="text-[11px]">
                   {rowData?.region?.nom || rowData?.pointVente?.region.nom || 'Depot Central'}
                 </span>
               )}
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
 
             <Column
@@ -500,24 +558,24 @@ const Page = () => {
               header="point vente"
               filter
               body={(rowData) => (
-                <span className="text-[14px]">{rowData?.pointVente?.nom || 'Depot Central'}</span>
+                <span className="text-[11px]">{rowData?.pointVente?.nom || 'Depot Central'}</span>
               )}
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
 
             <Column
               field="role"
               header="Rôle"
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
 
             <Column
               body={actionBodyTemplate}
               header="Actions"
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              className="px-4 py-1 text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
           </DataTable>
         </div>
@@ -527,7 +585,9 @@ const Page = () => {
         // @ts-ignore
         dialogType={dialogType}
         setDialogType={setDialogType}
+        //@ts-ignore
         newUser={newUser}
+        //@ts-ignore
         setNewUser={setNewUser}
         errors={errors}
         showRegionField={true}

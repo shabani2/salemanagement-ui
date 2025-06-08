@@ -166,3 +166,7 @@
   outline: none !important;
   /* box-shadow: none !important; */
 }
+
+.p-card .p-card-body {
+  padding: 0 !important;
+}

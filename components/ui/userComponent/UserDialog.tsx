@@ -4,17 +4,30 @@ import { Dropdown } from 'primereact/dropdown';
 import { FileUpload } from 'primereact/fileupload';
 import { Button } from 'primereact/button';
 import React from 'react';
-import { isPointVente, isRegion, User, UserModel } from '@/Models/UserType';
-import { getRoleOptionsByUser, UserRoleModel } from '@/lib/utils';
+import { isPointVente, isRegion } from '@/Models/UserType';
+import { getRoleOptionsByUser } from '@/lib/utils';
+
+interface NewUser {
+  nom: string;
+  prenom: string;
+  telephone: string;
+  email: string;
+  adresse: string;
+  password?: string;
+  role: string;
+  region?: string | { _id: string; nom: string };
+  pointVente?: string | { _id: string; nom: string };
+  image?: File | string | null;
+}
 
 interface UserDialogProps {
   dialogType: 'create' | 'edit' | 'detail' | null;
   setDialogType: (type: 'create' | 'edit' | 'detail' | null) => void;
-  newUser: any;
-  setNewUser: (user: any) => void;
+  newUser: NewUser;
+  setNewUser: (user: NewUser) => void;
   errors: Record<string, string>;
-  regions: any[];
-  pointsVente: any[];
+  regions: { _id: string; nom: string }[];
+  pointsVente: { _id: string; nom: string }[];
   previewUrl: string | null;
   handleCreateOrUpdate: () => void;
   loadingCreateOrUpdate: boolean;
@@ -72,7 +85,11 @@ const UserDialog: React.FC<UserDialogProps> = ({
                 <InputText
                   type="text"
                   placeholder={name === 'nom' ? 'Nom' : 'Prénom'}
-                  value={newUser[name] || ''}
+                  value={
+                    typeof newUser[name as keyof NewUser] === 'string'
+                      ? (newUser[name as keyof NewUser] as string)
+                      : ''
+                  }
                   onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
                   disabled={readOnly}
                   required
@@ -94,7 +111,11 @@ const UserDialog: React.FC<UserDialogProps> = ({
                 <InputText
                   type="text"
                   placeholder={placeholder}
-                  value={newUser[name] || ''}
+                  value={
+                    typeof newUser[name as keyof NewUser] === 'string'
+                      ? (newUser[name as keyof NewUser] as string)
+                      : ''
+                  }
                   onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
                   disabled={readOnly}
                   required
@@ -115,7 +136,11 @@ const UserDialog: React.FC<UserDialogProps> = ({
               <InputText
                 type={type || 'text'}
                 placeholder={placeholder}
-                value={newUser[name] || ''}
+                value={
+                  typeof newUser[name as keyof NewUser] === 'string'
+                    ? (newUser[name as keyof NewUser] as string)
+                    : ''
+                }
                 onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
                 disabled={readOnly || (dialogType === 'edit' && name === 'password')}
                 required

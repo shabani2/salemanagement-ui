@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable react-hooks/rules-of-hooks */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import { useState, useEffect, useRef } from 'react';
@@ -18,7 +21,12 @@ import {
 } from '@/stores/slices/regions/regionSlice';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { saveAs } from 'file-saver';
+//import { saveAs } from 'file-saver';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
+import { Toast } from 'primereact/toast';
 
 export default function RegionManagement() {
   const [deleteDialogType, setDeleteDialogType] = useState<boolean | null>(null);
@@ -68,7 +76,7 @@ export default function RegionManagement() {
       setDialogType(null);
     }
   };
-
+  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
   const handleDelete = () => {
     if (selectedRegion) {
       dispatch(deleteRegion(selectedRegion._id));
@@ -125,13 +133,13 @@ export default function RegionManagement() {
   //file management
   const toast = useRef<Toast>(null);
 
-  const handleFileManagement = ({
+  const handleFileManagement = async ({
     type,
     format,
     file,
   }: {
     type: 'import' | 'export';
-    format: 'csv' | 'pdf';
+    format: 'csv' | 'pdf' | 'excel';
     file?: File;
   }) => {
     if (type === 'import' && file) {
@@ -146,25 +154,46 @@ export default function RegionManagement() {
     }
 
     if (type === 'export') {
-      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-      const blob = new Blob([content], {
-        type:
-          format === 'csv'
-            ? 'text/csv;charset=utf-8'
-            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-      saveAs(blob, filename);
+      // Only allow "csv" or "xlsx" as fileType
+      if (format === 'pdf') {
+        toast.current?.show({
+          severity: 'warn',
+          summary: 'Export PDF non supporté',
+          detail: "L'export PDF n'est pas disponible pour ce module.",
+          life: 3000,
+        });
+        return;
+      }
+      // Map "excel" to "xlsx" for backend compatibility
+      const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : format;
+      const result = await dispatch(
+        exportFile({
+          url: '/export/regions',
+          mouvements: regions,
+          fileType: exportFileType,
+        })
+      );
 
-      toast.current?.show({
-        severity: 'success',
-        summary: `Export ${format.toUpperCase()}`,
-        detail: `File downloaded: ${filename}`,
-        life: 3000,
-      });
+      if (exportFile.fulfilled.match(result)) {
+        const filename = `regions.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadExportedFile(result.payload, filename);
+
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: `Export ${format.toUpperCase()} Échoué`,
+          detail: String(result.payload || 'Une erreur est survenue.'),
+          life: 3000,
+        });
+      }
     }
   };
-
   return (
     <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-3">
@@ -184,6 +213,7 @@ export default function RegionManagement() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+
             <div className="ml-3 flex gap-2 w-2/5">
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
@@ -201,9 +231,10 @@ export default function RegionManagement() {
             value={Array.isArray(filteredRegions[0]) ? filteredRegions.flat() : filteredRegions}
             paginator
             rows={5}
-            className="rounded-lg text-[14px]"
+            className="rounded-lg text-[12px]"
             tableStyle={{ minWidth: '50rem' }}
             rowClassName={(rowData, options) => {
+              //@ts-ignore
               const index = options?.index ?? 0;
               const globalIndex = first + index;
               return globalIndex % 2 === 0
@@ -287,7 +318,7 @@ export default function RegionManagement() {
         </div>
       </Dialog>
       <ConfirmDeleteDialog
-        visible={deleteDialogType}
+        visible={!!deleteDialogType}
         onHide={() => setDeleteDialogType(false)}
         onConfirm={(item) => {
           handleDelete();

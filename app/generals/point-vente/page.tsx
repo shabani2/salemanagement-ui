@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
@@ -23,14 +24,19 @@ import {
 } from '@/stores/slices/pointvente/pointventeSlice';
 import { PointVente } from '@/Models/pointVenteType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { saveAs } from 'file-saver';
+//import { saveAs } from 'file-saver';
 import { Toast } from 'primereact/toast';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 
 export default function PointVenteManagement() {
   const dispatch = useDispatch<AppDispatch>();
   const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
   const regions = useSelector((state: RootState) => selectAllRegions(state));
-
+  // @ts-ignore
+  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
   const [dialogType, setDialogType] = useState<string | null>(null);
   const [selectedPointVente, setSelectedPointVente] = useState<any>(null);
   const [newPointVente, setNewPointVente] = useState<{
@@ -118,7 +124,9 @@ export default function PointVenteManagement() {
       return (
         pv.nom?.toLowerCase().includes(query) ||
         pv.adresse?.toLowerCase().includes(query) ||
-        pv.region?.nom?.toLowerCase().includes(query)
+        (typeof pv.region === 'object' && pv.region !== null && 'nom' in pv.region
+          ? (pv.region.nom as string)?.toLowerCase().includes(query)
+          : false)
       );
     });
     setFilteredPointsVente(filtered);
@@ -127,13 +135,13 @@ export default function PointVenteManagement() {
   //file management
   const toast = useRef<Toast>(null);
 
-  const handleFileManagement = ({
+  const handleFileManagement = async ({
     type,
     format,
     file,
   }: {
     type: 'import' | 'export';
-    format: 'csv' | 'pdf';
+    format: 'csv' | 'pdf' | 'excel';
     file?: File;
   }) => {
     if (type === 'import' && file) {
@@ -148,25 +156,48 @@ export default function PointVenteManagement() {
     }
 
     if (type === 'export') {
-      const content = format === 'csv' ? 'name,age\nJohn,30\nJane,25' : 'Excel simulation content';
-      const blob = new Blob([content], {
-        type:
-          format === 'csv'
-            ? 'text/csv;charset=utf-8'
-            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const filename = `export.${format === 'csv' ? 'csv' : 'xlsx'}`;
-      saveAs(blob, filename);
+      // Only allow "csv" or "xlsx" as fileType
+      if (format === 'pdf') {
+        toast.current?.show({
+          severity: 'warn',
+          summary: 'Export PDF non supporté',
+          detail: "L'export PDF n'est pas disponible pour ce module.",
+          life: 3000,
+        });
+        return;
+      }
+      // Map "excel" to "xlsx" for backend compatibility
+      const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : format;
+      const result = await dispatch(
+        exportFile({
+          url: '/export/point-ventes',
+          mouvements: pointsVente,
+          fileType: exportFileType,
+        })
+      );
 
-      toast.current?.show({
-        severity: 'success',
-        summary: `Export ${format.toUpperCase()}`,
-        detail: `File downloaded: ${filename}`,
-        life: 3000,
-      });
+      if (exportFile.fulfilled.match(result)) {
+        const filename = `pointVente.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadExportedFile(result.payload, filename);
+
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: `Export ${format.toUpperCase()} Échoué`,
+          detail: String(result.payload || 'Une erreur est survenue.'),
+          life: 3000,
+        });
+      }
     }
   };
-  const [first, setFirst] = useState(0);
+  //@ts-ignore
+  const [first] = useState(0);
   return (
     <div className="  min-h-screen ">
       <div className="flex items-center justify-between mb-6">
@@ -186,6 +217,7 @@ export default function PointVenteManagement() {
               value={searchPV}
               onChange={(e) => setSearchPV(e.target.value)}
             />
+
             <div className="ml-3 flex w-2/5 ">
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
@@ -202,9 +234,10 @@ export default function PointVenteManagement() {
           value={filteredPointsVente}
           paginator
           rows={5}
-          className="rounded-lg"
+          className="rounded-lg text-[11px]"
           tableStyle={{ minWidth: '50rem' }}
           rowClassName={(rowData, options) => {
+            //@ts-ignore
             const index = options?.index ?? 0;
             const globalIndex = first + index;
             return globalIndex % 2 === 0
@@ -212,17 +245,41 @@ export default function PointVenteManagement() {
               : '!bg-green-900 !text-white';
           }}
         >
-          <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
+          <Column
+            field="_id"
+            header="#"
+            body={(_, options) => options.rowIndex + 1}
+            className="text-[11px]"
+            headerClassName="!bg-green-900 !text-white text-[11px]"
+          />
           <Column
             field="region"
             header="Région"
             body={(rowData) => rowData.region?.nom || 'N/A'}
             sortable
+            className="text-[11px]"
+            headerClassName="!bg-green-900 !text-white text-[11px]"
           />
-          <Column field="nom" header="Nom" sortable />
-          <Column field="adresse" header="Adresse" sortable />
-
-          <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
+          <Column
+            field="nom"
+            header="Nom"
+            sortable
+            className="text-[11px]"
+            headerClassName="!bg-green-900 !text-white text-[11px]"
+          />
+          <Column
+            field="adresse"
+            header="Adresse"
+            sortable
+            className="text-[11px]"
+            headerClassName="!bg-green-900 !text-white text-[11px]"
+          />
+          <Column
+            body={actionBodyTemplate}
+            header="Actions"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="!bg-green-900 !text-white text-[11px]"
+          />
         </DataTable>
       </div>
 

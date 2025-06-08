@@ -51,8 +51,9 @@ export function Sidebar({ isOpen, onClose, setLoading }: SidebarProps) {
     >
       <div className="flex justify-between items-center p-3">
         <span className="text-lg font-bold">AgriCap</span>
+
         <img
-          src={org && `http://localhost:8000/${org?.logo.replace('../', '')}`}
+          src={org?.logo ? `http://localhost:8000/${org.logo.replace('../', '')}` : ''}
           width={64}
           height={64}
           className="rounded-full cursor-pointer"

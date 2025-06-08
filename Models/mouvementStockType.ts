@@ -10,6 +10,8 @@ export interface MouvementStock {
   quantite: number;
   montant: number;
   statut: 'En Attente' | 'Validée';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface MouvementStockModel {
@@ -21,4 +23,6 @@ export interface MouvementStockModel {
   quantite: number;
   montant: number;
   statut: 'En Attente' | 'Validée';
+  createdAt?: string;
+  updatedAt?: string;
 }

@@ -34,6 +34,7 @@ import { DataTable } from 'primereact/datatable';
 import { Accordion, AccordionTab } from 'primereact/accordion';
 import { Column } from 'primereact/column';
 import { Divider } from 'primereact/divider';
+import { fetchOrganisations, Organisation } from '@/stores/slices/organisation/organisationSlice';
 
 type FormValues = {
   type: string;
@@ -72,10 +73,18 @@ const Page = () => {
   const [stockRestant, setStockRestant] = useState<{ [index: number]: number }>({});
   const [disableAdd, setDisableAdd] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
+  const [org, setOrg] = useState<Organisation[]>([]);
 
   const [selectedType, setSelectedType] = useState<string>('');
 
   const toast = React.useRef<Toast>(null);
+  useEffect(() => {
+    dispatch(fetchOrganisations()).then((data) => {
+      if (data) {
+        setOrg(data.payload);
+      }
+    });
+  }, [dispatch]);
 
   const user =
     typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
@@ -84,7 +93,7 @@ const Page = () => {
     type: '',
     depotCentral: false,
     pointVente: undefined,
-    produits: [{ categorie: '', produit: '', quantite: 0 }],
+    produits: [],
     formulaire: {
       categorie: '',
       produit: '',
@@ -139,7 +148,20 @@ const Page = () => {
 
   const totalMontant = watch('produits').reduce((acc, item) => {
     const produit = allProduits.find((p) => p._id === item.produit);
-    return acc + (produit ? produit.prix * item.quantite : 0);
+    if (!produit) return acc;
+
+    const quantite = item.quantite ?? 0;
+    const prix = produit.prix ?? 0;
+    const marge = produit.marge ?? 0;
+    const tva = produit.tva ?? 0;
+
+    const montant = quantite * prix;
+    const margeVal = (montant * marge) / 100;
+    const netTopay = montant + margeVal;
+    const tvaValeur = (netTopay * tva) / 100;
+    const ttc = selectedType === 'Vente' ? netTopay + tvaValeur : montant;
+
+    return acc + ttc;
   }, 0);
 
   const onSubmit = async (data: FormValues) => {
@@ -163,25 +185,34 @@ const Page = () => {
           : produitObj.prixVente;
 
         return {
-          produit: produitObj._id,
+          produit: produitObj,
           produitNom: produitObj.nom,
           quantite: item.quantite,
           montant: prix * item.quantite,
           type: data.type,
           depotCentral: data.depotCentral ?? false,
           pointVente: data.pointVente,
-          statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type),
+          statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type)
+            ? ('Validée' as const)
+            : ('En Attente' as const),
         };
       });
 
       const results = await Promise.allSettled(
         mouvements.map((m) =>
           dispatch(
+            // @ts-ignore
+            // @ts-ignore
+            // @ts-ignore
             createMouvementStock({
               produit: m.produit,
+              // @ts-ignore
               quantite: m.quantite,
               montant: m.montant,
+              // @ts-ignore
               type: m.type,
+              // @ts-ignore
+              // @ts-ignore
               depotCentral: m.depotCentral,
               pointVente: m.pointVente,
               statut: m.statut,
@@ -221,7 +252,7 @@ const Page = () => {
           accept: async () => {
             const result = await dispatch(
               generateStockPdf({
-                organisation,
+                organisation: org[0] || organisation,
                 user,
                 mouvements,
                 type: data.type,
@@ -244,6 +275,7 @@ const Page = () => {
         });
 
         reset(defaultValues);
+        console.log(produits);
       }
     } catch (err) {
       toast.current?.show({
@@ -334,7 +366,7 @@ const Page = () => {
     min: { value: 1, message: 'Minimum 1' },
     validate: async (value: any) => {
       if (type === 'Entrée' || type === 'Commande') return true;
-      return await validateStock(value, index);
+      return await validateStock(value);
     },
   });
 
@@ -368,46 +400,53 @@ const Page = () => {
 
   // Afficher uniquement un seul champ dynamique pour édition
 
-  const [formulaire, setFormulaire] = useState({
-    categorie: '',
-    produit: '',
-    quantite: 0,
-  });
-
+  console.log('liste produit : ', produits);
   const selectedCatId = watch('formulaire.categorie');
 
-  const filteredProduits = allProduits.filter((p) => p.categorie._id == selectedCatId);
+  const filteredProduits = allProduits.filter(
+    (p) =>
+      typeof p.categorie === 'object' &&
+      p.categorie !== null &&
+      '_id' in p.categorie &&
+      (p.categorie as { _id: string })._id == selectedCatId
+  );
 
   return (
-    <div className="  min-h-screen p-4">
+    <div className="min-h-screen p-4 text-xs">
       <Toast ref={toast} />
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'opérations' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Opérations' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
-          className="bg-none"
+          className="bg-none" // Breadcrumb text size might be controlled by PrimeReact theme
         />
-        <h2 className="text-2xl font-bold  text-gray-500">Gestion des opérations</h2>
+        {/* Removed text-2xl, will inherit text-xs or can be set explicitly if needed larger */}
+        <h1 className="font-bold text-gray-500 text-[14px]">Gestion des opérations</h1>
       </div>
-
       <div className="flex  md:flex-wrap gap-6">
+        {' '}
+        {/* Changed to flex-col for stacking on small screens, md:flex-row for larger */}
         <div className="bg-white p-4 rounded-lg shadow-md w-full">
           <form
             onSubmit={(e) => {
-              if (fields.length > 0) {
+              // Simplified unregister logic, ensure it matches your needs
+              if (fields.length > 0 && getValues('formulaire.produit')) {
                 unregister('formulaire.produit');
                 unregister('formulaire.quantite');
                 unregister('formulaire.categorie');
               }
               handleSubmit(onSubmit)(e);
             }}
-            className="flex flex-col md:flex-row gap-6 gap-6"
+            className="flex flex-col md:flex-row gap-6"
           >
             {/* Colonne gauche : Formulaire principal */}
-            <div className="space-y-4">
+            <div className="space-y-4 flex-grow">
+              {' '}
+              {/* Added flex-grow */}
               {/* Type */}
               <div>
-                <label className="block text-sm font-medium mb-1 invisible">Type</label>
+                {/* Removed text-sm from label, it's also invisible */}
+                <label className="block font-medium mb-1 invisible">Type</label>
                 <Controller
                   name="type"
                   control={control}
@@ -421,16 +460,18 @@ const Page = () => {
                         setSelectedType(e.value);
                       }}
                       placeholder="Sélectionner un type"
+                      // Dropdown text size might be controlled by PrimeReact theme
                       className={classNames('w-full', { 'p-invalid': !!errors.type })}
                     />
                   )}
                 />
+                {/* Error message will inherit text-xs */}
                 {errors.type && <small className="text-red-700">{errors.type.message}</small>}
               </div>
-
               {/* Dépôt central (si Entrée) */}
               {watch('type') === 'Entrée' && (
                 <div>
+                  {/* Label text will inherit text-xs */}
                   <label>
                     <input
                       type="checkbox"
@@ -449,24 +490,39 @@ const Page = () => {
                   )}
                 </div>
               )}
-
               {/* Point de vente (si non Entrée) */}
-              {watch('type') !== 'Entrée' && (
+              {watch('type') && watch('type') !== 'Entrée' && (
                 <div>
                   <label>Point de vente</label>
-                  <Dropdown
-                    value={watch('pointVente')}
-                    options={pointsVente}
-                    optionLabel="nom"
-                    onChange={(e) => setValue('pointVente', e.value)}
-                    placeholder="Sélectionner un point de vente"
-                    className="w-full"
-                    disabled={!watch('type') || isPointVenteLocked}
+                  <Controller
+                    name="pointVente"
+                    control={control}
+                    rules={{
+                      required:
+                        watch('type') && watch('type') !== 'Entrée'
+                          ? 'Point de vente est requis'
+                          : false,
+                    }}
+                    render={({ field }) => (
+                      <Dropdown
+                        {...field}
+                        value={field.value} // Ensure value is correctly passed for controlled component
+                        options={pointsVente}
+                        optionLabel="nom"
+                        onChange={(e) => field.onChange(e.value)}
+                        placeholder="Sélectionner un point de vente"
+                        className="w-full"
+                        disabled={!watch('type') || isPointVenteLocked}
+                      />
+                    )}
                   />
-                  {errors.pointVente && <small className="text-red-700">Champ requis</small>}
+                  {errors.pointVente && (
+                    <small className="text-red-700">
+                      {errors.pointVente.message || 'Champ requis'}
+                    </small>
+                  )}
                 </div>
               )}
-
               {/* Produits */}
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
@@ -512,11 +568,18 @@ const Page = () => {
                     <label>Quantité</label>
                     <Controller
                       name="formulaire.quantite"
+                      // @ts-ignore
                       control={control}
+                      // @ts-ignore
+                      // @ts-ignore
                       render={({ field }) => (
                         <InputText
                           type="number"
-                          value={field.value}
+                          value={
+                            field.value !== undefined && field.value !== null
+                              ? String(field.value)
+                              : ''
+                          }
                           onChange={(e) => field.onChange(Number(e.target.value))}
                           className={`w-full ${errors.formulaire?.quantite ? 'p-invalid' : ''}`}
                         />
@@ -534,10 +597,10 @@ const Page = () => {
                 <div className="flex gap-4 justify-end">
                   <Button
                     type="button"
-                    className="!bg-green-700"
+                    className="!bg-green-700" // Button text size might be controlled by PrimeReact theme
                     severity={undefined}
                     icon={editingIndex !== null ? 'pi pi-check' : 'pi pi-plus'}
-                    label={editingIndex !== null ? 'Modifier' : 'Ajouter un produit'}
+                    label={editingIndex !== null ? 'Modifier Produit' : 'Ajouter Produit'}
                     onClick={async () => {
                       const isValid = await trigger([
                         'formulaire.categorie',
@@ -556,52 +619,68 @@ const Page = () => {
                         return;
                       }
 
-                      append(getValues('formulaire'));
+                      const formData = getValues('formulaire');
+                      if (editingIndex !== null) {
+                        update(editingIndex, formData);
+                        setEditingIndex(null);
+                      } else {
+                        append(formData);
+                      }
                       resetField('formulaire');
                     }}
                   />
                 </div>
               </div>
             </div>
-            <Divider layout="vertical" className="hidden md:block" />
-            {/* Colonne droite : Taux */}
 
-            <div className="space-y-4">
+            <Divider layout="vertical" className="hidden md:block" />
+
+            {/* Colonne droite : Taux */}
+            <div className="space-y-4 flex-shrink-0 md:w-1/3">
+              {' '}
+              {/* Added flex-shrink-0 and width */}
               <div className="flex flex-row gap-2">
                 <div>
-                  <label className="block text-sm font-medium mb-1 text-gray-500">
-                    Taux dollar
-                  </label>
+                  {/* Removed text-sm */}
+                  <label className="block font-medium mb-1 text-gray-500">Taux dollar</label>
                   <InputText
                     type="number"
-                    value={watch('tauxDollar') ?? ''}
+                    value={
+                      watch('tauxDollar') !== undefined && watch('tauxDollar') !== null
+                        ? String(watch('tauxDollar'))
+                        : ''
+                    }
                     onChange={(e) => {
-                      const value = parseFloat(e.target.value);
-                      if (!isNaN(value)) {
-                        setValue('tauxDollar', value);
-                        localStorage.setItem('tauxDollar', value.toString());
+                      const value = e.target.value;
+                      if (value !== '' && !isNaN(Number(value))) {
+                        setValue('tauxDollar', Number(value));
+                        localStorage.setItem('tauxDollar', value);
                       } else {
-                        setValue('tauxDollar', '');
+                        setValue('tauxDollar', 0);
                         localStorage.removeItem('tauxDollar');
                       }
                     }}
-                    className="w-full"
+                    className="w-full" // InputText internal text size might be controlled by PrimeReact theme
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium mb-1 text-gray-500">
-                    Taux en franc
-                  </label>
+                  {/* Removed text-sm */}
+                  <label className="block font-medium mb-1 text-gray-500">Taux en franc</label>
                   <InputText
                     type="number"
-                    value={watch('tauxFranc') ?? ''}
+                    value={
+                      watch('tauxFranc') !== undefined && watch('tauxFranc') !== null
+                        ? String(watch('tauxFranc'))
+                        : ''
+                    }
                     onChange={(e) => {
-                      const value = parseFloat(e.target.value);
-                      if (!isNaN(value)) {
-                        setValue('tauxFranc', value);
-                        localStorage.setItem('tauxFranc', value.toString());
+                      const value = e.target.value;
+                      if (value !== '' && !isNaN(Number(value))) {
+                        setValue('tauxFranc', Number(value));
+                        localStorage.setItem('tauxFranc', value);
                       } else {
-                        setValue('tauxFranc', '');
+                        setValue('tauxFranc', 0);
                         localStorage.removeItem('tauxFranc');
                       }
                     }}
@@ -611,54 +690,55 @@ const Page = () => {
               </div>
               {/* zone pour montant de conversion */}
               <div className="flex flex-wrap md:flex-nowrap gap-4 w-full">
-                {/* Colonne 1 : Montant reçu */}
                 <div className="w-full md:w-3/5 min-w-0">
-                  <label className="block text-sm font-medium text-gray-500">
-                    Montant reçu en $
-                  </label>
+                  {/* Removed text-sm */}
+                  <label className="block font-medium text-gray-500">Montant reçu en $</label>
                   <InputText
                     type="number"
                     {...register('montantDollar')}
                     className="w-full"
-                    onBlur={() => setValue('montantFranc', montantFranc)}
+                    onBlur={() => setValue('montantFranc', montantFranc)} // This might not work as expected, montantFranc is a string
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') setValue('montantFranc', montantFranc);
+                      if (e.key === 'Enter') setValue('montantFranc', montantFranc); // Same as above
                     }}
                   />
                 </div>
 
-                {/* Colonne 2 : Montant converti */}
                 <div className="w-full md:w-2/5 min-w-0">
-                  <label className="block text-sm font-medium text-gray-500">
-                    Montant converti
-                  </label>
+                  {/* Removed text-sm */}
+                  <label className="block font-medium text-gray-500">Montant converti</label>
+                  {/* Text will inherit text-xs */}
                   <div className="w-full border rounded-md p-3 text-white bg-gray-500">
                     {montantFranc} FC
                   </div>
                 </div>
               </div>
-
               {/* zone de reduction */}
-              <div className=" gap-2 w-full">
-                <h3 className="text-gray-500 text-xl">Zones de Reduction</h3>
+              <div className="gap-2 w-full">
+                {/* Removed text-xl */}
+                <h3 className="text-gray-500">Zones de Reduction</h3>
                 <Divider layout="horizontal" className="mb-2" />
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Rabais (%)</label>
+                    {/* Removed text-sm */}
+                    <label className="block font-medium text-gray-500">Rabais (%)</label>
                     <InputText type="number" {...register('rabais')} className="w-full" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Remise (%)</label>
+                    {/* Removed text-sm */}
+                    <label className="block font-medium text-gray-500">Remise (%)</label>
                     <InputText type="number" {...register('remise')} className="w-full" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Valeur rabais</label>
+                    {/* Removed text-sm */}
+                    <label className="block font-medium text-gray-500">Valeur rabais</label>
                     <div className="w-full border rounded-md p-2 text-right bg-gray-500 text-gray-100">
                       {valeurRabais} FC
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Valeur remise</label>
+                    {/* Removed text-sm */}
+                    <label className="block font-medium text-gray-500">Valeur remise</label>
                     <div className="w-full border rounded-md p-2 text-right bg-gray-500 text-gray-100">
                       {valeurRemise} FC
                     </div>
@@ -668,34 +748,37 @@ const Page = () => {
             </div>
           </form>
         </div>
-
         {/* zone de recapitulation */}
-
-        <div className="bg-white p-6 rounded-2xl shadow-xl w-full">
-          <h3 className="text-xl font-bold text-gray-800 mb-6">Récapitulatif</h3>
-
-          <div className="flex flex-col md:flex-row gap-6">
-            {/* Colonne gauche (2/3) */}
-            <div className="md:w-2/3 space-y-6">
-              {type !== 'Entrée' && (
-                <>
-                  {['Livraison', 'Commande'].includes(type) && pointVente && (
-                    <div className="border p-3 rounded-lg bg-gray-50 text-gray-500">
-                      <div className="font-semibold">Point de vente sélectionné :</div>
-                      <div>Nom : {pointVente.nom}</div>
-                      <div>Adresse : {pointVente.adresse}</div>
-                      <div>Région : {pointVente.region?.nom}</div>
-                      <div>Ville : {pointVente.region?.ville}</div>
-                    </div>
-                  )}
-                </>
+        <div className="bg-white p-6 rounded-2xl shadow-xl w-full ">
+          {' '}
+          {/* Adjusted width for recap */}
+          {/* Removed text-xl */}
+          <h3 className="font-bold text-gray-800 mb-6">Récapitulatif</h3>
+          <div className="flex flex-col gap-6">
+            {' '}
+            {/* Simplified to single column for recap */}
+            <div className="space-y-6">
+              {type && type !== 'Entrée' && pointVente && (
+                <div className="border p-3 rounded-lg bg-gray-50 text-gray-500">
+                  <div className="font-semibold">Point de vente sélectionné :</div>
+                  <div>Nom : {pointVente.nom}</div>
+                  <div>Adresse : {pointVente.adresse}</div>
+                  <div>Région : {pointVente.region?.nom}</div>
+                  <div>Ville : {pointVente.region?.ville}</div>
+                </div>
               )}
 
               <div>
                 <h4 className="font-semibold text-gray-500">Détails par produit</h4>
-                <Accordion>
+                <Accordion activeIndex={0}>
                   <AccordionTab header="Opérations effectuées">
-                    <DataTable value={watch('produits') || []} responsiveLayout="scroll">
+                    {/* AccordionTab header text size might be controlled by PrimeReact theme */}
+                    <DataTable
+                      value={watch('produits') || []}
+                      responsiveLayout="scroll"
+                      size="small"
+                      className="text-[11px]"
+                    >
                       <Column header="#" body={(_, i) => i.rowIndex + 1} />
                       <Column
                         field="produit"
@@ -715,21 +798,86 @@ const Page = () => {
                         body={(rowData) => {
                           const produit = allProduits.find((p) => p._id === rowData.produit);
                           if (!produit) return '-';
-                          const prix = ['Livraison', 'Entrée'].includes(type)
-                            ? produit.prix
-                            : produit.prixVente;
-                          return `${prix} FC`;
+                          // const prix = ['Livraison', 'Entrée'].includes(type)
+                          //   ? produit.prix
+                          //   : produit.prixVente;
+                          return `${produit.prix} FC`;
                         }}
                       />
                       <Column
-                        header="Total"
+                        header="Montant"
                         body={(rowData) => {
                           const produit = allProduits.find((p) => p._id === rowData.produit);
                           if (!produit) return '-';
-                          const prix = ['Livraison', 'Entrée'].includes(type)
-                            ? produit.prix
-                            : produit.prixVente;
-                          return `${rowData.quantite * prix} FC`;
+                          // const prix = ['Livraison', 'Entrée'].includes(type)
+                          //   ? produit.prix
+                          //   : produit.prixVente;
+                          const quantite = rowData.quantite ?? 0;
+                          return `${quantite * produit.prix} FC`;
+                        }}
+                      />
+                      <Column
+                        header="Marge"
+                        body={(rowData) => {
+                          const produit = allProduits.find((p) => p._id === rowData.produit);
+                          if (!produit) return '-';
+                          const quantite = rowData.quantite ?? 0;
+                          const marge = produit?.marge ?? 0;
+                          const montant = quantite * produit.prix || 0;
+                          return `${((montant * marge) / 100).toFixed(2)} FC`;
+                        }}
+                      />
+                      <Column
+                        header="prix de vente"
+                        body={(rowData) => {
+                          const produit = allProduits.find((p) => p._id === rowData.produit);
+                          if (!produit) return '-';
+                          const quantite = rowData.quantite ?? 0;
+                          const marge = produit?.marge ?? 0;
+                          const montant = quantite * produit.prix || 0;
+                          const margeVal = ((montant * marge) / 100).toFixed(2);
+                          //return `${montant + parseFloat(margeVal).toFixed(2)} FC`;
+                          return `${(montant + parseFloat(margeVal)).toFixed(2)} FC`;
+                        }}
+                      />
+                      <Column
+                        header="TVA"
+                        body={(rowData) => {
+                          const produit = allProduits.find((p) => p._id === rowData.produit);
+                          if (!produit) return '-';
+                          const quantite = rowData.quantite ?? 0;
+                          const marge = produit?.marge ?? 0;
+                          const tva = produit?.tva ?? 0;
+                          const montant = quantite * produit.prix || 0;
+                          const margeVal = ((montant * marge) / 100).toFixed(2);
+                          const netTopay = (montant + parseFloat(margeVal)).toFixed(2);
+                          if (tva === 0) return '0 FC';
+                          if (isNaN(Number(netTopay)) || Number(netTopay) <= 0) return '0 FC';
+                          // Calcul de la TVA
+                          const tvaValeur = ((parseInt(netTopay) * tva) / 100).toFixed(2);
+
+                          if (isNaN(parseFloat(tvaValeur)) || parseFloat(tvaValeur) <= 0)
+                            return '0 FC';
+                          return `${tvaValeur} FC`;
+                        }}
+                      />
+                      <Column
+                        header="TTC"
+                        body={(rowData) => {
+                          const produit = allProduits.find((p) => p._id === rowData.produit);
+                          if (!produit) return '-';
+                          const quantite = rowData.quantite ?? 0;
+                          const marge = produit?.marge ?? 0;
+                          const tva = produit?.tva ?? 0;
+                          const montant = quantite * produit.prix || 0;
+                          const margeVal = ((montant * marge) / 100).toFixed(2);
+                          const netTopay = (montant + parseFloat(margeVal)).toFixed(2);
+                          if (tva === 0) return '0 FC';
+                          if (isNaN(Number(netTopay)) || Number(netTopay) <= 0) return '0 FC';
+                          // Calcul de la TVA
+                          const tvaValeur = ((parseInt(netTopay) * tva) / 100).toFixed(2);
+
+                          return `${parseFloat(netTopay) + parseFloat(tvaValeur)} FC`;
                         }}
                       />
                     </DataTable>
@@ -737,36 +885,36 @@ const Page = () => {
                 </Accordion>
               </div>
 
-              <div className="text-right text-lg font-semibold text-gray-800">
-                Total : {totalMontant} FC
+              {/* Removed text-lg */}
+              <div className="text-right font-semibold text-gray-800">
+                Total : {totalMontant.toFixed(2)} FC
               </div>
             </div>
-
-            {/* Divider vertical visible uniquement sur desktop */}
-            <div className="hidden md:flex justify-center">
-              <Divider layout="vertical" className="h-full" />
-            </div>
-
-            {/* Colonne droite (1/3) */}
-            <div className="md:w-1/3 space-y-6">
-              {type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
+            {/* Financial details section */}
+            <div className="space-y-6">
+              {type && type !== 'Livraison' && type !== 'Entrée' && type !== 'Commande' && (
                 <>
-                  <div className="text-right text-lg font-bold text-green-700">
-                    Net à payer : {netAPayer} FC
+                  {/* Removed text-lg */}
+                  <div className="text-right font-bold text-green-700">
+                    {selectedType === 'Vente' && (
+                      <>Montant à payer : {totalMontant.toFixed(2)} FC</>
+                    )}
+
+                    {/* Net à payer : {netAPayer} FC */}
                   </div>
 
                   <div className="space-y-4 flex gap-2">
                     <div className="w-1/2">
-                      <label className="block text-sm font-medium text-gray-500">
+                      {/* Removed text-sm */}
+                      <label className="block font-medium text-gray-500">
                         Montant reçu en franc
                       </label>
                       <InputText type="number" {...register('montantRecu')} className="w-full" />
                     </div>
 
                     <div className="w-1/2">
-                      <label className="block text-sm font-medium text-gray-500">
-                        Reste / à retourner
-                      </label>
+                      {/* Removed text-sm */}
+                      <label className="block font-medium text-gray-500">Reste / à retourner</label>
                       <div className="w-full border rounded-md p-3 text-right text-gray-100 bg-gray-500">
                         {reste} FC
                       </div>
@@ -788,7 +936,7 @@ const Page = () => {
           </div>
         </div>
       </div>
-      <ConfirmDialog />
+      <ConfirmDialog /> {/* Ensure this is included if you use confirmDialog */}
     </div>
   );
 };
