@@ -19,6 +19,7 @@ import {
   addPointVente,
   deletePointVente,
   fetchPointVentes,
+  fetchPointVentesByRegionId,
   selectAllPointVentes,
   updatePointVente,
 } from '@/stores/slices/pointvente/pointventeSlice';
@@ -45,15 +46,27 @@ export default function PointVenteManagement() {
     region: string | null;
   }>({ nom: '', adresse: '', region: null });
   const menuRef = useRef<any>(null);
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
 
   useEffect(() => {
-    dispatch(fetchPointVentes());
-    dispatch(fetchRegions());
-  }, [dispatch]);
+    if (user?.role === 'AdminRegion') {
+      dispatch(fetchPointVentesByRegionId(user?.region._id)).then((resp) => {
+        console.log('donnees recu : ', resp.payload);
+      });
+    } else {
+      dispatch(fetchPointVentes());
+    }
+    //dispatch(fetchRegions());
+  }, [dispatch, user?.role, user?.region?._id]);
 
   const handleAction = (action: string, rowData: any) => {
-    setSelectedPointVente(rowData);
-    setDialogType(action);
+    console.log('Action:', action, 'Row Data:', rowData);
+    if (action === 'details' || action === 'edit') {
+      // On stocke la ligne sélectionnée dans selectedPointVente
+      setSelectedPointVente(rowData);
+      setDialogType(action);
+    }
   };
 
   const handleCreate = () => {
@@ -112,7 +125,7 @@ export default function PointVenteManagement() {
     setDialogType(null);
   };
 
-  console.log('point de vente = ', pointsVente);
+  // console.log('point de vente = ', pointsVente);
 
   // traitement de la recherche
   const [searchPV, setSearchPV] = useState('');
@@ -200,13 +213,13 @@ export default function PointVenteManagement() {
   const [first] = useState(0);
   return (
     <div className="  min-h-screen ">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mt-5 mb-5">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des points de vente' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold  text-gray-500">Gestion des Points de Vente</h2>
+        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des Points de Vente</h2>
       </div>
       <div className="bg-white p-4 rounded-lg shadow-md">
         <div className="gap-4 mb-4   flex justify-between">
@@ -232,9 +245,10 @@ export default function PointVenteManagement() {
         </div>
         <DataTable
           value={filteredPointsVente}
+          size="small"
           paginator
-          rows={5}
-          className="rounded-lg text-[11px]"
+          rows={10}
+          className="rounded-lg text-[11px] "
           tableStyle={{ minWidth: '50rem' }}
           rowClassName={(rowData, options) => {
             //@ts-ignore
@@ -257,27 +271,27 @@ export default function PointVenteManagement() {
             header="Région"
             body={(rowData) => rowData.region?.nom || 'N/A'}
             sortable
-            className="text-[11px]"
+            className="text-[11px] !p-[2px]"
             headerClassName="!bg-green-900 !text-white text-[11px]"
           />
           <Column
             field="nom"
             header="Nom"
             sortable
-            className="text-[11px]"
+            className="text-[11px] !p-[2px]"
             headerClassName="!bg-green-900 !text-white text-[11px]"
           />
           <Column
             field="adresse"
             header="Adresse"
             sortable
-            className="text-[11px]"
+            className="text-[11px] !p-[2px]"
             headerClassName="!bg-green-900 !text-white text-[11px]"
           />
           <Column
             body={actionBodyTemplate}
             header="Actions"
-            className="px-4 py-1 text-[11px]"
+            className="!p-[2px] text-[11px]"
             headerClassName="!bg-green-900 !text-white text-[11px]"
           />
         </DataTable>
@@ -407,9 +421,13 @@ export default function PointVenteManagement() {
               className="w-full p-2 border rounded mb-4"
             />
           </div>
-          <div className="mb-2"></div>
-
-          <Button label="Mettre à jour" className="bg-blue-700 text-white" onClick={handleUpdate} />
+          <div className="mb-2 flex justify-end">
+            <Button
+              label="Mettre à jour"
+              className="!bg-green-700 text-white"
+              onClick={handleUpdate}
+            />
+          </div>
         </div>
       </Dialog>
     </div>

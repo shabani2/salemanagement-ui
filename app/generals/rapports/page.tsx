@@ -8,6 +8,7 @@ import { OperationType } from '@/lib/operationType';
 import {
   fetchMouvementsStock,
   fetchMouvementStockByPointVenteId,
+  fetchMouvementStockByRegionId,
   selectAllMouvementsStock,
   validateMouvementStock,
 } from '@/stores/slices/mvtStock/mvtStock';
@@ -126,15 +127,27 @@ const page = () => {
   useEffect(() => {
     if (!user?.role) return;
 
-    if (user.role !== 'SuperAdmin' && user.role !== 'AdminRegion') {
-      console.log('user role : ', user.role);
+    if (user?.role === 'AdminPointVente') {
+      console.log('user role : ', user?.role);
       dispatch(fetchMouvementStockByPointVenteId(user?.pointVente?._id)).then((resp) => {
         console.log('mvt = ', resp.payload);
       });
+    } else if (user?.role === 'AdminRegion') {
+      dispatch(fetchMouvementStockByRegionId(user?.region?._id)).then((resp) => {
+        if (resp.meta.requestStatus === 'rejected') {
+          console.error('Failed to fetch mouvements stock:', resp.payload);
+        }
+        console.log('Fetched mouvements stock admin region:', resp.payload);
+      });
     } else {
-      dispatch(fetchMouvementsStock());
+      dispatch(fetchMouvementsStock()).then((resp) => {
+        if (resp.meta.requestStatus === 'rejected') {
+          console.error('Failed to fetch mouvements stock:', resp.payload);
+        }
+        console.log('Fetched mouvements stock admin super:', resp.payload);
+      });
     }
-  }, [dispatch, user?.role]);
+  }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
 
   // traitement de recherche
   const [search, setSearch] = useState('');
@@ -258,16 +271,18 @@ const page = () => {
 
     setFilteredMvtStocks([...filtered]);
   }, [mvtStocks, search, categorie, selectedPointVente, selectedType]);
+  // console.log("user",user)
+  //console.log('Filtered Mvt Stocks:', filteredMvtStocks);
 
   return (
-    <div className="  min-h-screen ">
-      <div className="flex items-center justify-between mb-6">
+    <div className=" min-h-screen ">
+      <div className="flex items-center justify-between pt-6 pb-6">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des Rapports' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold  text-gray-500">Gestion des Rapports</h2>
+        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des Rapports</h2>
       </div>
       <div className="bg-white p-4 rounded-lg shadow-md">
         <div className="flex mb-4 gap-4">
@@ -314,6 +329,7 @@ const page = () => {
           loading={loading}
           rows={rows}
           first={first}
+          size="small"
           onPage={onPageChange}
           className="rounded-lg custom-datatable text-[11px]"
           tableStyle={{ minWidth: '60rem' }}
@@ -394,11 +410,15 @@ const page = () => {
             headerClassName="text-[11px] !bg-green-900 !text-white"
           />
           <Column
-            field="pointVente.nom"
-            header="Point de Vente"
+            field=" "
+            header="stock"
             body={(rowData: MouvementStock) => (
               <span className="text-[11px]">
-                {rowData?.pointVente?.nom ? rowData?.pointVente?.nom : 'Depot Central'}
+                {rowData?.region
+                  ? rowData?.region.nom
+                  : rowData?.pointVente?.nom
+                    ? rowData.pointVente.nom
+                    : 'Depot Central'}
               </span>
             )}
             className="px-4 py-1 text-[11px]"
@@ -414,7 +434,7 @@ const page = () => {
           />
 
           <Column
-            header="Prix Unitaire"
+            header="Prix/U"
             body={(rowData: MouvementStock) => {
               const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
                 ? rowData.produit?.prix
@@ -432,46 +452,8 @@ const page = () => {
             headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
-          {/* <Column
-            header="Montant"
-            body={(rowData: MouvementStock) => {
-              const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
-                ? rowData.produit?.prix
-                : rowData.produit?.prixVente;
-              const quantite = rowData.quantite ?? 0;
-              const totalAcquisition = prix * quantite;
-              return (
-                <span className="text-blue-700 font-semibold text-[11px]">
-                  {totalAcquisition.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              );
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          /> */}
-
-          {/* <Column
-            header="Valeur Marge"
-            body={(rowData: MouvementStock) => {
-              const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
-                ? rowData.produit?.prix
-                : rowData.produit?.prixVente;
-              const marge = rowData.produit?.marge ?? 0;
-              const quantite = rowData.quantite ?? 0;
-              const valeur = ((prix * marge) / 100) * quantite;
-              return (
-                <span className="text-orange-600 font-medium text-[11px]">{valeur.toFixed(2)}</span>
-              );
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          /> */}
-
           <Column
-            header="Net à Payer"
+            header="Prix de vente Total"
             body={(rowData: MouvementStock) => {
               const net = rowData.produit?.netTopay ?? 0;
               const quantite = rowData.quantite ?? 0;
@@ -487,7 +469,7 @@ const page = () => {
           />
 
           <Column
-            header="Valeur TVA"
+            header="Valeur TVA Total"
             body={(rowData: MouvementStock) => {
               const net = rowData.produit?.netTopay ?? 0;
               const tva = rowData.produit?.tva ?? 0;
@@ -504,7 +486,7 @@ const page = () => {
           />
 
           <Column
-            header="Prix de Vente"
+            header="TTC"
             body={(rowData: MouvementStock) => {
               const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
                 ? rowData.produit?.prix
@@ -538,6 +520,17 @@ const page = () => {
               );
             }}
           />
+          <Column
+            field="mouvementstock.user.nom"
+            header="utilisateur"
+            body={(rowData: MouvementStock) => (
+              <span className="text-[11px]">
+                {typeof rowData?.user === 'object' ? rowData?.user?.nom : rowData?.user || '—'}
+              </span>
+            )}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
 
           <Column
             field="createdAt"
@@ -569,8 +562,8 @@ const page = () => {
         onConfirm={(item) => {
           dispatch(validateMouvementStock(item?._id)).then((resp) => {
             console.log('mvt updated', resp.payload);
-            if (user.role !== 'SuperAdmin' && user.role !== 'AdminRegion') {
-              console.log('user role : ', user.role);
+            if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
+              console.log('user role : ', user?.role);
               dispatch(fetchMouvementStockByPointVenteId(user?.pointVente?._id)).then((resp) => {
                 console.log('mvt = ', resp.payload);
               });

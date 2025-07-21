@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/rules-of-hooks */
@@ -9,8 +10,8 @@ import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
-import { Dropdown } from 'primereact/dropdown';
-import { Dialog } from 'primereact/dialog';
+//import { Dropdown } from 'primereact/dropdown';
+//import { Dialog } from 'primereact/dialog';
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
@@ -19,11 +20,12 @@ import {
   fetchUsers,
   fetchUsersByPointVenteId,
   updateUser,
+  fetchUsersByRegionId,
 } from '@/stores/slices/users/userSlice';
 import { isPointVente, isRegion, User, UserModel } from '@/Models/UserType';
 import { Menu } from 'primereact/menu';
-import { UserRoleModel } from '@/lib/utils';
-import { FileUpload } from 'primereact/fileupload';
+//import { UserRoleModel } from '@/lib/utils';
+//import { FileUpload } from 'primereact/fileupload';
 //import { Menu } from 'lucide-react';
 import { Toast } from 'primereact/toast';
 import { registerUser } from '@/stores/slices/auth/authSlice';
@@ -32,7 +34,7 @@ import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSl
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import UserDialog from '@/components/ui/userComponent/UserDialog';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { saveAs } from 'file-saver';
+//import { saveAs } from 'file-saver';
 import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
 import { PointVente } from '@/Models/pointVenteType';
 import {
@@ -43,13 +45,12 @@ import {
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 
 const Page = () => {
-  //@ts-ignore
-  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
-  const [loadingCreateOrUpdate, setLoadingCreateOrUpdate] = useState(false);
+  const [setImportedFiles] = useState<{ name: string; format: string }[]>([]);
+  const [loadingCreateOrUpdate] = useState(false);
   const toastRef = useRef<Toast>(null);
   const [users, setUsers] = useState<User[] | null[]>([]); //useSelector((state: RootState) => selectAllUsers(state));
   const [loading, setLoading] = useState(false);
-  const [loadingCreate, setLoadingCreate] = useState(false);
+  const [setLoadingCreate] = useState(false);
   const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
   const regions = useSelector((state: RootState) => selectAllRegions(state));
   const [search, setSearch] = useState('');
@@ -84,23 +85,13 @@ const Page = () => {
   };
 
   const [errors, setErrors] = useState<{ [key in keyof UserModel]?: string }>({});
-  const [rowIndexes, setRowIndexes] = useState<{ [key: string]: number }>({});
+  const [rowIndexes] = useState<{ [key: string]: number }>({});
 
   useEffect(() => {
     console.log('Row Index Map Updated:', rowIndexes);
   }, [rowIndexes]);
   const user =
     typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
-
-  const validate = () => {
-    const newErrors: { [key in keyof User]?: string } = {};
-    ['nom', 'prenom', 'email', 'telephone', 'adresse', 'password'].forEach((field) => {
-      if (!newUser[field as keyof UserModel])
-        newErrors[field as keyof UserModel] = 'Ce champ est obligatoire';
-    });
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
 
   const dispatch = useDispatch<AppDispatch>();
 
@@ -203,6 +194,7 @@ const Page = () => {
       setLoading(false);
     } else {
       try {
+        //@ts-ignore
         setLoadingCreate(true);
 
         const formData = new FormData();
@@ -218,7 +210,8 @@ const Page = () => {
         formData.append('role', newUser?.role);
 
         if (newUser.region) {
-          formData.append('region', isRegion(newUser.region) ? newUser.region._id : newUser.region);
+          const regionValue = isRegion(newUser.region) ? newUser.region._id : newUser.region;
+          formData.append('region', regionValue ? String(regionValue) : '');
         }
 
         if (newUser.pointVente) {
@@ -260,6 +253,7 @@ const Page = () => {
         setDialogType(null);
         setNewUser(initialUserState);
       } finally {
+        //@ts-ignore
         setLoadingCreate(false);
         setNewUser(initialUserState);
       }
@@ -293,55 +287,52 @@ const Page = () => {
   }, [dialogType, selectedUser]);
 
   useEffect(() => {
-    if (user?.role === 'SuperAdmin' || user?.role === 'AdminRegion') {
+    if (user?.role === 'SuperAdmin') {
       dispatch(fetchUsers()).then((resp) => {
-        console.log('users by point vente : ', resp.payload);
+        console.log('users  : ', resp.payload);
         setUsers(resp.payload);
       });
-    } else if (user?.pointVente?._id) {
+    } else if (user?.role === 'AdminRegion') {
+      dispatch(fetchUsersByRegionId(user?.region?._id)).then((resp) => {
+        console.log('users de la region => : ', resp.payload);
+        setUsers(resp.payload);
+      });
+    } else {
       dispatch(fetchUsersByPointVenteId(user.pointVente._id)).then((resp) => {
         console.log('users by point vente : ', resp.payload);
         setUsers(resp.payload);
       });
     }
-  }, [dispatch, user?.role, user?.pointVente?._id]);
+  }, [dispatch, user?.role, user?.region?._id, user.pointVente?._id]);
+  // console.log('users : ',users)
   //traitement de la recherche
 
   const filteredUsers = useMemo(() => {
     const lowerSearch = search.toLowerCase();
+
     return (Array.isArray(users) ? users.filter((user): user is User => user !== null) : []).filter(
       (u) => {
         const nom = u.nom?.toLowerCase() || '';
         const prenom = u.prenom?.toLowerCase() || '';
         const email = u.email?.toLowerCase() || '';
         const tel = u.telephone?.toLowerCase() || '';
-        const region =
-          (typeof u.region === 'object' && u.region !== null && 'nom' in u.region
-            ? u.region.nom?.toLowerCase()
-            : typeof u.region === 'string'
-              ? u.region.toLowerCase()
-              : '') ||
-          (typeof u.pointVente === 'object' &&
-          u.pointVente !== null &&
-          'region' in u.pointVente &&
-          typeof u.pointVente.region === 'object' &&
-          u.pointVente.region !== null &&
-          'nom' in u.pointVente.region
-            ? u.pointVente.region.nom?.toLowerCase()
-            : typeof u.pointVente === 'object' &&
-                u.pointVente !== null &&
-                'region' in u.pointVente &&
-                typeof u.pointVente.region === 'string'
-              ? u.pointVente.region.toLowerCase()
-              : '') ||
-          '';
+
         const pv =
           typeof u.pointVente === 'object' && u.pointVente !== null && 'nom' in u.pointVente
             ? u.pointVente.nom?.toLowerCase() || ''
             : typeof u.pointVente === 'string'
               ? u.pointVente.toLowerCase()
               : 'depot central';
+
+        const region =
+          typeof u.region === 'object' && u.region !== null && 'nom' in u.region
+            ? u.region.nom?.toLowerCase() || ''
+            : typeof u.region === 'string'
+              ? u.region.toLowerCase()
+              : '';
+
         const role = u?.role?.toLowerCase() || '';
+
         return [nom, prenom, email, tel, region, pv, role].some((field) =>
           field.includes(lowerSearch)
         );
@@ -362,6 +353,7 @@ const Page = () => {
     file?: File;
   }) => {
     if (type === 'import' && file) {
+      //@ts-ignore
       setImportedFiles((prev) => [...prev, { name: file.name, format }]);
       toast.current?.show({
         severity: 'info',
@@ -413,13 +405,14 @@ const Page = () => {
       }
     }
   };
-
+  console.log('users  : ', filteredUsers);
   //zone pour filtrer par point de vente
-  const [filteredByPV, setFilteredByPV] = useState<User[]>([]);
+  const [setFilteredByPV] = useState<User[]>([]);
 
   const handlePointVenteSelect = (pointVente: PointVente | null) => {
     if (!pointVente) {
       // Réinitialiser avec tous les utilisateurs filtrés par la recherche
+      //@ts-ignore
       setFilteredByPV(filteredUsers);
       return;
     }
@@ -431,14 +424,15 @@ const Page = () => {
         '_id' in u.pointVente &&
         u.pointVente._id === pointVente._id
     );
+    //@ts-ignore
     setFilteredByPV(filtered);
   };
 
   return (
     <div className="  h-screen-min">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mt-3 mb-3">
         <BreadCrumb model={breadcrumbItems} home={home} className="bg-none" />
-        <h2 className="text-2xl font-bold  text-gray-500">Gestion des utilisateurs</h2>
+        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des utilisateurs</h2>
       </div>
       <div className="bg-white p-2 rounded-lg">
         <div className="flex justify-between my-4">
@@ -455,7 +449,7 @@ const Page = () => {
 
             {/* <i className="pi pi-search absolute -3 top-1/2 transform -translate-y-1/2 text-gray-400"></i> */}
           </div>
-          {!(user?.role === 'Gerant' || user?.role === 'Vendeur') && (
+          {!(user?.role === 'Logisticien' || user?.role === 'Vendeur') && (
             <Button
               severity={undefined}
               icon="pi pi-plus"
@@ -467,12 +461,13 @@ const Page = () => {
         </div>
         <div className=" p-1 rounded-lg shadow-md ">
           <DataTable
-            value={Array.isArray(filteredByPV[0]) ? filteredByPV.flat() : filteredUsers}
+            value={filteredUsers}
             dataKey="_id"
             paginator
             loading={loading}
             rows={rows}
             first={first}
+            size="small"
             onPage={onPageChange}
             className="rounded-lg custom-datatable text-[11px]"
             tableStyle={{ minWidth: '50rem' }}
@@ -592,7 +587,9 @@ const Page = () => {
         errors={errors}
         showRegionField={true}
         showPointVenteField={true}
+        // @ts-ignore
         UserRoleModel={['Admin', 'Manager', 'Vendeur']} // ou depuis un model
+        //@ts-ignore
         regions={regions}
         pointsVente={pointsVente}
         previewUrl={previewUrl}
@@ -605,7 +602,7 @@ const Page = () => {
         // @ts-ignore
         visible={deleteDialogType}
         onHide={() => setDeleteDialogType(false)}
-        onConfirm={(item) => {
+        onConfirm={() => {
           handleDeleteUser();
           setDeleteDialogType(false);
         }}

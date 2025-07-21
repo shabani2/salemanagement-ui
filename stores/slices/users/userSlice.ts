@@ -39,7 +39,7 @@ export const fetchUsers = createAsyncThunk('users/fetchUsers', async (_, { rejec
     const response = await apiClient.get('/user', {
       headers: getAuthHeaders(),
     });
-    // console.log('response => : ', response.data);
+    console.log('response => : ', response.data);
     return response.data;
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -48,6 +48,23 @@ export const fetchUsers = createAsyncThunk('users/fetchUsers', async (_, { rejec
     return rejectWithValue('Erreur lors de la récupération des utilisateurs');
   }
 });
+
+export const fetchUsersByRegionId = createAsyncThunk(
+  'Stock/fetchUsersByregionId',
+  async (regionId: string, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/user/region/${regionId}`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la récupération du mouvement de stock');
+    }
+  }
+);
 
 export const fetchUsersByPointVenteId = createAsyncThunk(
   'Stock/fetchUsersBypointVenteId',
@@ -155,6 +172,14 @@ const userSlice = createSlice({
       .addCase(fetchUsersByPointVenteId.rejected, (state, action) => {
         state.status = 'failed';
         state.error = action.payload as string;
+      })
+      .addCase(fetchUsersByRegionId.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        userAdapter.setAll(state, action.payload);
+      })
+      .addCase(fetchUsersByRegionId.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
       });
   },
 });
@@ -177,5 +202,5 @@ export const selectUserError = (state: RootState) => state.users.error;
 // ✅ Sélecteur pour récupérer les utilisateurs selon leur rôle
 export const selectUserByRole = (role: string) => (state: RootState) => {
   const usersArray = selectAllUsers(state); // 🔥 Assure-toi de récupérer un tableau
-  return usersArray.filter((user) => user.role === role);
+  return usersArray.filter((user) => user?.role === role);
 };

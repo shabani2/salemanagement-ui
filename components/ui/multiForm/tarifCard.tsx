@@ -12,7 +12,7 @@ const TarifCard: React.FC<TarifCardProps> = ({ plan, onSelect }) => {
   return (
     <Card
       title={<span className="text-xl font-bold text-gray-800">{plan?.nom}</span>}
-      subTitle={<span className="text-sm text-gray-500">{plan?.description}</span>}
+      subTitle={<span className="text-sm text-gray-5000">{plan?.description}</span>}
       className="shadow-lg rounded-xl w-full md:w-96 border-t-4 border-green-700 p-3"
     >
       <div className="text-center">
@@ -22,10 +22,10 @@ const TarifCard: React.FC<TarifCardProps> = ({ plan, onSelect }) => {
         <div className="text-4xl font-extrabold text-green-700">
           {plan?.details?.devise} {plan?.details.nouveauPrix.toFixed(2)}
         </div>
-        <div className="text-gray-500 text-sm mb-2">
+        <div className="text-gray-5000 text-sm mb-2">
           {plan?.details?.duree} • Économisez {plan?.details.economie}%
         </div>
-        <p className="text-xs text-gray-500 italic mb-4">{plan?.renouvellement}</p>
+        <p className="text-xs text-gray-5000 italic mb-4">{plan?.renouvellement}</p>
         <Button
           label={plan?.ctaText}
           className="w-full p-button-success"

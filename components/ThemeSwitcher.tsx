@@ -12,7 +12,7 @@ export default function ThemeSwitcher() {
       icon={isDark ? 'pi pi-sun' : 'pi pi-moon'}
       label={isDark ? 'Clair' : 'Sombre'}
       onClick={toggleTheme}
-      className="p-button-sm p-button-text p-button-rounded !text-white !border-none !focus:outline-none !ring-0 !focus:ring-0 !shadow-none !hover:shadow-none"
+      className="p-button-sm p-button-text p-button-rounded !text-white !border-none !focus:outline-none !ring-0 !focus:ring-0 !shadow-none !hover:shadow-none !text-[16px]"
     />
   );
 }

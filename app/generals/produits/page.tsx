@@ -257,14 +257,14 @@ const page = () => {
     }
   };
   return (
-    <div className="  min-h-screen ">
-      <div className="flex items-center justify-between mb-6">
+    <div className="min-h-screen ">
+      <div className="flex items-center justify-between mt-3 mb-3 ">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Produits1' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Produits' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold text-gray-500">Gestion des Produits</h2>
+        <h2 className="text-2xl font-bold text-gray-5000">Gestion des Produits</h2>
       </div>
       <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row w-full ">
         <div className=" bg-white p-2 rounded-lg w-full ">
@@ -310,7 +310,8 @@ const page = () => {
             <DataTable
               value={filteredProduits}
               paginator
-              rows={5}
+              size="small"
+              rows={10}
               className="rounded-lg text-[11px] text-gray-900 w-full"
               tableStyle={{ minWidth: '70rem' }}
               rowClassName={(rowData, options) => {

@@ -1,29 +1,44 @@
+'use client';
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/rules-of-hooks */
-'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
 import { FileUpload } from 'primereact/fileupload';
 import { BreadCrumb } from 'primereact/breadcrumb';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import {
   addOrganisation,
   fetchOrganisations,
   Organisation,
-  selectCurrentOrganisation,
   updateOrganisation,
 } from '@/stores/slices/organisation/organisationSlice';
-import { AppDispatch, RootState } from '@/stores/store';
+import { AppDispatch } from '@/stores/store';
 import { Toast } from 'primereact/toast';
 import { User } from '@/Models/UserType';
 
-const page = () => {
+const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
   const [org, setOrg] = useState<Organisation[]>([]);
   const [user, setUser] = useState<User | null>(null);
+  const toast = useRef(null);
+  const [uploadKey, setUploadKey] = useState(0);
+
+  const [formData, setFormData] = useState({
+    nom: '',
+    rccm: '',
+    contact: '',
+    siegeSocial: '',
+    devise: '',
+    pays: '',
+    idNat: 'non affecté',
+    numeroImpot: 'non affecté',
+    superAdmin: user?._id || '',
+    emailEntreprise: '',
+    logo: null as File | string | null,
+  });
 
   useEffect(() => {
     dispatch(fetchOrganisations()).then((data) => {
@@ -42,36 +57,23 @@ const page = () => {
     }
   }, [user]);
 
-  const [formData, setFormData] = useState({
-    nom: '',
-    rccm: '',
-    contact: '',
-    siegeSocial: '',
-    devise: '',
-    pays: '',
-    superAdmin: user?._id,
-    emailEntreprise: '',
-    logo: null as File | string | null,
-  });
-
-  const [uploadKey, setUploadKey] = useState(0);
-
   useEffect(() => {
-    if (org) {
-      setFormData(
-        // @ts-ignore
-        {
-          nom: org[0]?.nom,
-          rccm: org[0]?.rccm,
-          contact: org[0]?.contact,
-          siegeSocial: org[0]?.siegeSocial,
-          devise: org[0]?.devise,
-          pays: org[0]?.pays,
-          emailEntreprise: org[0]?.emailEntreprise,
-          logo: org[0]?.logo || null,
-          superAdmin: org[0]?.superAdmin,
-        }
-      );
+    if (org.length > 0) {
+      const current = org[0];
+      console.log('Organisation actuelle : ', current);
+      setFormData({
+        nom: current.nom || '',
+        rccm: current.rccm || '',
+        contact: current.contact || '',
+        siegeSocial: current.siegeSocial || '',
+        devise: current.devise || '',
+        pays: current.pays || '',
+        emailEntreprise: current.emailEntreprise || '',
+        logo: current.logo || null,
+        superAdmin: current.superAdmin || '',
+        idNat: current.idNat || 'non affecté',
+        numeroImpot: current.numeroImpot || 'non affecté',
+      });
     }
   }, [org]);
 
@@ -88,16 +90,30 @@ const page = () => {
     }
   };
 
-  const toast = useRef(null);
-
   const handleSubmit = async () => {
+    const rawData = {
+      ...formData,
+      superAdmin: (formData.superAdmin as any)?._id || formData.superAdmin,
+    };
+
     const data = new FormData();
-    Object.entries(formData).forEach(([key, value]) => {
-      if (value) data.append(key, value);
+    Object.entries(rawData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        data.append(key, value);
+      }
     });
 
+    // const data = new FormData();
+    // Object.entries(formData).forEach(([key, value]) => {
+    //   if (value) data.append(key, value);
+    // });
+    // const updatedData = {
+    //   ...data,
+    //   superAdmin: data.superAdmin?._id, // on extrait l’_id de l’objet superadmin
+    // };
     try {
       if (org[0]?._id) {
+        //console.log('console pour data : ',data)
         await dispatch(
           updateOrganisation({
             // @ts-ignore
@@ -133,8 +149,7 @@ const page = () => {
       });
     }
   };
-  console.log('org', org);
-  console.log('formData', formData);
+
   return (
     <div className="p-3 space-y-6">
       <Toast ref={toast} />
@@ -144,13 +159,13 @@ const page = () => {
           model={[{ label: 'Accueil', url: '/' }, { label: 'Organisation' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
         />
-        <h2 className="text-2xl font-bold  text-gray-500">Organisation</h2>
+        <h2 className="text-2xl font-bold text-gray-5000">Organisation</h2>
       </div>
 
       <div className="bg-white rounded-2xl shadow-lg p-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-6 p-3">
-            {['nom', 'rccm', 'contact', 'siegeSocial'].map((field) => (
+            {['nom', 'rccm', 'contact', 'siegeSocial', 'idNat', 'numeroImpot'].map((field) => (
               <span className="p-float-label p-3" key={field}>
                 <InputText
                   id={field}
@@ -208,7 +223,7 @@ const page = () => {
                   className="h-16 w-16 object-contain border rounded"
                 />
               ) : (
-                <span className="text-sm  text-gray-500">Aucune image</span>
+                <span className="text-sm text-gray-5000">Aucune image</span>
               )}
             </div>
           </div>
@@ -216,11 +231,10 @@ const page = () => {
 
         <div className="mt-8 flex justify-end p-3">
           <Button
-            label={org ? 'Mettre à jour' : 'Créer'}
-            icon={org ? 'pi pi-refresh' : 'pi pi-plus'}
+            label={org.length > 0 ? 'Mettre à jour' : 'Créer'}
+            icon={org.length > 0 ? 'pi pi-refresh' : 'pi pi-plus'}
             className="w-full sm:w-auto !bg-green-700"
             onClick={handleSubmit}
-            severity={undefined}
           />
         </div>
       </div>
@@ -228,4 +242,4 @@ const page = () => {
   );
 };
 
-export default page;
+export default Page;

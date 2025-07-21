@@ -55,6 +55,23 @@ export const fetchPointVentes = createAsyncThunk(
   }
 );
 
+export const fetchPointVentesByRegionId = createAsyncThunk(
+  'Stock/fetchPointVenteByRegionId',
+  async (regionId: string, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/point-ventes/region/${regionId}`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la récupération du mouvement de stock');
+    }
+  }
+);
+
 // ✅ Thunk pour ajouter un point de vente
 export const addPointVente = createAsyncThunk(
   'pointVentes/addPointVente',
@@ -130,6 +147,10 @@ const pointVenteSlice = createSlice({
       })
       .addCase(deletePointVente.fulfilled, (state, action) => {
         pointVenteAdapter.removeOne(state, action.payload);
+      })
+      .addCase(fetchPointVentesByRegionId.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        pointVenteAdapter.setAll(state, action.payload);
       });
   },
 });

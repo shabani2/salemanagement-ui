@@ -53,6 +53,7 @@ const DropdownTimeFilter: React.FC<DropdownTimeFilterProps> = ({ data, onChange 
       const filtered = filterByTime(selectedRange);
       onChange(filtered, selectedRange);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRange, data]);
 
   const valueTemplate = (option: any, props: any) => (

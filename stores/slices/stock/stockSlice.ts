@@ -42,6 +42,22 @@ export const fetchStocks = createAsyncThunk('stock/fetchAll', async (_, { reject
     return rejectWithValue('Erreur lors de la récupération des stocks');
   }
 });
+export const fetchStockByRegionId = createAsyncThunk(
+  'Stock/fetchStockByRegionId',
+  async (regionId: string, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/stock/region/${regionId}`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la récupération du mouvement de stock');
+    }
+  }
+);
 export const fetchStockByPointVenteId = createAsyncThunk(
   'Stock/fetchStockBypointVenteId',
   async (pointVenteId: string, { rejectWithValue }) => {
@@ -153,7 +169,6 @@ const stockSlice = createSlice({
       .addCase(fetchStocks.fulfilled, (state, action) => {
         state.status = 'succeeded';
         stockAdapter.setAll(state, action.payload);
-        fetchStockByPointVenteId;
       })
       .addCase(fetchStocks.rejected, (state, action) => {
         state.status = 'failed';
@@ -176,6 +191,14 @@ const stockSlice = createSlice({
         stockAdapter.setAll(state, action.payload);
       })
       .addCase(fetchStockByPointVenteId.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
+      })
+      .addCase(fetchStockByRegionId.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        stockAdapter.setAll(state, action.payload);
+      })
+      .addCase(fetchStockByRegionId.rejected, (state, action) => {
         state.status = 'failed';
         state.error = action.payload as string;
       });

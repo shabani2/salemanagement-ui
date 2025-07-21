@@ -6,8 +6,12 @@ import { Dropdown } from 'primereact/dropdown';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
 import { PointVente } from '@/Models/pointVenteType';
-import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
-import { fetchRegions } from '@/stores/slices/regions/regionSlice';
+import {
+  fetchPointVentes,
+  fetchPointVentesByRegionId,
+  selectAllPointVentes,
+} from '@/stores/slices/pointvente/pointventeSlice';
+//import { fetchRegions } from '@/stores/slices/regions/regionSlice';
 
 interface DropdownPointVenteFilterProps {
   onSelect: (pointVente: PointVente | null) => void;
@@ -16,13 +20,20 @@ interface DropdownPointVenteFilterProps {
 const DropdownPointVenteFilter: React.FC<DropdownPointVenteFilterProps> = ({ onSelect }) => {
   const dispatch = useDispatch<AppDispatch>();
   const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
-
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
   const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(null);
 
   useEffect(() => {
-    dispatch(fetchPointVentes());
-    dispatch(fetchRegions());
-  }, [dispatch]);
+    if (user?.role === 'AdminRegion') {
+      dispatch(fetchPointVentesByRegionId(user?.region?._id));
+    } else {
+      dispatch(fetchPointVentes()).then((resp) => {
+        console.log('all pv : ', resp.payload);
+      });
+    }
+    // dispatch(fetchRegions());
+  }, [dispatch, user?.role, user?.region?._id]);
 
   const options: PointVente[] = [
     { _id: '', nom: 'Tous les points de vente' } as PointVente,
@@ -46,7 +57,8 @@ const DropdownPointVenteFilter: React.FC<DropdownPointVenteFilterProps> = ({ onS
       onSelect(e.value);
     }
   };
-
+  //console.log("Selected Point de Vente:", selectedPointVente);
+  //console.log("Available Points de Vente:", pointsVente);
   return (
     <div className="w-full md:w-52">
       <Dropdown

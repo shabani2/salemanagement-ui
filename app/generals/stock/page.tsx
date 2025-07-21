@@ -17,6 +17,7 @@ import {
 } from '@/stores/slices/document/importDocuments/exportDoc';
 import {
   fetchStockByPointVenteId,
+  fetchStockByRegionId,
   fetchStocks,
   selectAllStocks,
 } from '@/stores/slices/stock/stockSlice';
@@ -60,13 +61,13 @@ const page = () => {
   const user =
     typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
 
-  useEffect(() => {
-    if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
-      dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
-    } else {
-      dispatch(fetchStocks());
-    }
-  }, [dispatch, user?.role]);
+  // useEffect(() => {
+  //   if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
+  //     dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
+  //   } else {
+  //     dispatch(fetchStocks());
+  //   }
+  // }, [dispatch, user?.role]);
 
   // traitement de la recherche dans le stock
   const [search, setSearch] = useState('');
@@ -98,12 +99,14 @@ const page = () => {
 
   // 1. Charger les données une seule fois au mount
   useEffect(() => {
-    if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
+    if (user?.role === 'AdminPointVente') {
       dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
+    } else if (user?.role === 'AdminRegion') {
+      dispatch(fetchStockByRegionId(user?.region?._id));
     } else {
       dispatch(fetchStocks());
     }
-  }, [dispatch, user?.role]);
+  }, [dispatch, user?.pointVente?._id, user?.region?._id, user?.role]);
 
   // 2. Initialiser filteredBase après que stocks ait été rempli
   useEffect(() => {
@@ -112,7 +115,7 @@ const page = () => {
     }
   }, [stocks]);
 
-  console.log('filteredBase');
+  // console.log('filteredBase');
   const handlePointVenteSelect = (pointVente: PointVente | null) => {
     if (!pointVente) {
       setFilteredBase(stocks);
@@ -177,13 +180,13 @@ const page = () => {
 
   return (
     <div className=" min-h-screen ">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between pb-6 pt-6">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des stock' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold  text-gray-500">Gestion des stock</h2>
+        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des stock</h2>
       </div>
       <div className="bg-white p-4 rounded-lg shadow-md">
         <div className="flex mb-4 gap-4">
@@ -232,7 +235,8 @@ const page = () => {
           first={first}
           onPage={onPageChange}
           className="rounded-lg custom-datatable text-[11px]"
-          tableStyle={{ minWidth: '60rem' }}
+          // tableStyle={{ minWidth: '60rem' }}
+          size="small"
           rowClassName={(_rowData: Stock, options) => {
             //@ts-ignore
             const rowIndex = options?.rowIndex ?? 0;
@@ -292,10 +296,14 @@ const page = () => {
           />
           <Column
             field="pointVente.nom"
-            header="Point de Vente"
+            header="stock"
             body={(rowData: Stock) => (
               <span className="text-[11px]">
-                {rowData?.pointVente?.nom ? rowData?.pointVente?.nom : 'Depot Central'}
+                {rowData?.region
+                  ? rowData?.region.nom
+                  : rowData?.pointVente?.nom
+                    ? rowData.pointVente.nom
+                    : 'Depot Central'}
               </span>
             )}
             className="px-4 py-1 text-[11px]"
@@ -308,89 +316,9 @@ const page = () => {
             className="px-4 py-1 text-[11px]"
             headerClassName="text-[11px] !bg-green-900 !text-white"
           />
-
-          {/* <Column
-            field="montant"
-            header="Montant"
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-            body={(rowData: Stock) => rowData.montant.toLocaleString()}
-          /> */}
-
-          <Column
-            header="Prix acquisition"
-            body={(rowData) => (
-              <span className="text-blue-700 font-semibold text-[11px]">
-                {rowData.produit?.prix?.toLocaleString() ?? 'N/A'}
-              </span>
-            )}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
-
-          {/* <Column
-            header="Valeur Marge"
-            body={(rowData: MouvementStock) => {
-              const prix = rowData.produit?.prix;
-              const marge = rowData.produit?.marge;
-              const valeur =
-                prix && marge !== undefined ? ((prix * marge) / 100).toFixed(2) : 'N/A';
-              return <span className="text-orange-600 font-medium text-[11px]">{valeur}</span>;
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          /> */}
-
-          <Column
-            header="Net à Payer"
-            body={(rowData) => {
-              const net = rowData.produit?.netTopay;
-              return (
-                <span className="text-purple-700 font-semibold text-[11px]">
-                  {net?.toFixed(2) ?? 'N/A'}
-                </span>
-              );
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
-
-          <Column
-            header="TVA (%)"
-            body={(rowData: MouvementStock) => (
-              <span className="text-yellow-800 font-medium text-[11px]">
-                {rowData.produit?.tva ?? '—'}%
-              </span>
-            )}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
-
-          <Column
-            header="Valeur TVA"
-            body={(rowData: MouvementStock) => {
-              const net = rowData.produit?.netTopay;
-              const tva = rowData.produit?.tva;
-              const value = net && tva !== undefined ? ((net * tva) / 100).toFixed(2) : 'N/A';
-              return <span className="text-yellow-600 font-medium text-[11px]">{value}</span>;
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
-
-          <Column
-            header="Prix de Vente"
-            body={(rowData) => (
-              <span className="text-green-600 font-bold text-[11px]">
-                {rowData.produit?.prixVente?.toFixed(2) ?? 'N/A'}
-              </span>
-            )}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
           <Column
             field="stock.produit.seuil"
-            header="seuil de stock"
+            header="quantite seuil"
             filter
             className="px-4 py-1 text-[11px]"
             headerClassName="text-[11px] !bg-green-900 !text-white"
@@ -419,6 +347,90 @@ const page = () => {
                 </span>
               );
             }}
+          />
+
+          <Column
+            header="Prix/U"
+            body={(rowData) => (
+              <span className="text-blue-700 font-semibold text-[11px]">
+                {rowData.produit?.prix?.toLocaleString() ?? 'N/A'}
+              </span>
+            )}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
+
+          <Column
+            field="montant"
+            header="Cout Total"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+            body={(rowData: Stock) => rowData.montant.toLocaleString()}
+          />
+
+          {/* <Column
+            header="Valeur Marge"
+            body={(rowData: MouvementStock) => {
+              const prix = rowData.produit?.prix;
+              const marge = rowData.produit?.marge;
+              const valeur =
+                prix && marge !== undefined ? ((prix * marge) / 100).toFixed(2) : 'N/A';
+              return <span className="text-orange-600 font-medium text-[11px]">{valeur}</span>;
+            }}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          /> */}
+
+          <Column
+            header="Prix de vente Total"
+            body={(rowData: Stock) => {
+              const net = rowData.produit?.netTopay ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const totalNet = net * quantite;
+              return (
+                <span className="text-purple-700 font-semibold text-[11px]">
+                  {totalNet.toFixed(2)}
+                </span>
+              );
+            }}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
+
+          <Column
+            header="Valeur TVA Total"
+            body={(rowData: Stock) => {
+              const net = rowData.produit?.netTopay ?? 0;
+              const tva = rowData.produit?.tva ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const valeurTVA = ((net * tva) / 100) * quantite;
+              return (
+                <span className="text-yellow-600 font-medium text-[11px]">
+                  {valeurTVA.toFixed(2)}
+                </span>
+              );
+            }}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
+
+          <Column
+            header="TTC"
+            body={(rowData: Stock) => {
+              //@ts-ignore
+              const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+                ? rowData.produit?.prix
+                : rowData.produit?.prixVente;
+              const prixVente = rowData.produit?.prixVente ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const totalVente = prixVente * quantite;
+              let colorClass = 'text-blue-600';
+              if (prixVente > prix) colorClass = 'text-green-600 font-bold';
+              else if (prixVente < prix) colorClass = 'text-red-600 font-bold';
+              return <span className={`${colorClass} text-[11px]`}>{totalVente.toFixed(2)}</span>;
+            }}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column

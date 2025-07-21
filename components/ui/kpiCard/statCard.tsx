@@ -43,7 +43,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, change, type, data })
   };
 
   return (
-    <Card className="w-full shadow-md rounded-2xl p-2 !bg-gray-800">
+    <Card className="w-full shadow-md rounded-2xl p-2 !bg-gray-50">
       <div className="flex justify-between items-center">
         <div className="flex flex-col gap-2">
           <span className="text-gray-100 text-lg">{title}</span>

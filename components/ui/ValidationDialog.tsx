@@ -34,7 +34,7 @@ export const ValidationDialog = ({
       style={{ width: '30vw' }}
     >
       <div className="p-4 text-center">
-        <p className="text-lg font-medium  text-gray-500">
+        <p className="text-lg font-medium  text-gray-5000">
           Voulez-vous vraiment valider{' '}
           <span className="font-bold text-red-600">{getItemLabel()}</span> ?
         </p>

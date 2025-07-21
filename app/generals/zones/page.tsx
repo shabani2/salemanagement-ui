@@ -15,6 +15,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
 import {
   addRegion,
+  updateRegion,
   deleteRegion,
   fetchRegions,
   selectAllRegions,
@@ -67,15 +68,25 @@ export default function RegionManagement() {
   const handleCreate = () => {
     dispatch(addRegion(newRegion));
     setDialogType(null);
+    dispatch(fetchRegions()); // Re-fetch regions after adding a new one
     setNewRegion(initialRegion);
   };
 
-  const handleUpdate = () => {
-    if (selectedRegion) {
-      dispatch(addRegion(selectedRegion));
-      setDialogType(null);
+  const handleUpdate = async () => {
+    if (!selectedRegion) return;
+
+    try {
+      // Si tu veux gérer la promesse et capturer erreurs / retours
+      const result = await dispatch(updateRegion(selectedRegion)).unwrap();
+      console.log('Mise à jour réussie :', result);
+      dispatch(fetchRegions()); // Re-fetch regions after updating
+    } catch (err) {
+      console.error('Erreur lors de la mise à jour :', err);
     }
+
+    setDialogType(null);
   };
+
   const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
   const handleDelete = () => {
     if (selectedRegion) {
@@ -86,7 +97,7 @@ export default function RegionManagement() {
 
   const actionBodyTemplate = (rowData: any) => {
     const menuRef = useRef<any>(null);
-
+    // console.log('regions : ',zones)
     return (
       <div>
         <Menu
@@ -196,13 +207,13 @@ export default function RegionManagement() {
   };
   return (
     <div className="  min-h-screen ">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 mt-3">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des régions' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold  text-gray-500">Gestion des Régions</h2>
+        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des Régions</h2>
       </div>
       <div className="bg-white p-2 rounded-lg">
         <div className="flex justify-between my-4">
@@ -231,7 +242,8 @@ export default function RegionManagement() {
             value={Array.isArray(filteredRegions[0]) ? filteredRegions.flat() : filteredRegions}
             paginator
             rows={5}
-            className="rounded-lg text-[12px]"
+            size="small"
+            className="rounded-lg text-[11px]"
             tableStyle={{ minWidth: '50rem' }}
             rowClassName={(rowData, options) => {
               //@ts-ignore
@@ -245,35 +257,35 @@ export default function RegionManagement() {
             <Column
               field="_id"
               header="#"
-              body={(_, options) => <span className="text-[14px]">{options.rowIndex + 1}</span>}
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              body={(_, options) => <span className="text-[11px]">{options.rowIndex + 1}</span>}
+              // className="px-4  text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
             <Column
               field="nom"
               header="Nom"
               sortable
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              // className="px-4  text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
             <Column
               field="pointVenteCount"
               header="Points de vente"
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              // className="px-4 !text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
             <Column
               field="ville"
               header="Ville"
               sortable
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              // className="px-4 !text-[11px]"
+              headerClassName="text-[11px] !bg-green-900 !text-white"
             />
             <Column
               body={actionBodyTemplate}
               header="Actions"
-              className="px-4 py-1 text-[14px]"
-              headerClassName="text-[14px] !bg-green-900 !text-white"
+              // className="px-4  !text-[11px]"
+              headerClassName="!text-[11px] !bg-green-900 !text-white"
             />
           </DataTable>
         </div>
@@ -310,7 +322,7 @@ export default function RegionManagement() {
           <div className="flex justify-end mt-4">
             <Button
               label="Modifier"
-              className="bg-blue-700 text-white"
+              className="!bg-green-700 text-white"
               onClick={handleUpdate}
               severity={undefined}
             />

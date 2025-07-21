@@ -170,7 +170,7 @@ const PaiementForm: React.FC<PaiementFormProps> = ({ selectedTarif, user, onFini
             });
         }
       });
-  }, [method]);
+  }, [method, onFinish, selectedTarif.prix]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">

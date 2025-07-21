@@ -11,6 +11,12 @@ import { categorieReducer } from './slices/produits/categoriesSlice';
 import { mouvementStockReducer } from './slices/mvtStock/mvtStock';
 import { stockReducer } from './slices/stock/stockSlice';
 import { organisationReducer } from './slices/organisation/organisationSlice';
+import { currencyReducer } from './slices/finances/currencySlice';
+import { exchangeRateReducer } from './slices/finances/exchangeRateSlice';
+import { discountReducer } from './slices/finances/discountSlice';
+import { financialSettingsReducer } from './slices/finances/financialSettingsSlice';
+import { commandeReducer } from './slices/commandes/commandeSlice';
+import { commandeProduitReducer } from './slices/commandes/commandeProduitSlice';
 
 export const store = configureStore({
   reducer: {
@@ -23,6 +29,12 @@ export const store = configureStore({
     mouvementStock: mouvementStockReducer,
     stocks: stockReducer,
     organisations: organisationReducer,
+    currencies: currencyReducer,
+    exchangeRates: exchangeRateReducer,
+    discounts: discountReducer,
+    financialSettings: financialSettingsReducer,
+    commandes: commandeReducer,
+    commandeProduits: commandeProduitReducer,
   },
 });
 

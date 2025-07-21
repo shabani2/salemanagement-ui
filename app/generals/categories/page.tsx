@@ -82,7 +82,7 @@ const page = () => {
         image: null,
       });
     }
-  }, [actionMade, newCategorie, selectedCategorie]);
+  }, [selectedCategorie]);
 
   const handleSubmit = () => {
     const formData = new FormData();
@@ -113,7 +113,7 @@ const page = () => {
       console.log('Image injectée dans formState:', selectedCategorie.image);
       setFormState((prev) => ({ ...prev, image: selectedCategorie.image }));
     }
-  }, [selectedCategorie, formState.image]);
+  }, [selectedCategorie]);
 
   //file management
   const toast = useRef<Toast>(null);
@@ -182,13 +182,13 @@ const page = () => {
 
   return (
     <div className="  min-h-screen ">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-3 mt-3">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Categories' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold  text-gray-500">Gestion des Categories</h2>
+        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des Categories</h2>
       </div>
       <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row">
         <div className=" w-full bg-white p-2 rounded-lg">
@@ -298,7 +298,7 @@ const page = () => {
           <div className="flex justify-end">
             <Button
               label={actionMade === 'create' ? 'Ajouter' : 'Modifier'}
-              className="bg-blue-600 text-white"
+              className="!bg-green-600 text-white"
               onClick={handleSubmit}
               severity={undefined}
             />

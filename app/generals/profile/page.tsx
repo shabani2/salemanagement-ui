@@ -46,7 +46,7 @@ const Page = () => {
     if (dialogType === 'edit') {
       setEditedUser(user);
     }
-  }, [dialogType, selectedUser]);
+  }, [dialogType, selectedUser, user]);
 
   const handleUpdate = async () => {
     if (!editedUser) return;
@@ -74,7 +74,7 @@ const Page = () => {
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold text-gray-500">Profil</h2>
+        <h2 className="text-2xl font-bold text-gray-5000">Profil</h2>
       </div>
 
       <Card className="w-full h-full shadow-lg rounded-none overflow-hidden p-0">
@@ -98,9 +98,9 @@ const Page = () => {
           <h2 className="text-lg md:text-xl font-semibold text-gray-800">
             {`${user.prenom || ''} ${user.nom || ''}`}
           </h2>
-          <p className="text-sm md:text-base text-gray-500">{user.role || 'Rôle inconnu'}</p>
+          <p className="text-sm md:text-base text-gray-5000">{user?.role || 'Rôle inconnu'}</p>
 
-          <div className="mt-4 text-gray-500 text-sm md:text-base">
+          <div className="mt-4 text-gray-5000 text-sm md:text-base">
             {user.email && <p>📧 {user.email}</p>}
             {user.telephone && <p>📞 {user.telephone}</p>}
             {user.adresse && <p>📍 {user.adresse}</p>}
@@ -160,7 +160,7 @@ const Page = () => {
                     }
                     className="w-full pr-10"
                   />
-                  <i className="pi pi-user absolute right-2 text-gray-500 text-lg" />
+                  <i className="pi pi-user absolute right-2 text-gray-5000 text-lg" />
                 </div>
               ))}
             </div>
@@ -183,7 +183,7 @@ const Page = () => {
                     }
                     className="w-full pr-10"
                   />
-                  <i className={`pi ${icon} absolute right-2 text-gray-500 text-lg`} />
+                  <i className={`pi ${icon} absolute right-2 text-gray-5000 text-lg`} />
                 </div>
               ))}
             </div>
@@ -197,7 +197,7 @@ const Page = () => {
                 onChange={(e) => setEditedUser((prev) => ({ ...prev!, adresse: e.target.value }))}
                 className="w-full pr-10"
               />
-              <i className="pi pi-map-marker absolute right-2 text-gray-500 text-lg" />
+              <i className="pi pi-map-marker absolute right-2 text-gray-5000 text-lg" />
             </div>
 
             <FileUpload

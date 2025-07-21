@@ -113,13 +113,7 @@ const TarifAbonnement: React.FC<TarifAbonnementProps> = ({ onNext, onBack, setSe
         {tarifs.map((tarif) => (
           <TarifCard key={tarif.id} plan={tarif} onSelect={handleSelect} />
         ))}
-        <Button
-          severity="success"
-          label="Suivant"
-          disabled={!selectedTarif} // Désactive si aucun tarif n'est sélectionné
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          onClick={handleNext}
-        />
+
         {/* 
         <Button
           severity="success"
@@ -130,6 +124,15 @@ const TarifAbonnement: React.FC<TarifAbonnementProps> = ({ onNext, onBack, setSe
           onClick={onNext}
         />
         */}
+      </div>
+      <div className="flex justify-end w-full">
+        <Button
+          severity="success"
+          label="Suivant"
+          disabled={!selectedTarif} // Désactive si aucun tarif n'est sélectionné
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 "
+          onClick={handleNext}
+        />
       </div>
     </div>
   );

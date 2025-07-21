@@ -53,14 +53,16 @@ const UserDialog: React.FC<UserDialogProps> = ({
         ? `http://localhost:8000/${newUser.image}`
         : null;
 
-  const showRegionField = newUser.role === 'AdminRegion';
+  const showRegionField = newUser?.role === 'AdminRegion';
   const showPointVenteField =
-    newUser.role === 'AdminPointVente' || newUser.role === 'Vendeur' || newUser.role === 'Gerant';
+    newUser?.role === 'AdminPointVente' ||
+    newUser?.role === 'Vendeur' ||
+    newUser?.role === 'Logisticien';
   const user =
     typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
-  const allowedOptions = getRoleOptionsByUser(user.role);
+  const allowedOptions = getRoleOptionsByUser(user?.role);
 
-  if (user.role === 'Gerant' || user.role === 'Vendeur') return null;
+  if (user?.role === 'Logisticien' || user?.role === 'Vendeur') return null;
 
   return (
     <Dialog
@@ -73,7 +75,7 @@ const UserDialog: React.FC<UserDialogProps> = ({
             : 'Détails de l’utilisateur'
       }
       onHide={() => setDialogType(null)}
-      style={{ width: '50vw', height: '70vh' }}
+      style={{ width: '35vw', height: '70vh' }}
       modal
     >
       <div className="flex flex-col h-full">
@@ -95,7 +97,7 @@ const UserDialog: React.FC<UserDialogProps> = ({
                   required
                   className="w-full pr-10"
                 />
-                <i className="pi pi-user absolute right-2  text-gray-500 text-lg" />
+                <i className="pi pi-user absolute right-2  text-gray-5000 text-lg" />
                 {errors[name] && <small className="text-red-700">{errors[name]}</small>}
               </div>
             ))}
@@ -121,7 +123,7 @@ const UserDialog: React.FC<UserDialogProps> = ({
                   required
                   className="w-full pr-10"
                 />
-                <i className={`pi ${icon} absolute right-2  text-gray-500 text-lg`} />
+                <i className={`pi ${icon} absolute right-2  text-gray-5000 text-lg`} />
                 {errors[name] && <small className="text-red-700">{errors[name]}</small>}
               </div>
             ))}
@@ -146,14 +148,14 @@ const UserDialog: React.FC<UserDialogProps> = ({
                 required
                 className="w-full pr-10"
               />
-              <i className={`pi ${icon} absolute right-2  text-gray-500 text-lg`} />
+              <i className={`pi ${icon} absolute right-2  text-gray-5000 text-lg`} />
               {errors[name] && <small className="text-red-700">{errors[name]}</small>}
             </div>
           ))}
 
           {/* Rôle */}
           <Dropdown
-            value={newUser.role}
+            value={newUser?.role}
             options={allowedOptions}
             placeholder="Sélectionner un rôle"
             onChange={(e) => setNewUser({ ...newUser, role: e.value })}

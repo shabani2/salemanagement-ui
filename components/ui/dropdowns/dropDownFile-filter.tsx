@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Dropdown } from 'primereact/dropdown';
 import { Filter } from 'lucide-react';
+import { getOptionsByRole } from '@/lib/utils';
 
 interface DropdownTypeFilterProps {
   mvtStocks: any[];
@@ -10,13 +11,12 @@ interface DropdownTypeFilterProps {
 
 const DropdownTypeFilter: React.FC<DropdownTypeFilterProps> = ({ mvtStocks, onChange }) => {
   const [selectedType, setSelectedType] = useState<string | null>('Tout');
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
+  const filteredTypeOptions = useMemo(() => user && getOptionsByRole(user?.role), [user]);
+  const safeTypeOptions = Array.isArray(filteredTypeOptions) ? filteredTypeOptions : [];
 
-  const mvtOptions = [
-    { label: 'Tout', value: 'Tout' },
-    ...Array.from(new Set(mvtStocks.map((m) => m.type)))
-      .filter(Boolean)
-      .map((type) => ({ label: type, value: type })),
-  ];
+  const mvtOptions = [{ label: 'Tout', value: 'Tout' }, ...safeTypeOptions];
 
   useEffect(() => {
     if (selectedType === 'Tout') {

@@ -59,11 +59,11 @@ export default function LoginPage() {
           <Image src={inaf} alt="App Logo" width={100} height={100} />
         </div>
 
-        <h2 className="text-2xl font-semibold  text-gray-500 text-center mb-6">Se connecter</h2>
+        <h2 className="text-2xl font-semibold  text-gray-5000 text-center mb-6">Se connecter</h2>
 
         {/* Téléphone */}
         <div className="mb-4">
-          <label className="block  text-gray-500 text-sm font-medium mb-2">Téléphone</label>
+          <label className="block  text-gray-5000 text-sm font-medium mb-2">Téléphone</label>
           <InputText
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
@@ -74,7 +74,7 @@ export default function LoginPage() {
 
         {/* Mot de passe */}
         <div className="mb-4 relative">
-          <label className="block  text-gray-500 text-sm font-medium mb-2">Mot de passe</label>
+          <label className="block  text-gray-5000 text-sm font-medium mb-2">Mot de passe</label>
           <div className="relative w-full">
             <input
               type={showPassword ? 'text' : 'password'}
@@ -85,7 +85,7 @@ export default function LoginPage() {
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-3 flex items-center  text-gray-500 cursor-pointer"
+              className="absolute inset-y-0 right-3 flex items-center  text-gray-5000 cursor-pointer"
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (

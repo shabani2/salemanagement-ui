@@ -13,15 +13,19 @@ export function filterRoutesByRole(role: UserRole) {
 
     case 'adminpointvente':
       return base.concat(
-        Routes.filter((r) => ['Opérations', 'Stock', 'Rapports', 'Utilisateurs'].includes(r.title))
+        Routes.filter((r) =>
+          ['Opérations', 'Stock', 'Rapports', 'Utilisateurs', 'finances', 'Commandes'].includes(
+            r.title
+          )
+        )
       );
     case 'vendeur':
       return base.concat(
-        Routes.filter((r) => ['Opérations', 'Stock', 'Rapports'].includes(r.title))
+        Routes.filter((r) => ['Opérations', 'Stock', 'Rapports', 'Finances'].includes(r.title))
       );
-    case 'gerant':
+    case 'logisticien':
       return base.concat(
-        Routes.filter((r) => ['Opérations', 'Stock', 'Rapports'].includes(r.title))
+        Routes.filter((r) => ['Stock', 'Rapports', 'Commandes'].includes(r.title))
       );
     default:
       return base;

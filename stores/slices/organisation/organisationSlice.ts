@@ -21,6 +21,8 @@ export interface Organisation {
   devise: string;
   superAdmin: string;
   pays: string;
+  idNat: string;
+  numeroImpot: string;
   emailEntreprise: string;
   createdAt?: string;
   updatedAt?: string;

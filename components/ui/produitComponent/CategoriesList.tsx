@@ -1,11 +1,12 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
-import React, { useRef, useState } from 'react';
-import { InputSwitch } from 'primereact/inputswitch';
+
 import { Menu } from 'primereact/menu';
 import { Button } from 'primereact/button';
 import { Paginator } from 'primereact/paginator';
 import { Categorie } from '@/Models/produitsType';
+import { useRef, useState } from 'react';
 
 interface Props {
   categories: Categorie[];
@@ -33,22 +34,8 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Tout */}
-      <div
-        key="all"
-        className="flex items-center justify-between bg-white shadow p-4 rounded-xl !bg-gray-100"
-      >
-        <div className="flex items-center gap-4">
-          <InputSwitch
-            checked={!!activeSwitches['all']}
-            onChange={() => handleSwitchChange(null)}
-          />
-          <span className="text-lg font-medium">Tout</span>
-        </div>
-      </div>
-
       {/* Pagination des catégories */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {paginatedCategories.map((categorie) => {
           const menuItems = [
             {
@@ -66,14 +53,14 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
           return (
             <div
               key={categorie._id}
-              className="flex items-center justify-between bg-white shadow p-4 rounded-xl !bg-gray-100"
+              className="flex items-center justify-between  shadow p-4 rounded-xl !bg-gray-300"
             >
               <div className="flex items-center gap-4">
-                <InputSwitch
+                {/* <InputSwitch
                   //@ts-ignore
                   checked={!!activeSwitches[categorie._id]}
                   onChange={() => handleSwitchChange(categorie)}
-                />
+                /> */}
 
                 <div className="relative w-12 h-12 rounded-full overflow-hidden">
                   {categorie.image && (

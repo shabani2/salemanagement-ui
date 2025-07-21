@@ -24,6 +24,7 @@ const MultiStepForm: React.FC = () => {
     setStep(2);
   };
   const handleNextOrganisation = (organisation: Organisation) => {
+    console.log('next on organisation  here : ', organisation);
     setOrganisation(organisation);
     setStep(3);
   };

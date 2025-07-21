@@ -102,11 +102,11 @@ const UserForm: React.FC<{ onNext: (user: User) => void }> = ({ onNext }) => {
             <input
               name="role"
               placeholder="Rôle *"
-              value={user.role}
+              value={user?.role}
               onChange={handleChange}
               className="p-inputtext p-component w-full border rounded-md px-3 py-2"
             />
-            {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
+            {errors?.role && <p className="text-red-500 text-sm mt-1">{errors?.role}</p>}
           </div>
           <div className="sm:col-span-2">
             <input
