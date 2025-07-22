@@ -86,7 +86,9 @@ const Page = () => {
     type: '',
     depotCentral: false,
     pointVente:
-     user&& user?.role && !['SuperAdmin', 'AdminRegion'].includes(user?.role) ? user.pointVente : null,
+      user && user?.role && !['SuperAdmin', 'AdminRegion'].includes(user?.role)
+        ? user.pointVente
+        : null,
     region: undefined,
     user: user || undefined,
     produits: [],
@@ -129,7 +131,7 @@ const Page = () => {
   const montantFranc = montantDollar * tauxFranc;
 
   const totalMontant = (watch('produits') ?? []).reduce((acc, item) => {
-    const produit = allProduits.find((p) => p._id === item.produit);
+    const produit = allProduits.find((p) => p?._id === item.produit);
     if (!produit) return acc;
 
     const quantite = item.quantite ?? 0;
@@ -159,9 +161,9 @@ const Page = () => {
     if (isPointVenteLocked && user?.pointVente && pointsVente.length > 0) {
       const matchedPV = pointsVente.find(
         (pv) =>
-          pv._id === (typeof user.pointVente === 'string' ? user.pointVente : user.pointVente._id)
+          pv?._id === (typeof user.pointVente === 'string' ? user.pointVente : user.pointVente?._id)
       );
-      if (matchedPV && getValues('pointVente')?._id !== matchedPV._id) {
+      if (matchedPV && getValues('pointVente')?._id !== matchedPV?._id) {
         setValue('pointVente', matchedPV);
       }
     }
@@ -181,7 +183,7 @@ const Page = () => {
       const parsed = parseFloat(savedTauxFranc);
       if (getValues('tauxFranc') !== parsed) setValue('tauxFranc', parsed);
     }
-  }, [user?.region?._id,user]);
+  }, [user?.region?._id, user]);
 
   const validateStock = async (value: number) => {
     const produitId = watch('formulaire.produit');
@@ -216,7 +218,7 @@ const Page = () => {
 
     try {
       const mouvements = data.produits.map((item) => {
-        const produitObj = allProduits.find((p) => p._id === item.produit);
+        const produitObj = allProduits.find((p) => p?._id === item.produit);
         if (!produitObj) throw new Error('Produit introuvable');
 
         const prix = ['Entrée', 'Livraison', 'Commande', 'Sortie'].includes(data.type)
@@ -225,7 +227,7 @@ const Page = () => {
 
         return {
           // Remplacez produitObj par son ID
-          produit: produitObj._id, // ⬅️ Chaîne ID au lieu de l'objet complet
+          produit: produitObj?._id, // ⬅️ Chaîne ID au lieu de l'objet complet
 
           produitNom: produitObj.nom,
           quantite: item.quantite,
@@ -329,7 +331,7 @@ const Page = () => {
     } else {
       dispatch(fetchPointVentesByRegionId(user?.region?._id));
     }
-  }, [user?.region?._id, dispatch, user?.role, user._id]);
+  }, [user?.region?._id, dispatch, user?.role, user?._id]);
 
   console.log('categories got :', categories);
   return (
@@ -392,7 +394,7 @@ const Page = () => {
 
                 {watch('type') === 'Entrée' && (
                   <div className="mt-4">
-                    {user&&user?.role === 'SuperAdmin' ? (
+                    {user && user?.role === 'SuperAdmin' ? (
                       <div className="bg-blue-50 p-4 rounded-xl border-l-4 border-blue-500">
                         <label className="flex items-center gap-2 font-medium text-gray-800">
                           <input
@@ -411,7 +413,7 @@ const Page = () => {
                           </small>
                         )}
                       </div>
-                    ) :user&& user?.role === 'AdminRegion' ? (
+                    ) : user && user?.role === 'AdminRegion' ? (
                       <div className="flex items-center gap-3 font-bold text-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border-l-4 border-blue-500">
                         <i className="pi pi-building text-blue-600 text-xl"></i>
                         <div>
@@ -431,7 +433,7 @@ const Page = () => {
                       <i className="pi pi-store text-blue-500"></i>
                       Point de vente
                     </label>
-                    {user&&['SuperAdmin', 'AdminRegion'].includes(user?.role) ? (
+                    {user && ['SuperAdmin', 'AdminRegion'].includes(user?.role) ? (
                       // Mode sélection libre pour SuperAdmin et AdminRegion
                       <Controller
                         name="pointVente"
@@ -491,7 +493,7 @@ const Page = () => {
                         render={({ field }) => (
                           <Dropdown
                             {...field}
-                            options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
+                            options={categories.map((cat) => ({ label: cat.nom, value: cat?._id }))}
                             onChange={(e) => field.onChange(e.value)}
                             placeholder="Choisir une catégorie"
                             className="w-full border-gray-300 rounded-xl"
@@ -512,7 +514,7 @@ const Page = () => {
                         render={({ field }) => (
                           <Dropdown
                             {...field}
-                            options={filteredProduits.map((p) => ({ label: p.nom, value: p._id }))}
+                            options={filteredProduits.map((p) => ({ label: p.nom, value: p?._id }))}
                             placeholder="Choisir un produit"
                             className="w-full border-gray-300 rounded-xl"
                             onChange={(e) => field.onChange(e.value)}
@@ -660,7 +662,7 @@ const Page = () => {
                         </thead>
                         <tbody>
                           {watchProduits.map((item, index) => {
-                            const produit = allProduits.find((p) => p._id === item.produit);
+                            const produit = allProduits.find((p) => p?._id === item.produit);
                             return (
                               <tr key={index} className="bg-white border-b hover:bg-gray-50">
                                 <td className="px-4 py-3 font-medium text-gray-900">

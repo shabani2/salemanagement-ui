@@ -46,17 +46,17 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
   };
 
   const getHeaderTitle = () => {
-    if (user&&!user?.role) return 'Tableau de Bord';
-    const roleId = user&&isUserRole(user?.role);
+    if (user && !user?.role) return 'Tableau de Bord';
+    const roleId = user && isUserRole(user?.role);
     switch (roleId) {
       case 1:
         return 'Dépôt Central';
       case 2:
-        return user&& isRegion(user.region) ? user.region.nom : 'Région';
+        return user && isRegion(user.region) ? user.region.nom : 'Région';
       case 3:
       case 4:
       case 5:
-        return user&& isPointVente(user.pointVente) ? user.pointVente.nom : 'Point de Vente';
+        return user && isPointVente(user.pointVente) ? user.pointVente.nom : 'Point de Vente';
       default:
         return 'Tableau de Bord';
     }
@@ -129,7 +129,7 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
               <i className="pi pi-user text-blue-600 mr-2" />
               Profil
             </DropdownMenuItem>
-            {user&&user?.role === 'SuperAdmin' && (
+            {user && user?.role === 'SuperAdmin' && (
               <DropdownMenuItem
                 onClick={() => onNavigate('/superAdmin/abonnements')}
                 className="cursor-pointer"

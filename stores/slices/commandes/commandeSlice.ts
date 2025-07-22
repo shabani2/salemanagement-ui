@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // features/commande/commandeSlice.ts
 
 'use client';
@@ -10,9 +12,9 @@ import {
 } from '@reduxjs/toolkit';
 import { RootState } from '../../store';
 import { apiClient } from '../../../lib/apiConfig';
-import  {Commande, CommandeModel } from '../../../Models/commandeType';
-//import { CommandeProduit } from '../../../Models/CommandeProduitType';
+import { Commande } from '@/Models/commandeType';
 
+//import { CommandeProduit } from '../../../Models/CommandeProduitType';
 
 interface CommandeState {
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -20,6 +22,7 @@ interface CommandeState {
 }
 
 const commandeAdapter: EntityAdapter<Commande, string> = createEntityAdapter<Commande, string>({
+  //@ts-ignore
   selectId: (commande) => commande._id,
 });
 
@@ -47,7 +50,7 @@ export const fetchCommandes = createAsyncThunk(
 
 export const addCommande = createAsyncThunk(
   'commandes/addCommande',
-  async (commande: Omit<commandeModel, '_id'>, { rejectWithValue }) => {
+  async (commande: Omit<Commande, '_id'>, { rejectWithValue }) => {
     try {
       const res = await apiClient.post('/commandes', commande, { headers: getAuthHeaders() });
       return res.data;

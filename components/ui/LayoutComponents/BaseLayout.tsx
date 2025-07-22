@@ -124,13 +124,6 @@
 //   );
 // }
 
-
-
-
-
-
-
-
 'use client';
 
 import { useState, ReactNode, useEffect, useRef, useTransition } from 'react';
@@ -156,9 +149,7 @@ export default function BaseLayout({ children }: LayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
-  const currentOrganisation = useSelector((state: RootState) =>
-    selectCurrentOrganisation(state)
-  );
+  const currentOrganisation = useSelector((state: RootState) => selectCurrentOrganisation(state));
   const mainRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -174,8 +165,7 @@ export default function BaseLayout({ children }: LayoutProps) {
     if (!mainRef.current) return;
     const mainEl = mainRef.current;
     const handleResize = () => {
-      mainEl.style.width =
-        mainEl.scrollWidth > mainEl.clientWidth ? '100%' : 'auto';
+      mainEl.style.width = mainEl.scrollWidth > mainEl.clientWidth ? '100%' : 'auto';
     };
     handleResize();
     const resizeObserver = new ResizeObserver(handleResize);
@@ -190,11 +180,11 @@ export default function BaseLayout({ children }: LayoutProps) {
   }
 
   const handleNavigation = (path: string) => {
-     if (pathname !== path) {
+    if (pathname !== path) {
       startTransition(() => {
         router.push(path);
-    });
-   }
+      });
+    }
   };
 
   return (

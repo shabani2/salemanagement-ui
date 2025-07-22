@@ -95,7 +95,7 @@ const ProductFormSection = ({
       {/* Gestion dépôt central */}
       {watch('type') === 'Entrée' && (
         <div>
-          {user&&user?.role === 'SuperAdmin' ? (
+          {user && user?.role === 'SuperAdmin' ? (
             <>
               <label className="flex items-center gap-2">
                 <input type="checkbox" {...register('depotCentral')} disabled={!watch('type')} />
@@ -105,7 +105,7 @@ const ProductFormSection = ({
                 <small className="text-red-700">{errors.depotCentral.message}</small>
               )}
             </>
-          ) :user&& user?.role === 'AdminRegion' ? (
+          ) : user && user?.role === 'AdminRegion' ? (
             <div className="flex items-center gap-2 font-bold text-gray-800 bg-blue-50 p-3 rounded-md border-l-4 border-blue-500">
               <i className="pi pi-building text-blue-600" />
               <span>

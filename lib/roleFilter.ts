@@ -1,32 +1,37 @@
-import { Routes } from './route';
+import { menuItems } from './route';
 import { UserRole } from './utils';
 
 export function filterRoutesByRole(role: UserRole) {
-  const base = [Routes[0]]; // Always include Dashboard
+  const base = [menuItems[0]]; // Toujours inclure Dashboard
+
   switch (role.toLowerCase()) {
     case 'superadmin':
-      return Routes;
+      return menuItems;
+
     case 'adminregion':
       return base.concat(
-        Routes.filter((r) => !['Paramètres', 'Zones', 'Dashboard'].includes(r.title))
+        menuItems.filter((r) => !['Paramètres', 'Zones', 'Dashboard'].includes(r.title))
       );
 
     case 'adminpointvente':
       return base.concat(
-        Routes.filter((r) =>
-          ['Opérations', 'Stock', 'Rapports', 'Utilisateurs', 'finances', 'Commandes'].includes(
+        menuItems.filter((r) =>
+          ['Opérations', 'Stock', 'Rapports', 'Utilisateurs', 'Finances', 'Commandes'].includes(
             r.title
           )
         )
       );
+
     case 'vendeur':
       return base.concat(
-        Routes.filter((r) => ['Opérations', 'Stock', 'Rapports', 'Finances'].includes(r.title))
+        menuItems.filter((r) => ['Opérations', 'Stock', 'Rapports', 'Finances'].includes(r.title))
       );
+
     case 'logisticien':
       return base.concat(
-        Routes.filter((r) => ['Stock', 'Rapports', 'Commandes'].includes(r.title))
+        menuItems.filter((r) => ['Stock', 'Rapports', 'Commandes'].includes(r.title))
       );
+
     default:
       return base;
   }

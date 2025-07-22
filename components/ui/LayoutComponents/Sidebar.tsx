@@ -95,8 +95,6 @@
 //   );
 // }
 
-
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
@@ -158,6 +156,23 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       <nav className="flex-1 p-4 overflow-y-auto">
         <ul className="space-y-1">
+          {/* {menuItems.map(({ path, title, icon }) => (
+            <li key={path}>
+              <Link
+                href={path}
+                prefetch
+                className={`flex items-center px-4 py-2 rounded w-full text-left transition cursor-pointer ${
+                  isActive(path)
+                    ? '!bg-green-700 text-gray-100'
+                    : 'hover:!bg-green-400 hover:text-white'
+                }`}
+              >
+                <i className={`pi mr-2 ${icon} text-lg`} />
+                {title}
+              </Link>
+            </li>
+          ))} */}
+
           {menuItems.map(({ path, title, icon }) => (
             <li key={path}>
               <Link

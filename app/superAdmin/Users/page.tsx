@@ -145,7 +145,7 @@ const Page = () => {
     if (!selectedUser) return;
     setLoading(true);
     try {
-      await dispatch(deleteUser(selectedUser._id)).then(async () => {
+      await dispatch(deleteUser(selectedUser?._id)).then(async () => {
         await dispatch(fetchUsers()).then((resp) => {
           setUsers(resp.payload);
         });
@@ -161,9 +161,14 @@ const Page = () => {
   const home = { icon: 'pi pi-home', url: '/' };
 
   const handleCreateOrUpdate = async () => {
-    const isEditMode = !!newUser._id;
+    const isEditMode = !!newUser?._id;
 
-    if (!newUser.nom || !newUser.prenom || !newUser.email || (!isEditMode && !newUser.password)) {
+    if (
+      !newUser?.nom ||
+      !newUser?.prenom ||
+      !newUser?.email ||
+      (!isEditMode && !newUser?.password)
+    ) {
       setErrors({
         ...errors,
         // @ts-ignore
@@ -209,15 +214,15 @@ const Page = () => {
         formData.append('password', newUser.password);
         formData.append('role', newUser?.role);
 
-        if (newUser.region) {
-          const regionValue = isRegion(newUser.region) ? newUser.region._id : newUser.region;
+        if (newUser?.region) {
+          const regionValue = isRegion(newUser?.region) ? newUser?.region?._id : newUser?.region;
           formData.append('region', regionValue ? String(regionValue) : '');
         }
 
-        if (newUser.pointVente) {
+        if (newUser?.pointVente) {
           formData.append(
             'pointVente',
-            isPointVente(newUser.pointVente) ? newUser.pointVente._id : newUser.pointVente
+            isPointVente(newUser?.pointVente) ? newUser?.pointVente?._id : newUser?.pointVente
           );
         }
 
@@ -298,12 +303,12 @@ const Page = () => {
         setUsers(resp.payload);
       });
     } else {
-      dispatch(fetchUsersByPointVenteId(user.pointVente._id)).then((resp) => {
+      dispatch(fetchUsersByPointVenteId(user?.pointVente?._id)).then((resp) => {
         console.log('users by point vente : ', resp.payload);
         setUsers(resp.payload);
       });
     }
-  }, [dispatch, user?.role, user?.region?._id, user.pointVente?._id]);
+  }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
   // console.log('users : ',users)
   //traitement de la recherche
 
@@ -318,17 +323,17 @@ const Page = () => {
         const tel = u.telephone?.toLowerCase() || '';
 
         const pv =
-          typeof u.pointVente === 'object' && u.pointVente !== null && 'nom' in u.pointVente
-            ? u.pointVente.nom?.toLowerCase() || ''
-            : typeof u.pointVente === 'string'
-              ? u.pointVente.toLowerCase()
+          typeof u?.pointVente === 'object' && u?.pointVente !== null && 'nom' in u?.pointVente
+            ? u?.pointVente.nom?.toLowerCase() || ''
+            : typeof u?.pointVente === 'string'
+              ? u?.pointVente.toLowerCase()
               : 'depot central';
 
         const region =
-          typeof u.region === 'object' && u.region !== null && 'nom' in u.region
-            ? u.region.nom?.toLowerCase() || ''
-            : typeof u.region === 'string'
-              ? u.region.toLowerCase()
+          typeof u?.region === 'object' && u?.region !== null && 'nom' in u?.region
+            ? u?.region.nom?.toLowerCase() || ''
+            : typeof u?.region === 'string'
+              ? u?.region.toLowerCase()
               : '';
 
         const role = u?.role?.toLowerCase() || '';
@@ -420,9 +425,9 @@ const Page = () => {
     const filtered = filteredUsers.filter(
       (u) =>
         typeof u?.pointVente === 'object' &&
-        u.pointVente !== null &&
-        '_id' in u.pointVente &&
-        u.pointVente._id === pointVente._id
+        u?.pointVente !== null &&
+        '_id' in u?.pointVente &&
+        u?.pointVente?._id === pointVente?._id
     );
     //@ts-ignore
     setFilteredByPV(filtered);

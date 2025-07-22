@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // features/commandeProduit/commandeProduitSlice.ts
 
 'use client';
@@ -10,17 +12,20 @@ import {
 } from '@reduxjs/toolkit';
 import { RootState } from '../../store';
 import { apiClient } from '../../../lib/apiConfig';
-import { CommandeProduit} from '../../../Models/CommandeProduitType';
+import { CommandeProduit } from '../../../Models/CommandeProduitType';
 
 interface CommandeProduitState {
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 }
 
-const commandeProduitAdapter: EntityAdapter<CommandeProduit, string> =
-  createEntityAdapter<CommandeProduit, string>({
-    selectId: (cp) => cp?._id,
-  });
+const commandeProduitAdapter: EntityAdapter<CommandeProduit, string> = createEntityAdapter<
+  CommandeProduit,
+  string
+>({
+  //@ts-ignore
+  selectId: (cp) => cp?._id,
+});
 
 const initialState = commandeProduitAdapter.getInitialState<CommandeProduitState>({
   status: 'idle',
@@ -41,7 +46,9 @@ export const fetchCommandeProduitsByCommande = createAsyncThunk(
       });
       return res.data.produits; // assuming structure: { produits: [...] }
     } catch (error: any) {
-      return rejectWithValue(error.message || 'Erreur lors de la récupération des produits de la commande');
+      return rejectWithValue(
+        error.message || 'Erreur lors de la récupération des produits de la commande'
+      );
     }
   }
 );
@@ -49,13 +56,21 @@ export const fetchCommandeProduitsByCommande = createAsyncThunk(
 export const updateStatutProduitCommande = createAsyncThunk(
   'commandeProduits/updateStatut',
   async (
-    { commandeId, produitId, statut }: { commandeId: string; produitId: string; statut: 'attente' | 'livré' | 'annulé' },
+    {
+      commandeId,
+      produitId,
+      statut,
+    }: { commandeId: string; produitId: string; statut: 'attente' | 'livré' | 'annulé' },
     { rejectWithValue }
   ) => {
     try {
-      const res = await apiClient.put(`/commande-produits/${commandeId}`, { produitId, statut }, {
-        headers: getAuthHeaders(),
-      });
+      const res = await apiClient.put(
+        `/commande-produits/${commandeId}`,
+        { produitId, statut },
+        {
+          headers: getAuthHeaders(),
+        }
+      );
       return res.data;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Erreur lors de la mise à jour du statut du produit');
