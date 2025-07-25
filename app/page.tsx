@@ -45,7 +45,7 @@ export default function Page() {
 
   return (
     <div>
-      {/* Dashboard selon le rôle */}
+  
       <div className="mt-6">{renderDashboard()}</div>
     </div>
   );
