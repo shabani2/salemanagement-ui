@@ -205,7 +205,7 @@ export default function PrivilegiesDashboard() {
           <KpiCard title="Stock Total (fc)" value={formatNombre(stockTotalValue)} icon={Box} />
           <KpiCard title="CA Global" value={formatNombre(caGlobal)} icon={CreditCard} />
           <KpiCard title="Points de Vente" value={formatNombre(totalPointsVente)} icon={Building} />
-          <KpiCard title="Taux Livraison" value={tauxLivraison} icon={Truck} />
+          <KpiCard title="Taux Livraison" value={0} icon={Truck} />
         </div>
         {/* premiere section de graphique */}
         <div className="w-full flex gap-4">
