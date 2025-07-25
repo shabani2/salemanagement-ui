@@ -1,16 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/rules-of-hooks */
 'use client';
-import CategorieList from '@/components/ui/produitComponent/CategoriesList';
-import { Categorie, Produit } from '@/Models/produitsType';
-import {
-  addCategorie,
-  deleteCategorie,
-  fetchCategories,
-  selectAllCategories,
-  updateCategorie,
-} from '@/stores/slices/produits/categoriesSlice';
+
+import { fetchCategories, selectAllCategories } from '@/stores/slices/produits/categoriesSlice';
 import {
   addProduit,
   deleteProduit,
@@ -28,20 +22,27 @@ import { InputText } from 'primereact/inputtext';
 import { Menu } from 'primereact/menu';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { FileUpload } from 'primereact/fileupload';
-import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { Categorie, Produit } from '@/Models/produitsType';
+import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
+//import { saveAs } from 'file-saver';
+import { Toast } from 'primereact/toast';
+import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 const page = () => {
-   
   const menuRef = useRef<any>(null);
   const dispatch = useDispatch<AppDispatch>();
   const [produits, setProduits] = useState<Produit[]>([]); //useSelector((state: RootState) => selectAllProduits(state));
   const [allProduits, setAllProduits] = useState<Produit[]>([]);
   const categories = useSelector((state: RootState) => selectAllCategories(state));
-  const [search, setSearch] = useState('');
+
   const [dialogType, setDialogType] = useState<string | null>(null);
   const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
-  const [selectedCategorie, setSelectedCategorie] = useState<Categorie | null>(null);
+
   const selectedRowDataRef = useRef<any>(null);
   const [isDeleteProduit, setIsDeleteProduit] = useState<boolean>(false);
 
@@ -52,6 +53,7 @@ const page = () => {
     prixVente: 0,
     tva: 0,
     marge: 0,
+    seuil: 0,
     netTopay: 0,
     unite: '',
   });
@@ -65,18 +67,6 @@ const page = () => {
       setProduits(resp.payload); // version visible (filtrée ou pas)
     });
   }, [dispatch]);
-
-  const filterProduitByCategorie = (categorie: Categorie | null) => {
-    if (!categorie) {
-      setProduits(allProduits); // réinitialise
-      return;
-    }
-  //@ts-ignore
-    const filtered = allProduits.filter((p) => p.categorie._id === categorie._id);
-
-    setProduits(filtered);
-    console.log('Produits filtrés pour:', categorie.nom, filtered);
-  };
 
   const handleAction = (action: string, rowData: Produit) => {
     console.log('Produit cliqué :', rowData);
@@ -111,12 +101,13 @@ const page = () => {
       />
       <Button
         icon="pi pi-bars"
-        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
+        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
         onClick={(event) => {
           selectedRowDataRef.current = rowData; // 👈 on stocke ici le bon rowData
           menuRef.current.toggle(event);
         }}
         aria-haspopup
+        severity={undefined}
       />
     </div>
   );
@@ -158,6 +149,7 @@ const page = () => {
         prixVente: selectedProduit.prixVente || 0,
         tva: selectedProduit.tva || 0,
         marge: selectedProduit.marge || 0,
+        seuil: selectedProduit?.seuil || 0,
         unite: selectedProduit.unite || '',
 
         _id: selectedProduit._id, // si tu en as besoin pour l'update
@@ -178,151 +170,219 @@ const page = () => {
 
   //gestion de variable de categorie
 
-  const [newCategorie, setNewCategorie] = useState<Categorie>({
-    nom: '',
-    type: '',
-    image: null,
-  });
-  const [formState, setFormState] = useState<Categorie>(newCategorie);
-  const [isDeleteCat, setIsDeleteCat] = useState<boolean>(false);
-
-  const handleOpenCreate = () => {
-    setNewCategorie({ nom: '', type: '', image: null });
-    setActionMade('create');
-  };
-
-  const [actionMade, setActionMade] = useState<string | null>(null);
-
-  const geteActionMade = (action: 'edit' | 'delete', categorie: Categorie) => {
-    if (action === 'edit') {
-      setActionMade('update');
-      setSelectedCategorie(categorie);
-      console.log('selected categorie => ', selectedCategorie);
-    } else if (action === 'delete') {
-      setActionMade('delete');
-      setIsDeleteCat(true);
-      setSelectedCategorie(categorie);
-    }
-  };
-
+  // traitement de la recherche de produit
+  const [searchProd, setSearchProd] = useState('');
+  const [filteredProduits, setFilteredProduits] = useState(produits || []);
+  const [first, setFirst] = useState(0);
+  const [categorie, setCategorie] = useState<Categorie | null>(null);
   useEffect(() => {
-    if (actionMade === 'create') {
-      setFormState(newCategorie);
-    } else if (actionMade === 'update' && selectedCategorie) {
-      setFormState({
-        _id: selectedCategorie._id,
-        nom: selectedCategorie.nom,
-        type: selectedCategorie.type,
-        image: null,
-      });
-    }
-  }, [actionMade, newCategorie, selectedCategorie]);
+    const filtered = produits.filter((p) => {
+      const query = searchProd.toLowerCase();
+      return (
+        p.nom?.toLowerCase().includes(query) ||
+        String(p.prix).includes(query) ||
+        String(p.marge).includes(query) ||
+        String(p.netTopay).includes(query) ||
+        String(p.tva).includes(query) ||
+        String(p.prixVente).includes(query) ||
+        p.unite?.toLowerCase().includes(query)
+      );
+    });
+    setFilteredProduits(filtered);
+  }, [searchProd, produits]);
 
-  const handleSubmit = () => {
-    const formData = new FormData();
-    formData.append('nom', formState.nom);
-    formData.append('type', formState.type);
-    if (formState.image) {
-      formData.append('image', formState.image);
-    }
-    if (actionMade === 'create') {
-      console.log('categorie created : ', formData, formState);
-      dispatch(addCategorie(formState)).then((resp) => {
-        console.log('resp ', resp.payload);
+  //file management
+  const toast = useRef<Toast>(null);
+  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
+
+  const handleFileManagement = async ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'pdf' | 'excel';
+    file?: File;
+  }) => {
+    if (type === 'import' && file) {
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+      toast.current?.show({
+        severity: 'info',
+        summary: `Import ${format.toUpperCase()}`,
+        detail: `File imported: ${file.name}`,
+        life: 3000,
       });
-    } else if (actionMade === 'update') {
-      if (formState.image == null) {
-        console.log('image', selectedCategorie?.image);
-        setFormState({ ...formState, image: selectedCategorie?.image });
+      return;
+    }
+
+    if (type === 'export') {
+      // Only allow "csv" or "xlsx" as fileType
+      if (format === 'pdf') {
+        toast.current?.show({
+          severity: 'warn',
+          summary: 'Export PDF non supporté',
+          detail: "L'export PDF n'est pas disponible pour ce module.",
+          life: 3000,
+        });
+        return;
       }
-      //@ts-ignore
-      dispatch(updateCategorie({ id: selectedCategorie?._id, data: formState }));
-      console.log('categorie updated : ', formState);
-    }
+      // Map "excel" to "xlsx" for backend compatibility
+      const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : format;
+      const result = await dispatch(
+        exportFile({
+          url: '/export/produits',
+          mouvements: filteredProduits,
+          fileType: exportFileType,
+        })
+      );
 
-    setActionMade(null);
+      if (exportFile.fulfilled.match(result)) {
+        const filename = `produits.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadExportedFile(result.payload, filename);
+
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: `Export ${format.toUpperCase()} Échoué`,
+          detail: String(result.payload || 'Une erreur est survenue.'),
+          life: 3000,
+        });
+      }
+    }
   };
-  useEffect(() => {
-    if (!formState.image && selectedCategorie?.image) {
-      console.log('Image injectée dans formState:', selectedCategorie.image);
-      setFormState((prev) => ({ ...prev, image: selectedCategorie.image }));
-    }
-  }, [selectedCategorie, formState.image]);
-
   return (
-    <div className="bg-gray-100 min-h-screen ">
-      <div className="flex items-center justify-between mb-6">
+    <div className="min-h-screen ">
+      <div className="flex items-center justify-between mt-3 mb-3 ">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des Produits1' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Produits' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Gestion des Produits</h2>
+        <h2 className="text-2xl font-bold text-gray-5000">Gestion des Produits</h2>
       </div>
-      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row">
-        <div className=" w-3/12 bg-white p-2 rounded-lg">
-          <div className="flex flex-row justify-between p-1 items-center mb-2">
-            <h3 className="text-lg font-bold">categories</h3>
-            <div>
-              <Button
-                label="nouveau"
-                icon="pi pi-plus"
-                className="bg-blue-500 text-white p-1 rounded"
-                onClick={() => handleOpenCreate()}
-              />
-            </div>
-          </div>
-          <CategorieList
-            categories={categories}
-            filterProduitByCategorie={filterProduitByCategorie}
-            onAction={geteActionMade}
-          />
-        </div>
-        <div className="w-9/12 bg-white p-2 rounded-lg">
-          <div className="gap-4 mb-4   flex justify-between">
-            <div className="relative w-2/3 flex flex-row ">
+      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row w-full ">
+        <div className=" bg-white p-2 rounded-lg w-full ">
+          <div className="gap-4 mb-4 w-full  flex justify-between">
+            <div className="relative w-2/3 flex flex-row gap-2">
               <InputText
-                className="p-2 border rounded flex-grow"
-                placeholder="Rechercher..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                className="p-2 pl-10 border rounded w-full"
+                placeholder="Rechercher un produit..."
+                value={searchProd}
+                onChange={(e) => setSearchProd(e.target.value)}
               />
-              <div className="ml-3 flex gap-2 w-2/5">
-                <Button
-                  label="import"
-                  icon="pi pi-upload"
-                  className="p-button-primary text-[16px]"
-                />
-                <Button
-                  label="export"
-                  icon="pi pi-download"
-                  className="p-button-success text-[16px]"
-                />
-              </div>
+
+              <DropdownCategorieFilter
+                onSelect={(categorie) => {
+                  setCategorie(categorie);
+                  if (categorie === null) {
+                    setFilteredProduits(allProduits);
+                  }
+                  const filtered = allProduits.filter((p) => {
+                    if (!categorie) return true;
+                    return typeof p.categorie === 'object' &&
+                      p.categorie !== null &&
+                      '_id' in p.categorie
+                      ? p.categorie._id === categorie._id
+                      : p.categorie === categorie._id;
+                  });
+                  setFilteredProduits(filtered);
+                }}
+                // @ts-ignore
+              />
+              <DropdownImportExport onAction={handleFileManagement} />
             </div>
+            <div className="ml-3 flex gap-2 w-2/5"></div>
             <Button
               label="nouveau"
               icon="pi pi-plus"
-              className="bg-blue-500 text-white p-2 rounded"
+              className="!bg-green-700 text-white p-2 rounded"
               onClick={() => setDialogType('create')}
+              severity={undefined}
             />
           </div>
           <div>
             <DataTable
-              value={produits}
+              value={filteredProduits}
               paginator
-              rows={5}
-              className="rounded-lg"
+              size="small"
+              rows={10}
+              className="rounded-lg text-[11px] text-gray-900 w-full"
               tableStyle={{ minWidth: '70rem' }}
+              rowClassName={(rowData, options) => {
+                // @ts-ignore
+                const index = options?.index ?? 0;
+                const globalIndex = first + index;
+                return globalIndex % 2 === 0
+                  ? '!bg-gray-300 !text-gray-900'
+                  : '!bg-green-900 !text-white';
+              }}
             >
-              <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
-              <Column field="nom" header="Nom" sortable />
-              <Column field="prix" header="Prix d'acquisition/ production" sortable />
+              <Column
+                field="_id"
+                header="#"
+                body={(_, options) => options.rowIndex + 1}
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+                className="text-[11px]"
+              />
+              <Column
+                // field="produit.categorie.nom"
+                header=""
+                body={(rowData: Produit) => {
+                  const categorie = rowData?.categorie;
+                  if (!categorie) return <span className="text-[11px]">—</span>;
+                  let imageUrl = '';
+                  if (
+                    typeof categorie === 'object' &&
+                    categorie !== null &&
+                    'image' in categorie &&
+                    categorie.image
+                  ) {
+                    imageUrl = `http://localhost:8000/${categorie.image.replace('../', '')}`;
+                  }
+                  return (
+                    <div className="flex items-center gap-2 text-[11px]">
+                      {typeof categorie === 'object' &&
+                        categorie !== null &&
+                        'image' in categorie &&
+                        categorie.image && (
+                          <img
+                            src={imageUrl}
+                            alt={categorie.nom}
+                            className="w-8 h-8 rounded-full object-cover border border-gray-100"
+                          />
+                        )}
+                      {/* <span>{categorie.nom}</span> */}
+                    </div>
+                  );
+                }}
+                className="px-4 py-1 text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+              />
+              <Column
+                field="nom"
+                header="Nom"
+                sortable
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+              />
+              <Column
+                field="prix"
+                header="prix/U"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+              />
               <Column
                 field="marge"
                 header="Marge (%)"
                 body={(rowData: Produit) => rowData.marge ?? 'N/A'}
-                sortable
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 header="Valeur Marge"
@@ -331,13 +391,22 @@ const page = () => {
                     ? ((rowData.prix * rowData.marge) / 100).toFixed(2)
                     : 'N/A'
                 }
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 field="netTopay"
-                header="Net à Payer"
+                header="prix de vente/U"
                 body={(rowData: Produit) => rowData.netTopay?.toFixed(2) ?? 'N/A'}
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
-              <Column field="tva" header="TVA (%)" sortable />
+              <Column
+                field="tva"
+                header="TVA (%)"
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+              />
               <Column
                 header="Valeur TVA"
                 body={(rowData: Produit) =>
@@ -345,19 +414,36 @@ const page = () => {
                     ? ((rowData.netTopay * rowData.tva) / 100).toFixed(2)
                     : 'N/A'
                 }
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 field="prixVente"
-                header="Prix de Vente"
+                header="TTC/U"
                 body={(rowData: Produit) => rowData.prixVente?.toFixed(2) ?? 'N/A'}
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+              />
+              <Column
+                field="seuil"
+                header="Seuil de stock"
+                body={(rowData: Produit) => rowData.seuil?.toFixed(2) ?? 'N/A'}
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
               <Column
                 field="unite"
                 header="Unité"
                 body={(rowData: Produit) => rowData.unite || 'N/A'}
+                className="text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
               />
-
-              <Column body={actionBodyTemplate} header="Actions" className="px-4 py-1" />
+              <Column
+                body={actionBodyTemplate}
+                header="Actions"
+                className="px-4 py-1 text-[11px]"
+                headerClassName="text-[11px] !bg-green-900 !text-white"
+              />
             </DataTable>
           </div>
         </div>
@@ -405,7 +491,7 @@ const page = () => {
               <label className="block mb-1 text-sm font-medium">Prix d&apos;acquisition/Prod</label>
               <InputText
                 type="number"
-                 //@ts-ignore
+                //@ts-ignore
                 value={newProduit.prix}
                 onChange={(e) => handleInputChange('prix', parseFloat(e.target.value) || 0)}
                 className="w-full p-2 border rounded"
@@ -421,13 +507,24 @@ const page = () => {
                 className="w-full p-2 border rounded"
               />
             </div>
+
             <div className="flex-1">
               <label className="block mb-1 text-sm font-medium">TVA (%)</label>
               <InputText
                 type="number"
-                 //@ts-ignore
+                //@ts-ignore
                 value={newProduit.tva}
                 onChange={(e) => handleInputChange('tva', parseFloat(e.target.value) || 0)}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Seuil de stock</label>
+              <InputText
+                type="number"
+                //@ts-ignore
+                value={newProduit.seuil}
+                onChange={(e) => handleInputChange('seuil', parseFloat(e.target.value) || 0)}
                 className="w-full p-2 border rounded"
               />
             </div>
@@ -470,120 +567,13 @@ const page = () => {
           <div className="flex justify-end">
             <Button
               label={dialogType === 'edit' ? 'Modifier' : 'Ajouter'}
-              className="bg-green-500 text-white"
+              className="!bg-green-700 text-white"
               onClick={handleSubmitProduit}
+              severity={undefined}
             />
           </div>
         </div>
       </Dialog>
-
-      {/* dialog cote categorie */}
-      <Dialog
-        visible={actionMade === 'create' || actionMade === 'update'}
-        header={actionMade === 'create' ? 'Ajouter une catégorie' : 'Modifier la catégorie'}
-        onHide={() => setActionMade(null)}
-        style={{ width: '40vw' }}
-        modal
-      >
-        <div className="p-4 space-y-4">
-          {/* Ligne Nom + Type */}
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block mb-1 text-sm font-medium">Nom</label>
-              <InputText
-                type="text"
-                value={formState.nom}
-                onChange={(e) => setFormState({ ...formState, nom: e.target.value })}
-                required
-                className="w-full p-2 border rounded"
-                placeholder="Nom de la catégorie"
-              />
-            </div>
-
-            <div className="flex-1">
-              <label className="block mb-1 text-sm font-medium">Type</label>
-              <InputText
-                type="text"
-                value={formState.type}
-                onChange={(e) => setFormState({ ...formState, type: e.target.value })}
-                required
-                className="w-full p-2 border rounded"
-                placeholder="Type de la catégorie"
-              />
-            </div>
-          </div>
-
-          {/* Champ FileUpload + image preview côte à côte */}
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <label className="block mb-1 text-sm font-medium">Sélectionner une image</label>
-              <FileUpload
-                mode="basic"
-                accept="image/*"
-                maxFileSize={1000000}
-                chooseLabel="Choisir une image"
-                className="w-full mt-2"
-                customUpload
-                uploadHandler={() => {}}
-                onSelect={(e) => {
-                  const file = e.files?.[0];
-// @ts-ignore
-                  if (file) {
-                    // @ts-ignore
-                    setFormState({ ...formState, image: file });
-                  }
-                }}
-              />
-            </div>
-
-            {/* Image sélectionnée (preview) ou image actuelle */}
-            {
-              // @ts-ignore
-              formState.image instanceof File ? (
-                // @ts-ignore
-              <img
-                src={URL.createObjectURL(formState.image)}
-                alt="Aperçu sélectionné"
-                className="h-24 w-auto object-contain border rounded"
-              />
-            ) : (
-              actionMade === 'update' &&
-              selectedCategorie?.image && (
-                <img
-                  src={`http://localhost:8000/${selectedCategorie.image}`}
-                  alt="Image actuelle"
-                  className="h-24 w-auto object-contain border rounded"
-                />
-              )
-            )}
-          </div>
-
-          {/* Bouton Ajouter/Modifier */}
-          <div className="flex justify-end">
-            <Button
-              label={actionMade === 'create' ? 'Ajouter' : 'Modifier'}
-              className="bg-blue-600 text-white"
-              onClick={handleSubmit}
-            />
-          </div>
-        </div>
-      </Dialog>
-
-      {/* delete categorie Dialogue */}
-
-      <ConfirmDeleteDialog
-        visible={isDeleteCat}
-        onHide={() => setIsDeleteCat(false)}
-        onConfirm={(item) => {
-          dispatch(deleteCategorie(item._id)).then(() => {
-            dispatch(fetchCategories());
-            setIsDeleteCat(false);
-          });
-        }}
-        item={selectedCategorie}
-        objectLabel="la catégorie"
-        displayField="nom"
-      />
 
       {/* delete dialog pour produit */}
 

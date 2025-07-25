@@ -5,7 +5,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from '@/components/ui/dropdowns/dropdown-menu';
 import Image from 'next/image';
 import avatar1 from '@/assets/images/globals/avatar1.jpg';
 import { useEffect, useState } from 'react';

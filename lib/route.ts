@@ -1,237 +1,253 @@
-import dynamic from 'next/dynamic';
+// import { PrimeIcons } from 'primereact/api';
+// import SuperAdminDashboard from '@/app/page';
+// import Zone from '@/app/generals/zones/page';
+// import Pointventes from '@/app/generals/point-vente/page';
+// import Produit from '@/app/generals/produits/page';
+// import Categories from '@/app/generals/categories/page';
+// import Operations from '@/app/generals/operations/page';
+// import Rapport from '@/app/generals/rapports/page';
+// import Stock from '@/app/generals/stock/page';
+// import SuperAdminUsers from '@/app/superAdmin/Users/page';
+// import SuperAdminParametres from '@/app/generals/parametre/page';
+// import Commandes from '@/app/generals/commandes/page';
+// import finances from '@/app/finances/page';
+
+// export const Routes = [
+//   {
+//     path: '/',
+//     title: 'Dashboard',
+//     icon: PrimeIcons.CHART_BAR,
+//     component: SuperAdminDashboard,
+//   },
+//   {
+//     path: '/generals/zones',
+//     title: 'Zones',
+//     icon: PrimeIcons.GLOBE,
+//     component: Zone,
+//   },
+//   {
+//     path: '/generals/point-vente',
+//     title: 'Points de Vente',
+//     icon: PrimeIcons.SHOPPING_BAG,
+//     component: Pointventes,
+//   },
+//   {
+//     path: '/generals/categories',
+//     title: 'Catégories',
+//     icon: PrimeIcons.LIST,
+
+//     component: Categories,
+//   },
+//   {
+//     path: '/generals/produits',
+//     title: 'Produits',
+//     icon: PrimeIcons.TAG,
+//     component: Produit,
+//   },
+//   {
+//     path: '/generals/operations',
+//     title: 'Opérations',
+//     icon: PrimeIcons.SYNC,
+//     component: Operations,
+//   },
+//   {
+//     path: '/generals/commandes',
+//     title: 'Commandes',
+//     icon: PrimeIcons.SHOPPING_CART,
+//     component: Commandes,
+//   },
+//   {
+//     path: '/generals/rapports',
+//     title: 'Rapports',
+//     icon: PrimeIcons.FILE,
+//     component: Rapport,
+//   },
+//   {
+//     path: '/generals/stock',
+//     title: 'Stock',
+//     icon: PrimeIcons.BOX,
+//     component: Stock,
+//   },
+//   {
+//     path: '/superAdmin/Users',
+//     title: 'Utilisateurs',
+//     icon: PrimeIcons.USERS,
+//     component: SuperAdminUsers,
+//   },
+//   {
+//     path: '/superAdmin/Parametres',
+//     title: 'Paramètres',
+//     icon: PrimeIcons.COG,
+//     component: SuperAdminParametres,
+//   },
+//   {
+//     path: '/finances',
+//     title: 'Finances',
+//     icon: PrimeIcons.MONEY_BILL,
+//     component: finances,
+//   },
+// ];
+
+// lib/routes.ts
+// import dynamic from 'next/dynamic';
+// import { PrimeIcons } from 'primereact/api';
+// import { ComponentType, ReactElement } from 'react';
+// import RouteLoader from '@/components/ui/RouteLoader';
+
+// const withLoader = (importPath: () => Promise<any>): ComponentType =>
+//   dynamic(importPath, {
+//     loading: () => RouteLoader() as ReactElement,
+//   });
+
+// interface RouteItem {
+//   path: string;
+//   title: string;
+//   icon: string;
+//   component: ComponentType;
+// }
+
+// export const Routes: RouteItem[] = [
+//   {
+//     path: '/',
+//     title: 'Dashboard',
+//     icon: PrimeIcons.CHART_BAR,
+//     component: withLoader(() => import('@/app/page')),
+//   },
+//   {
+//     path: '/generals/zones',
+//     title: 'Zones',
+//     icon: PrimeIcons.GLOBE,
+//     component: withLoader(() => import('@/app/generals/zones/page')),
+//   },
+//   {
+//     path: '/generals/point-vente',
+//     title: 'Points de Vente',
+//     icon: PrimeIcons.SHOPPING_BAG,
+//     component: withLoader(() => import('@/app/generals/point-vente/page')),
+//   },
+//   {
+//     path: '/generals/categories',
+//     title: 'Catégories',
+//     icon: PrimeIcons.LIST,
+//     component: withLoader(() => import('@/app/generals/categories/page')),
+//   },
+//   {
+//     path: '/generals/produits',
+//     title: 'Produits',
+//     icon: PrimeIcons.TAG,
+//     component: withLoader(() => import('@/app/generals/produits/page')),
+//   },
+//   {
+//     path: '/generals/operations',
+//     title: 'Opérations',
+//     icon: PrimeIcons.SYNC,
+//     component: withLoader(() => import('@/app/generals/operations/page')),
+//   },
+//   {
+//     path: '/generals/commandes',
+//     title: 'Commandes',
+//     icon: PrimeIcons.SHOPPING_CART,
+//     component: withLoader(() => import('@/app/generals/commandes/page')),
+//   },
+//   {
+//     path: '/generals/rapports',
+//     title: 'Rapports',
+//     icon: PrimeIcons.FILE,
+//     component: withLoader(() => import('@/app/generals/rapports/page')),
+//   },
+//   {
+//     path: '/generals/stock',
+//     title: 'Stock',
+//     icon: PrimeIcons.BOX,
+//     component: withLoader(() => import('@/app/generals/stock/page')),
+//   },
+//   {
+//     path: '/superAdmin/Users',
+//     title: 'Utilisateurs',
+//     icon: PrimeIcons.USERS,
+//     component: withLoader(() => import('@/app/superAdmin/Users/page')),
+//   },
+//   {
+//     path: '/superAdmin/Parametres',
+//     title: 'Paramètres',
+//     icon: PrimeIcons.COG,
+//     component: withLoader(() => import('@/app/generals/parametre/page')),
+//   },
+//   {
+//     path: '/finances',
+//     title: 'Finances',
+//     icon: PrimeIcons.MONEY_BILL,
+//     component: withLoader(() => import('@/app/finances/page')),
+//   },
+// ];
+
 import { PrimeIcons } from 'primereact/api';
 
-//generals
-const Pointventes = dynamic(() => import('@/app/generals/point-vente/page'), {
-  ssr: false,
-});
+export interface RouteItem {
+  path: string;
+  title: string;
+  icon: string;
+}
 
-const Operations = dynamic(() => import('@/app/generals/operations/page'), {
-  ssr: false,
-});
-const Rapport = dynamic(() => import('@/app/generals/rapports/page'), {
-  ssr: false,
-});
-
-const zone = dynamic(() => import('@/app/generals/zones/page'), { ssr: false });
-// const produits = dynamic(() => import("@/app/generals/produits/page"), {
-//   ssr: false,
-// });
-
-// 📌 AdminPV
-const AdminPVDashboard = dynamic(() => import('@/app/Admin_pv/Dashboard/page'), { ssr: false });
-const AdminPVVendeurs = dynamic(() => import('@/app/Admin_pv/vendeurs/page'), {
-  ssr: false,
-});
-const AdminPVStock = dynamic(() => import('@/app/Admin_pv/stock/page'), {
-  ssr: false,
-});
-const AdminPVVentes = dynamic(() => import('@/app/Admin_pv/vente/page'), {
-  ssr: false,
-});
-const AdminPVCommandes = dynamic(() => import('@/app/Admin_pv/commandes/page'), { ssr: false });
-
-// 📌 AdminZone
-const AdminZoneDashboard = dynamic(() => import('@/app/Admin_zone/Dashboard/page'), { ssr: false });
-const AdminZonePointsVente = dynamic(() => import('@/app/Admin_zone/pointVentes/page'), {
-  ssr: false,
-});
-const AdminZoneAdminsPV = dynamic(() => import('@/app/Admin_zone/AdminPvs/page'), { ssr: false });
-const AdminZoneVentes = dynamic(() => import('@/app/Admin_zone/ventes/page'), {
-  ssr: false,
-});
-const AdminZoneStock = dynamic(() => import('@/app/generals/stock/page'), {
-  ssr: false,
-});
-const AdminZoneCommandes = dynamic(() => import('@/app/Admin_zone/commandes/page'), { ssr: false });
-
-// 📌 SuperAdmin
-const SuperAdminDashboard = dynamic(() => import('@/app/superAdmin/Dashboard/page'), {
-  ssr: false,
-});
-
-
-const SuperAdminStock = dynamic(() => import('@/app/generals/stock/page'), {
-  ssr: false,
-});
-const SuperAdminUsers = dynamic(() => import('@/app/superAdmin/Users/page'), {
-  ssr: false,
-});
-const SuperAdminParametres = dynamic(() => import('@/app/superAdmin/Parametres/page'), {
-  ssr: false,
-});
-
-// 📌 Vendeur
-const VendeurDashboard = dynamic(() => import('@/app/Vendeurs/dashbord/page'), {
-  ssr: false,
-});
-const VendeurVente = dynamic(() => import('@/app/Vendeurs/vente/page'), {
-  ssr: false,
-});
-const VendeurHistorique = dynamic(() => import('@/app/Vendeurs/historiques/page'), { ssr: false });
-const VendeurStock = dynamic(() => import('@/app/Vendeurs/stock/page'), {
-  ssr: false,
-});
-
-// 📌 Routes pour les Vendeurs
-const vendeurRoutes = [
+export const menuItems: RouteItem[] = [
   {
-    path: '/vendeur/dashboard',
+    path: '/',
     title: 'Dashboard',
     icon: PrimeIcons.CHART_BAR,
-    component: VendeurDashboard,
-  },
-  {
-    path: '/vendeur/vente',
-    title: 'Vente',
-    icon: PrimeIcons.SHOPPING_CART,
-    component: VendeurVente,
-  },
-  {
-    path: '/vendeur/historique',
-    title: 'Historique des ventes',
-    icon: PrimeIcons.CALENDAR,
-    component: VendeurHistorique,
-  },
-  {
-    path: '/vendeur/stock',
-    title: 'Stock',
-    icon: PrimeIcons.BOX,
-    component: VendeurStock,
-  },
-];
-
-// 📌 Routes pour Admin Point de Vente
-const adminPVRoutes = [
-  {
-    path: '/adminpv/dashboard',
-    title: 'Dashboard',
-    icon: PrimeIcons.CHART_BAR,
-    component: AdminPVDashboard,
-  },
-  {
-    path: '/adminpv/vendeurs',
-    title: 'Vendeurs',
-    icon: PrimeIcons.USERS,
-    component: AdminPVVendeurs,
-  },
-  {
-    path: '/adminpv/stock',
-    title: 'Stock',
-    icon: PrimeIcons.BOX,
-    component: AdminPVStock,
-  },
-  {
-    path: '/adminpv/ventes',
-    title: 'Ventes',
-    icon: PrimeIcons.MONEY_BILL,
-    component: AdminPVVentes,
-  },
-  {
-    path: '/adminpv/commandes',
-    title: 'Commandes',
-    icon: PrimeIcons.TABLET,
-    component: AdminPVCommandes,
-  },
-];
-
-// 📌 Routes pour Admin Zone
-const adminZoneRoutes = [
-  {
-    path: '/adminzone/dashboard',
-    title: 'Dashboard',
-    icon: PrimeIcons.CHART_BAR,
-    component: AdminZoneDashboard,
-  },
-  {
-    path: '/adminzone/pointsvente',
-    title: 'Points de Vente',
-    icon: PrimeIcons.SHOPPING_BAG,
-    component: AdminZonePointsVente,
-  },
-  {
-    path: '/adminzone/adminspv',
-    title: 'Admins PV',
-    icon: PrimeIcons.USER,
-    component: AdminZoneAdminsPV,
-  },
-  {
-    path: '/adminzone/ventes',
-    title: 'Ventes',
-    icon: PrimeIcons.MONEY_BILL,
-    component: AdminZoneVentes,
-  },
-  {
-    path: '/adminzone/stock',
-    title: 'Stock',
-    icon: PrimeIcons.BOX,
-    component: AdminZoneStock,
-  },
-  {
-    path: '/adminzone/commandes',
-    title: 'Commandes',
-    icon: PrimeIcons.TABLET,
-    component: AdminZoneCommandes,
-  },
-];
-
-// 📌 Routes pour SuperAdmin
-const superAdminRoutes = [
-  {
-    path: '/superAdmin/Dashboard',
-    title: 'Dashboard',
-    icon: PrimeIcons.CHART_BAR,
-    component: SuperAdminDashboard,
   },
   {
     path: '/generals/zones',
     title: 'Zones',
     icon: PrimeIcons.GLOBE,
-    component: zone,
   },
   {
     path: '/generals/point-vente',
     title: 'Points de Vente',
     icon: PrimeIcons.SHOPPING_BAG,
-    component: Pointventes,
+  },
+  {
+    path: '/generals/categories',
+    title: 'Catégories',
+    icon: PrimeIcons.LIST,
   },
   {
     path: '/generals/produits',
     title: 'Produits',
-    icon: PrimeIcons.TAG, // Représente une étiquette de prix
-    component: zone,
+    icon: PrimeIcons.TAG,
   },
   {
     path: '/generals/operations',
-    title: 'Operations',
+    title: 'Opérations',
     icon: PrimeIcons.SYNC,
-    component: Operations,
+  },
+  {
+    path: '/generals/commandes',
+    title: 'Commandes',
+    icon: PrimeIcons.SHOPPING_CART,
   },
   {
     path: '/generals/rapports',
-    title: 'rapports',
+    title: 'Rapports',
     icon: PrimeIcons.FILE,
-    component: Rapport,
   },
   {
     path: '/generals/stock',
     title: 'Stock',
     icon: PrimeIcons.BOX,
-    component: SuperAdminStock,
   },
   {
     path: '/superAdmin/Users',
     title: 'Utilisateurs',
     icon: PrimeIcons.USERS,
-    component: SuperAdminUsers,
   },
   {
     path: '/superAdmin/Parametres',
     title: 'Paramètres',
     icon: PrimeIcons.COG,
-    component: SuperAdminParametres,
+  },
+  {
+    path: '/finances',
+    title: 'Finances',
+    icon: PrimeIcons.MONEY_BILL,
   },
 ];
-
-// 📌 Export des routes par rôle
-export { vendeurRoutes, adminPVRoutes, adminZoneRoutes, superAdminRoutes };

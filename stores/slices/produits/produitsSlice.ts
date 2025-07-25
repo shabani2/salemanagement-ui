@@ -19,7 +19,7 @@ interface ProduitState {
 
 // @ts-ignore
 const produitAdapter: EntityAdapter<Produit, string> = createEntityAdapter<Produit, string>({
-   //@ts-ignore
+  //@ts-ignore
   selectId: (produit) => produit?._id,
 });
 

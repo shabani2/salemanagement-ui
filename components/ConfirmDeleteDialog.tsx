@@ -34,13 +34,23 @@ export const ConfirmDeleteDialog = ({
       style={{ width: '30vw' }}
     >
       <div className="p-4 text-center">
-        <p className="text-lg font-medium text-gray-700">
+        <p className="text-lg font-medium  text-gray-5000">
           Voulez-vous vraiment supprimer{' '}
           <span className="font-bold text-red-600">{getItemLabel()}</span> ?
         </p>
         <div className="flex justify-center gap-3 mt-5">
-          <Button label="Annuler" className="p-button-secondary" onClick={onHide} />
-          <Button label="Supprimer" className="p-button-danger" onClick={() => onConfirm(item)} />
+          <Button
+            label="Annuler"
+            className="p-button-secondary"
+            onClick={onHide}
+            severity={undefined}
+          />
+          <Button
+            label="Supprimer"
+            className="p-button-danger"
+            onClick={() => onConfirm(item)}
+            severity={undefined}
+          />
         </div>
       </div>
     </Dialog>

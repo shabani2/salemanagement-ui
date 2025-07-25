@@ -21,6 +21,8 @@ export interface Organisation {
   devise: string;
   superAdmin: string;
   pays: string;
+  idNat: string;
+  numeroImpot: string;
   emailEntreprise: string;
   createdAt?: string;
   updatedAt?: string;
@@ -133,7 +135,7 @@ export const updateOrganisation = createAsyncThunk(
       if (hasFile) {
         const formData = new FormData();
         for (const key in data) {
-           //@ts-ignore
+          //@ts-ignore
           if (key === 'logo' && data.logo instanceof File) {
             formData.append('logo', data.logo);
           } else {
@@ -189,6 +191,7 @@ const organisationSlice = createSlice({
       .addCase(fetchOrganisations.fulfilled, (state, action) => {
         state.status = 'succeeded';
         organisationAdapter.setAll(state, action.payload);
+        state.currentOrganisation = action.payload[0] || null; // Set the first organisation as current if available
       })
       .addCase(fetchOrganisations.rejected, (state, action) => {
         state.status = 'failed';
@@ -211,6 +214,23 @@ const organisationSlice = createSlice({
       });
   },
 });
+
+export const fetchDefaultOrganisationLogo = createAsyncThunk(
+  'organisations/fetchDefaultOrganisationLogo',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get('/organisations/logo', {
+        headers: getAuthHeaders(),
+      });
+      return response.data.logoUrl; // ou response.data selon backend
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la récupération du logo');
+    }
+  }
+);
 
 export const organisationReducer = organisationSlice.reducer;
 

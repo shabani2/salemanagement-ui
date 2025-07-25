@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
 import {
@@ -19,6 +20,7 @@ interface RegionState {
 
 // ✅ Adapter pour gérer les régions
 const regionAdapter: EntityAdapter<Region, string> = createEntityAdapter<Region, string>({
+  //@ts-ignore
   selectId: (region) => region._id,
 });
 

@@ -1,45 +1,53 @@
+'use client';
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/rules-of-hooks */
-'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
 import { FileUpload } from 'primereact/fileupload';
 import { BreadCrumb } from 'primereact/breadcrumb';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import {
   addOrganisation,
-  selectCurrentOrganisation,
+  fetchOrganisations,
+  Organisation,
   updateOrganisation,
 } from '@/stores/slices/organisation/organisationSlice';
-import { AppDispatch, RootState } from '@/stores/store';
+import { AppDispatch } from '@/stores/store';
 import { Toast } from 'primereact/toast';
 import { User } from '@/Models/UserType';
 
-const page = () => {
+const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const org = useSelector((state: RootState) => selectCurrentOrganisation(state));
-  // @ts-ignore
-  const [user, setUser] = useState<User>(null);
+  const [org, setOrg] = useState<Organisation[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+  const toast = useRef(null);
+  const [uploadKey, setUploadKey] = useState(0);
+
+  const [formData, setFormData] = useState({
+    nom: '',
+    rccm: '',
+    contact: '',
+    siegeSocial: '',
+    devise: '',
+    pays: '',
+    idNat: 'non affecté',
+    numeroImpot: 'non affecté',
+    superAdmin: user?._id || '',
+    emailEntreprise: '',
+    logo: null as File | string | null,
+  });
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('user-agricap');
-      console.log('localStorage[user-agricap] =', storedUser);
-
-      if (storedUser) {
-        try {
-          const parsed = JSON.parse(storedUser);
-          console.log('parsed user:', parsed);
-          setUser(parsed);
-        } catch (e) {
-          console.error('Erreur de parsing localStorage:', e);
-        }
+    dispatch(fetchOrganisations()).then((data) => {
+      if (data) {
+        setOrg(data.payload);
       }
-    }
-  }, []);
+    });
+  }, [dispatch]);
+
   useEffect(() => {
     if (user?._id) {
       setFormData((prev) => ({
@@ -49,49 +57,25 @@ const page = () => {
     }
   }, [user]);
 
-  const [formData, setFormData] = useState({
-    nom: '',
-    rccm: '',
-    contact: '',
-    siegeSocial: '',
-    devise: '',
-    pays: '',
-    superAdmin: user?._id,
-    emailEntreprise: '',
-    logo: null as File | string | null,
-  });
-
-  const [uploadKey, setUploadKey] = useState(0);
-
   useEffect(() => {
-    if (org) {
-      setFormData(
-      // @ts-ignore
-        {
-        nom: org.nom,
-        rccm: org.rccm,
-        contact: org.contact,
-        siegeSocial: org.siegeSocial,
-        devise: org.devise,
-        pays: org.pays,
-        emailEntreprise: org.emailEntreprise,
-        logo: org.logo || null,
+    if (org.length > 0) {
+      const current = org[0];
+      console.log('Organisation actuelle : ', current);
+      setFormData({
+        nom: current.nom || '',
+        rccm: current.rccm || '',
+        contact: current.contact || '',
+        siegeSocial: current.siegeSocial || '',
+        devise: current.devise || '',
+        pays: current.pays || '',
+        emailEntreprise: current.emailEntreprise || '',
+        logo: current.logo || null,
+        superAdmin: current.superAdmin || '',
+        idNat: current.idNat || 'non affecté',
+        numeroImpot: current.numeroImpot || 'non affecté',
       });
     }
   }, [org]);
-
-  // const handleSubmit = async () => {
-  //   const data = new FormData();
-  //   Object.entries(formData).forEach(([key, value]) => {
-  //     if (value) data.append(key, value);
-  //   });
-
-  //   if (org?._id) {
-  //     dispatch(updateOrganisation({ id: org._id, data }));
-  //   } else {
-  //     dispatch(addOrganisation(data));
-  //   }
-  // };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -106,20 +90,38 @@ const page = () => {
     }
   };
 
-  const toast = useRef(null);
-
   const handleSubmit = async () => {
+    const rawData = {
+      ...formData,
+      superAdmin: (formData.superAdmin as any)?._id || formData.superAdmin,
+    };
+
     const data = new FormData();
-    Object.entries(formData).forEach(([key, value]) => {
-      if (value) data.append(key, value);
+    Object.entries(rawData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        data.append(key, value);
+      }
     });
 
+    // const data = new FormData();
+    // Object.entries(formData).forEach(([key, value]) => {
+    //   if (value) data.append(key, value);
+    // });
+    // const updatedData = {
+    //   ...data,
+    //   superAdmin: data.superAdmin?._id, // on extrait l’_id de l’objet superadmin
+    // };
     try {
-      if (org?._id) {
-        await dispatch(updateOrganisation({
-          // @ts-ignore
-          id: org._id, data
-        })).unwrap();
+      if (org[0]?._id) {
+        //console.log('console pour data : ',data)
+        await dispatch(
+          updateOrganisation({
+            // @ts-ignore
+            id: org[0]._id,
+            // @ts-ignore
+            data,
+          })
+        ).unwrap();
         // @ts-ignore
         toast.current?.show({
           severity: 'success',
@@ -149,7 +151,7 @@ const page = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 space-y-6">
       <Toast ref={toast} />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -157,14 +159,14 @@ const page = () => {
           model={[{ label: 'Accueil', url: '/' }, { label: 'Organisation' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
         />
-        <h2 className="text-2xl font-bold">Organisation</h2>
+        <h2 className="text-2xl font-bold text-gray-5000">Organisation</h2>
       </div>
 
       <div className="bg-white rounded-2xl shadow-lg p-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-6">
-            {['nom', 'rccm', 'contact', 'siegeSocial'].map((field) => (
-              <span className="p-float-label" key={field}>
+          <div className="space-y-6 p-3">
+            {['nom', 'rccm', 'contact', 'siegeSocial', 'idNat', 'numeroImpot'].map((field) => (
+              <span className="p-float-label p-3" key={field}>
                 <InputText
                   id={field}
                   name={field}
@@ -179,9 +181,9 @@ const page = () => {
             ))}
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 p-3">
             {['devise', 'pays', 'emailEntreprise'].map((field) => (
-              <span className="p-float-label" key={field}>
+              <span className="p-float-label p-3" key={field}>
                 <InputText
                   id={field}
                   name={field}
@@ -202,7 +204,7 @@ const page = () => {
                 accept="image/*"
                 maxFileSize={1000000}
                 chooseLabel="Choisir une image"
-                className="w-full max-w-xs"
+                className="w-full max-w-xs [&>.p-button]:!bg-green-700 [&>.p-button]:hover:bg-green-800 [&>.p-button]:text-white"
                 customUpload
                 uploadHandler={() => {}}
                 onSelect={handleFileSelect}
@@ -214,24 +216,24 @@ const page = () => {
                   alt="Aperçu sélectionné"
                   className="h-16 w-16 object-contain border rounded"
                 />
-              ) : org?.logo ? (
+              ) : org[0]?.logo ? (
                 <img
-                  src={`http://localhost:8000/${org.logo.replace('../', '')}`}
+                  src={`http://localhost:8000/${org[0].logo.replace('../', '')}`}
                   alt="Image actuelle"
                   className="h-16 w-16 object-contain border rounded"
                 />
               ) : (
-                <span className="text-sm text-gray-500">Aucune image</span>
+                <span className="text-sm text-gray-5000">Aucune image</span>
               )}
             </div>
           </div>
         </div>
 
-        <div className="mt-8 flex justify-end">
+        <div className="mt-8 flex justify-end p-3">
           <Button
-            label={org ? 'Mettre à jour' : 'Créer'}
-            icon={org ? 'pi pi-refresh' : 'pi pi-plus'}
-            className="w-full sm:w-auto"
+            label={org.length > 0 ? 'Mettre à jour' : 'Créer'}
+            icon={org.length > 0 ? 'pi pi-refresh' : 'pi pi-plus'}
+            className="w-full sm:w-auto !bg-green-700"
             onClick={handleSubmit}
           />
         </div>
@@ -240,4 +242,4 @@ const page = () => {
   );
 };
 
-export default page;
+export default Page;

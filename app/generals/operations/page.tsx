@@ -1,13 +1,12 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
- 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
- 
+
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BreadCrumb } from 'primereact/breadcrumb';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { InputText } from 'primereact/inputtext';
 import { Dropdown } from 'primereact/dropdown';
 import { Button } from 'primereact/button';
@@ -19,32 +18,46 @@ import { AppDispatch, RootState } from '@/stores/store';
 import { fetchCategories, selectAllCategories } from '@/stores/slices/produits/categoriesSlice';
 import { Produit } from '@/Models/produitsType';
 import { fetchProduits } from '@/stores/slices/produits/produitsSlice';
-import { MouvementStockModel } from '@/Models/mouvementStockType';
+import { MouvementStock } from '@/Models/mouvementStockType';
 import { createMouvementStock } from '@/stores/slices/mvtStock/mvtStock';
 import { PointVente } from '@/Models/pointVenteType';
-import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
-import { Controller } from 'react-hook-form';
+import {
+  fetchPointVentes,
+  fetchPointVentesByRegionId,
+  selectAllPointVentes,
+} from '@/stores/slices/pointvente/pointventeSlice';
 import { checkStock } from '@/stores/slices/stock/stockSlice';
 import { User } from '@/Models/UserType';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { downloadPdfFile, generateStockPdf } from '@/stores/slices/document/pdfGenerator';
 import { destinateur, organisation, serie } from '@/lib/Constants';
-
+import { getOptionsByRole } from '@/lib/utils';
+import { DataTable } from 'primereact/datatable';
+import { Accordion, AccordionTab } from 'primereact/accordion';
+import { Column } from 'primereact/column';
+import { Divider } from 'primereact/divider';
+import { fetchOrganisations, Organisation } from '@/stores/slices/organisation/organisationSlice';
+import { Region } from '@/Models/regionTypes';
+import { Badge } from 'primereact/badge';
+import { Card } from 'primereact/card';
+import { Tag } from 'primereact/tag';
 
 type FormValues = {
   type: string;
   depotCentral?: boolean;
-  pointVente?: {
-    _id: string;
-    nom: string;
-    adresse: string;
-    region: { _id: string; nom: string; ville: string };
-  };
+  pointVente?: PointVente;
+  user?: User;
+  region?: Region;
   produits: {
     categorie: string;
     produit: string;
     quantite: number;
   }[];
+  formulaire: {
+    categorie: string;
+    produit: string;
+    quantite: number;
+  };
   remise?: number;
   rabais?: number;
   montantRecu?: number;
@@ -54,23 +67,14 @@ type FormValues = {
   tauxDollar?: number;
 };
 
-const typeOptions = [
-  { label: 'Entrée', value: 'Entrée' },
-  { label: 'Sortie', value: 'Sortie' },
-  { label: 'Vente', value: 'Vente' },
-  { label: 'Livraison', value: 'Livraison' },
-  { label: 'Commande', value: 'commande' },
-];
-
 const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
   const categories = useSelector((state: RootState) => selectAllCategories(state));
   const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
   const [allProduits, setAllProduits] = useState<Produit[]>([]);
   const [produits, setProduits] = useState<Produit[]>([]);
-  const [stockRestant, setStockRestant] = useState<{ [index: number]: number }>({});
-  const [disableAdd, setDisableAdd] = useState(false);
-
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [org, setOrg] = useState<Organisation[]>([]);
   const [selectedType, setSelectedType] = useState<string>('');
 
   const toast = React.useRef<Toast>(null);
@@ -81,8 +85,18 @@ const Page = () => {
   const defaultValues: FormValues = {
     type: '',
     depotCentral: false,
-    pointVente: undefined,
-    produits: [{ categorie: '', produit: '', quantite: 0 }],
+    pointVente:
+      user && user?.role && !['SuperAdmin', 'AdminRegion'].includes(user?.role)
+        ? user.pointVente
+        : null,
+    region: undefined,
+    user: user || undefined,
+    produits: [],
+    formulaire: {
+      categorie: '',
+      produit: '',
+      quantite: 0,
+    },
     remise: 0,
     rabais: 0,
   };
@@ -97,69 +111,141 @@ const Page = () => {
     reset,
     setError,
     clearErrors,
-  } = useForm<FormValues>({
-    defaultValues,
-    mode: 'onChange',
-  });
+    getValues,
+    resetField,
+    unregister,
+    trigger,
+  } = useForm<FormValues>({ defaultValues, mode: 'onChange' });
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'produits' });
+  const { fields, append, remove, update } = useFieldArray({ control, name: 'produits' });
+
+  const watchProduits = watch('produits');
+  const selectedPointVente = watch('pointVente');
+  const type = watch('type');
+  const tauxFranc = watch('tauxFranc') || 0;
+  const tauxDollar = watch('tauxDollar') || 0;
+  const montantDollar = watch('montantDollar') || 0;
+  const montantRecu = watch('montantRecu') || 0;
+  const rabais = watch('rabais') || 0;
+  const remise = watch('remise') || 0;
+  const montantFranc = montantDollar * tauxFranc;
+
+  const totalMontant = (watch('produits') ?? []).reduce((acc, item) => {
+    const produit = allProduits.find((p) => p?._id === item.produit);
+    if (!produit) return acc;
+
+    const quantite = item.quantite ?? 0;
+    const prix = produit.prix ?? 0;
+    const marge = produit.marge ?? 0;
+    const tva = produit.tva ?? 0;
+
+    const montant = quantite * prix;
+    const margeVal = (montant * marge) / 100;
+    const netTopay = montant + margeVal;
+    const tvaValeur = (netTopay * tva) / 100;
+    const ttc = selectedType === 'Vente' ? netTopay + tvaValeur : montant;
+
+    return acc + ttc;
+  }, 0);
+
+  const valeurRabais = (totalMontant * rabais) / 100;
+  const valeurRemise = ((totalMontant - valeurRabais) * remise) / 100;
+  const netAPayer = totalMontant - valeurRabais - valeurRemise;
+  const reste = montantRecu - netAPayer;
+  const pointVente = watch('pointVente');
+
+  const rolesWithFixedPointVente = ['AdminRegion,AdminPointVente', 'Vendeur', 'Logisticien'];
+  const isPointVenteLocked = user && rolesWithFixedPointVente.includes(user?.role);
 
   useEffect(() => {
-    dispatch(fetchCategories());
-    dispatch(fetchProduits()).then((resp) => {
-      setAllProduits(resp.payload);
-      setProduits(resp.payload);
-    });
-    dispatch(fetchPointVentes());
-  }, [dispatch]);
+    if (isPointVenteLocked && user?.pointVente && pointsVente.length > 0) {
+      const matchedPV = pointsVente.find(
+        (pv) =>
+          pv?._id === (typeof user.pointVente === 'string' ? user.pointVente : user.pointVente?._id)
+      );
+      if (matchedPV && getValues('pointVente')?._id !== matchedPV?._id) {
+        setValue('pointVente', matchedPV);
+      }
+    }
 
-  useEffect(() => {
-    console.log('🔥 Form errors:', errors);
-  }, [errors]);
+    if (user?.region && getValues('region')?._id !== user.region._id) {
+      setValue('region', user.region);
+    }
 
-  const totalMontant = watch('produits').reduce((acc, item) => {
-    const produit = allProduits.find((p) => p._id === item.produit);
-    return acc + (produit ? produit.prix * item.quantite : 0);
-  }, 0);  
+    const savedTauxDollar = localStorage.getItem('tauxDollar');
+    if (savedTauxDollar) {
+      const parsed = parseFloat(savedTauxDollar);
+      if (getValues('tauxDollar') !== parsed) setValue('tauxDollar', parsed);
+    }
+
+    const savedTauxFranc = localStorage.getItem('tauxFranc');
+    if (savedTauxFranc) {
+      const parsed = parseFloat(savedTauxFranc);
+      if (getValues('tauxFranc') !== parsed) setValue('tauxFranc', parsed);
+    }
+  }, [user?.region?._id, user]);
+
+  const validateStock = async (value: number) => {
+    const produitId = watch('formulaire.produit');
+    if (!produitId || !value || value <= 0) return 'Quantité invalide';
+    if (type === 'Entrée' || type === 'Commande') return true;
+
+    const result = await dispatch(
+      checkStock({
+        type,
+        produitId,
+        quantite: value,
+        pointVenteId: selectedPointVente?._id,
+      })
+    ).unwrap();
+
+    if (!result.suffisant || result.quantiteDisponible < value) {
+      return `Stock disponible : ${result.quantiteDisponible}`;
+    }
+    return true;
+  };
 
   const onSubmit = async (data: FormValues) => {
+    if (!data.produits || data.produits.length === 0) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Veuillez ajouter au moins un produit avant de soumettre.',
+        life: 4000,
+      });
+      return;
+    }
+
     try {
       const mouvements = data.produits.map((item) => {
-        const produitObj = allProduits.find((p) => p._id === item.produit);
+        const produitObj = allProduits.find((p) => p?._id === item.produit);
         if (!produitObj) throw new Error('Produit introuvable');
 
-        const prix = ['Entrée', 'Livraison'].includes(data.type)
+        const prix = ['Entrée', 'Livraison', 'Commande', 'Sortie'].includes(data.type)
           ? produitObj.prix
           : produitObj.prixVente;
 
         return {
-          produit: produitObj._id,
+          // Remplacez produitObj par son ID
+          produit: produitObj?._id, // ⬅️ Chaîne ID au lieu de l'objet complet
+
           produitNom: produitObj.nom,
           quantite: item.quantite,
           montant: prix * item.quantite,
           type: data.type,
           depotCentral: data.depotCentral ?? false,
-          pointVente: data.pointVente,
-          statut: data.type === 'Entrée',
+
+          // Remplacez data.pointVente par son ID si c'est un objet
+          pointVente: data.pointVente?._id || data.pointVente, // ⬅️ ID string
+
+          region: data.region?._id || data.region, // ⬅️ Même traitement pour la région
+          user: data?.user?._id || data.user, // ⬅️ Gère les deux cas (objet ou ID)
+          statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type),
         };
       });
 
       const results = await Promise.allSettled(
-        mouvements.map((m) =>
-          dispatch(
-            createMouvementStock({
-              //@ts-ignore
-              produit: m.produit,
-              quantite: m.quantite,
-              montant: m.montant,  //@ts-ignore
-              type: m.type,
-              depotCentral: m.depotCentral,
-              pointVente: m.pointVente,
-                //@ts-ignore
-              statut: m.statut,
-            })
-          )
-        )
+        mouvements.map((m) => dispatch(createMouvementStock(m as any)))
       );
 
       results.forEach((res, i) => {
@@ -168,14 +254,13 @@ const Page = () => {
           toast.current?.show({
             severity: 'error',
             summary: `Erreur: ${produitNom}`,
-            detail: res.reason || 'Échec de l’enregistrement',
-            life: 5000,
+            detail: 'Échec de l’enregistrement',
+            life: 7000,
           });
         }
       });
 
       const allOk = results.every((res) => res.status === 'fulfilled');
-
       if (allOk) {
         toast.current?.show({
           severity: 'success',
@@ -184,7 +269,6 @@ const Page = () => {
           life: 3000,
         });
 
-        // ✅ Ouverture du Dialog pour PDF
         confirmDialog({
           message: 'Voulez-vous télécharger le document PDF ?',
           header: 'Téléchargement',
@@ -194,7 +278,7 @@ const Page = () => {
           accept: async () => {
             const result = await dispatch(
               generateStockPdf({
-                organisation,
+                organisation: org[0] || organisation,
                 user,
                 mouvements,
                 type: data.type,
@@ -202,7 +286,6 @@ const Page = () => {
                 serie,
               })
             );
-
             if (generateStockPdf.fulfilled.match(result)) {
               downloadPdfFile(result.payload, `${data.type}-${serie}.pdf`);
             } else {
@@ -215,468 +298,625 @@ const Page = () => {
             }
           },
         });
-
         reset(defaultValues);
       }
     } catch (err) {
       toast.current?.show({
         severity: 'error',
         summary: 'Erreur critique',
-        detail: 'Une erreur globale est survenue',
+        detail: 'Échec de l’opération',
         life: 4000,
       });
     }
   };
 
-  // checking stock management
-
-  const watchProduits = watch('produits');
-  const selectedPointVente = watch('pointVente');
+  const filteredTypeOptions = useMemo(() => user && getOptionsByRole(user?.role), [user]);
+  const selectedCatId = watch('formulaire.categorie');
+  const filteredProduits = allProduits.filter((p) => (p.categorie as any)?._id === selectedCatId);
 
   useEffect(() => {
-    if (selectedType === 'Entrée') return; // 🚫 Ne pas vérifier le stock en cas d'entrée
-
-    watchProduits.forEach((prod, index) => {
-      if (!prod.produit || !prod.quantite || prod.quantite <= 0) return;
-
-      dispatch(
-        checkStock({
-          type: selectedType,
-          produitId: prod.produit,
-          quantite: Number(prod.quantite),
-          pointVenteId: selectedPointVente?._id,
-        })
-      ).then((res) => {
-        const result = res.payload;
-        if (!result?.suffisant && result.quantiteDisponible < prod.quantite) {
-          setError(`produits.${index}.quantite`, {
-            type: 'manual',
-            message: `Stock disponible : ${result.quantiteDisponible} `,
-          });
-        } else {
-          clearErrors(`produits.${index}.quantite`);
-        }
-      });
+    dispatch(fetchOrganisations()).then((data) => {
+      if (data) setOrg(data.payload);
     });
-  }, [watchProduits, selectedType, selectedPointVente]);
-  //@ts-ignore
-  const validateStock = async (value, index) => {
-    const produitId = watch(`produits.${index}.produit`);
-    const type = watch('type');
-
-    if (!produitId || !value || value <= 0) {
-      setDisableAdd(true);
-      return 'Quantité invalide';
-    }
-
-    // ✅ Si Entrée, on ne valide pas le stock
-    if (type === 'Entrée') {
-      setDisableAdd(false);
-      return true;
-    }
-
-    const result = await dispatch(
-      checkStock({
-        type,
-        produitId,
-        quantite: Number(value),
-        pointVenteId: type !== 'Entrée' ? selectedPointVente?._id : undefined,
-      })
-    ).unwrap();
-
-    const isValid = result.suffisant && result.quantiteDisponible >= value;
-
-    if (!isValid) {
-      setDisableAdd(true);   //@ts-ignore
-      setValue(`produits.${index}.quantite`, undefined);
+    dispatch(fetchCategories()).then((resp) => {
+      console.log('donnees from api : ', resp.payload);
+    });
+    dispatch(fetchProduits()).then((resp) => {
+      const produits = Array.isArray(resp.payload) ? resp.payload : [];
+      setAllProduits(produits);
+      setProduits(produits);
+    });
+    if (user && user?.role === 'SuperAdmin') {
+      dispatch(fetchPointVentes());
     } else {
-      setDisableAdd(false);
+      dispatch(fetchPointVentesByRegionId(user?.region?._id));
     }
+  }, [user?.region?._id, dispatch, user?.role, user?._id]);
 
-    return isValid ? true : `Stock disponible : ${result.quantiteDisponible}`;
-  };
-
-  const tauxFranc = watch('tauxFranc') || 0;
-  const tauxDollar = watch('tauxDollar') || 0;
-  const montantDollar = watch('montantDollar') || 0;
-  const montantRecu = watch('montantRecu') || 0;
-  const rabais = watch('rabais') || 0;
-  const remise = watch('remise') || 0;
-  const type = watch('type');
-  const montantFranc = montantDollar * tauxFranc;
-  const valeurRabais = (totalMontant * rabais) / 100;
-  const valeurRemise = ((totalMontant - valeurRabais) * remise) / 100;
-  const netAPayer = totalMontant - valeurRabais - valeurRemise;
-  const reste = montantRecu - netAPayer;
-  const pointVente = watch('pointVente');
-
-  const getQuantiteValidationRules = (type: string, index: number) => ({
-    required: 'Quantité requise',
-    min: { value: 1, message: 'Minimum 1' },
-    validate: async (value: any) => {
-      if (type === 'Entrée') return true;
-      return await validateStock(value, index);
-    },
-  });
-
-  useEffect(() => {
-    const savedTauxDollar = localStorage.getItem('tauxDollar');
-    const savedTauxFranc = localStorage.getItem('tauxFranc');
-    if (savedTauxDollar) setValue('tauxDollar', parseFloat(savedTauxDollar));
-    if (savedTauxFranc) setValue('tauxFranc', parseFloat(savedTauxFranc));
-  }, [setValue]);
-
+  console.log('categories got :', categories);
   return (
-    <div className="bg-gray-100 min-h-screen p-4">
+    <div className="min-h-screen p-4 text-xs">
       <Toast ref={toast} />
       <div className="flex items-center justify-between mb-6">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des opérations' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Opérations' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Gestion des opérations</h2>
+        <h1 className="font-bold text-gray-500 text-[14px]">Gestion des opérations</h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-4 rounded-lg shadow-md">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="w-full flex items-center gap-2">
-              <Controller
-                name="type"
-                control={control}
-                rules={{ required: 'Type est requis' }}
-                render={({ field }) => (
-                  <Dropdown
-                    {...field}
-                    options={typeOptions}
-                    onChange={(e) => {
-                      field.onChange(e.value);
-                      setSelectedType(e.value);
-                    }}
-                    placeholder="Sélectionner un type"
-                    className={classNames('w-full', { 'p-invalid': !!errors.type })}
+      <div className="w-full mx-auto px-4 py-2 bg-white rounded-lg shadow-md">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          <div className="flex flex-col md:flex-row gap-0">
+            {/* Formulaire: 2/12 */}
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="w-full md:w-2/12 p-3 bg-gradient-to-br from-blue-50 to-indigo-50"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <i className="pi pi-pencil text-blue-600 text-xl"></i>
+                <h2 className="text-xl font-bold text-gray-800">Nouvelle Operation</h2>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="font-medium mb-2 text-gray-700 flex items-center gap-2">
+                    <i className="pi pi-sitemap text-blue-500"></i>
+                    Type d&apos;opération
+                  </label>
+                  <Controller
+                    name="type"
+                    control={control}
+                    rules={{ required: 'Type est requis' }}
+                    render={({ field }) => (
+                      <Dropdown
+                        {...field}
+                        options={filteredTypeOptions}
+                        onChange={(e) => {
+                          field.onChange(e.value);
+                          setSelectedType(e.value);
+                        }}
+                        placeholder="Sélectionner une operation"
+                        className={classNames('w-full border-gray-300 rounded-xl', {
+                          'p-invalid border-red-500': !!errors.type,
+                        })}
+                      />
+                    )}
                   />
-                )}
-              />
-              {errors.type && <small className="text-red-500">{errors.type.message}</small>}
-            </div>
+                  {errors.type && (
+                    <small className="text-red-600 mt-1 flex items-center gap-1">
+                      <i className="pi pi-exclamation-circle"></i>
+                      {errors.type.message}
+                    </small>
+                  )}
+                </div>
 
-            {watch('type') === 'Entrée' && (
-              <div>
-                <label>
-                  <input
-                    type="checkbox"
-                    {...register('depotCentral', {
-                      validate: (value) =>
-                        watch('type') !== 'Entrée' ||
-                        value === true ||
-                        'Vous devez cocher "Dépôt central"',
-                    })}
-                    disabled={!watch('type')}
-                  />{' '}
-                  Dépôt central
-                </label>
-                {errors.depotCentral && (
-                  <small className="text-red-500">{errors.depotCentral.message}</small>
-                )}
-              </div>
-            )}
-
-            {watch('type') !== 'Entrée' && (
-              <div>
-                <label>Point de vente</label>
-                <Dropdown
-                  value={watch('pointVente')}
-                  options={pointsVente}
-                  optionLabel="nom"
-                  onChange={(e) => setValue('pointVente', e.value)}
-                  placeholder="Sélectionner un point de vente"
-                  className="w-full"
-                  disabled={!watch('type')}
-                />
-                {errors.pointVente && <small className="text-red-500">Champ requis</small>}
-              </div>
-            )}
-
-            {fields.map((field, index) => {
-              const selectedCatId = watch(`produits.${index}.categorie`);
-              const selectedProduitId = watch(`produits.${index}.produit`);   //@ts-ignore
-              const filteredProduits = allProduits.filter((p) => p.categorie._id === selectedCatId);
-
-              return (
-                <div key={field.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                  <div>
-                    <label>Catégorie</label>
-                    <Dropdown
-                      value={selectedCatId}
-                      options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
-                      onChange={(e) => setValue(`produits.${index}.categorie`, e.value)}
-                      placeholder="Choisir une catégorie"
-                      className="w-full"
-                      disabled={!watch('type')}
-                    />
+                {watch('type') === 'Entrée' && (
+                  <div className="mt-4">
+                    {user && user?.role === 'SuperAdmin' ? (
+                      <div className="bg-blue-50 p-4 rounded-xl border-l-4 border-blue-500">
+                        <label className="flex items-center gap-2 font-medium text-gray-800">
+                          <input
+                            type="checkbox"
+                            {...register('depotCentral')}
+                            disabled={!watch('type')}
+                            className="h-4 w-4 text-blue-600 rounded"
+                          />
+                          <i className="pi pi-building text-blue-600"></i>
+                          Dépôt central
+                        </label>
+                        {errors.depotCentral && (
+                          <small className="text-red-600 mt-1 flex items-center gap-1">
+                            <i className="pi pi-exclamation-circle"></i>
+                            {errors.depotCentral.message}
+                          </small>
+                        )}
+                      </div>
+                    ) : user && user?.role === 'AdminRegion' ? (
+                      <div className="flex items-center gap-3 font-bold text-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border-l-4 border-blue-500">
+                        <i className="pi pi-building text-blue-600 text-xl"></i>
+                        <div>
+                          <div className="font-bold">Dépôt régional</div>
+                          <div className="text-sm font-normal">
+                            {user?.region?.nom || 'Région non définie'}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                  <div>
-                    <label>Produit</label>
-                    <Dropdown
-                      value={selectedProduitId}
-                      options={filteredProduits.map((p) => ({ label: p.nom, value: p._id }))}
-                      onChange={(e) => setValue(`produits.${index}.produit`, e.value)}
-                      placeholder="Choisir un produit"
-                      className="w-full"
-                      disabled={!watch('type')}
-                    />
-                  </div>
-                  <div>
-                    <label>Quantité</label>
-                    <InputText
-                      type="number"
-                      {...register(
-                        `produits.${index}.quantite`,
-                        getQuantiteValidationRules(watch('type'), index)
-                      )}
-                      onBlur={async () => {
-                        if (watch('type') !== 'Entrée') {
-                          const value = watch(`produits.${index}.quantite`);
-                          await validateStock(value, index);
-                        }
-                      }}
-                      className="w-full"
-                      disabled={!watch('type')}
-                    />
+                )}
 
-                    {errors.produits?.[index]?.quantite && (
-                      <small className="text-red-500">
-                        {errors.produits[index].quantite.message || 'Quantité requise'}
+                {watch('type') && watch('type') !== 'Entrée' && (
+                  <div className="mt-4">
+                    <label className="font-medium mb-2 text-gray-700 flex items-center gap-2">
+                      <i className="pi pi-store text-blue-500"></i>
+                      Point de vente
+                    </label>
+                    {user && ['SuperAdmin', 'AdminRegion'].includes(user?.role) ? (
+                      // Mode sélection libre pour SuperAdmin et AdminRegion
+                      <Controller
+                        name="pointVente"
+                        control={control}
+                        rules={{ required: 'Point de vente est requis' }}
+                        render={({ field }) => (
+                          <Dropdown
+                            {...field}
+                            value={field.value}
+                            options={pointsVente}
+                            optionLabel="nom"
+                            onChange={(e) => field.onChange(e.value)}
+                            placeholder="Sélectionner un point de vente"
+                            className="w-full border-gray-300 rounded-xl"
+                            disabled={!watch('type') || isPointVenteLocked}
+                          />
+                        )}
+                      />
+                    ) : (
+                      // Mode verrouillé avec valeur unique pour les autres rôles
+                      <Controller
+                        name="pointVente"
+                        control={control}
+                        render={({ field }) => (
+                          <Dropdown
+                            {...field}
+                            value={user?.pointVente}
+                            options={user?.pointVente ? [user.pointVente] : []}
+                            optionLabel="nom"
+                            placeholder="Votre point de vente"
+                            className="w-full border-gray-300 rounded-xl"
+                            disabled={true}
+                            onChange={(e) => field.onChange(e.value)}
+                          />
+                        )}
+                      />
+                    )}
+                    {errors.pointVente && (
+                      <small className="text-red-600 mt-1 flex items-center gap-1">
+                        <i className="pi pi-exclamation-circle"></i>
+                        {errors.pointVente.message || 'Champ requis'}
                       </small>
                     )}
                   </div>
-                  <Button
-                    icon="pi pi-trash"
-                    severity="danger"
-                    text
-                    onClick={() => remove(index)}
-                    disabled={!watch('type')}
-                  />
+                )}
+
+                <div className="space-y-6 mt-6">
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
+                        <i className="pi pi-tag text-blue-500"></i>
+                        Catégorie
+                      </label>
+                      <Controller
+                        name="formulaire.categorie"
+                        control={control}
+                        render={({ field }) => (
+                          <Dropdown
+                            {...field}
+                            options={categories.map((cat) => ({ label: cat.nom, value: cat?._id }))}
+                            onChange={(e) => field.onChange(e.value)}
+                            placeholder="Choisir une catégorie"
+                            className="w-full border-gray-300 rounded-xl"
+                            disabled={!watch('type')}
+                          />
+                        )}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
+                        <i className="pi pi-box text-blue-500"></i>
+                        Produit
+                      </label>
+                      <Controller
+                        name="formulaire.produit"
+                        control={control}
+                        render={({ field }) => (
+                          <Dropdown
+                            {...field}
+                            options={filteredProduits.map((p) => ({ label: p.nom, value: p?._id }))}
+                            placeholder="Choisir un produit"
+                            className="w-full border-gray-300 rounded-xl"
+                            onChange={(e) => field.onChange(e.value)}
+                          />
+                        )}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
+                        <i className="pi pi-calculator text-blue-500"></i>
+                        Quantité
+                      </label>
+                      <Controller
+                        name="formulaire.quantite"
+                        control={control}
+                        render={({ field }) => (
+                          <InputText
+                            type="number"
+                            value={field.value !== undefined ? String(field.value) : ''}
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                            className={`w-full border-gray-300 rounded-xl ${errors.formulaire?.quantite ? 'p-invalid border-red-500' : ''}`}
+                            placeholder="Entrez la quantité"
+                          />
+                        )}
+                      />
+                      {errors.formulaire?.quantite && (
+                        <small className="text-red-600 mt-1 flex items-center gap-1">
+                          <i className="pi pi-exclamation-circle"></i>
+                          {errors.formulaire.quantite.message || 'Quantité requise'}
+                        </small>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex mt-4">
+                    <Button
+                      type="button"
+                      className={`w-full p-3 rounded-xl font-bold transition-all duration-300 ${
+                        editingIndex !== null
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600'
+                          : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                      }`}
+                      icon={editingIndex !== null ? 'pi pi-check' : 'pi pi-plus'}
+                      label={editingIndex !== null ? 'Modifier Produit' : 'Ajouter Produit'}
+                      onClick={async () => {
+                        const isValid = await trigger([
+                          'formulaire.categorie',
+                          'formulaire.produit',
+                          'formulaire.quantite',
+                        ]);
+                        if (!isValid) return;
+
+                        const quantite = getValues('formulaire.quantite');
+                        const stockValidation = await validateStock(quantite);
+                        if (stockValidation !== true) {
+                          setError('formulaire.quantite', {
+                            type: 'manual',
+                            message: stockValidation,
+                          });
+                          return;
+                        }
+
+                        const formData = getValues('formulaire');
+                        if (editingIndex !== null) {
+                          update(editingIndex, formData);
+                          setEditingIndex(null);
+                        } else {
+                          append(formData);
+                        }
+                        resetField('formulaire');
+                      }}
+                    />
+                  </div>
                 </div>
-              );
-            })}
+              </div>
+            </form>
 
-            <Button
-              type="button"
-              icon="pi pi-plus"
-              label="Ajouter un produit"
-              onClick={() => append({ categorie: '', produit: '', quantite: 0 })}
-              disabled={!watch('type') || disableAdd}
-            />
-          </form>
-        </div>
+            <Divider layout="vertical" className="hidden md:block h-auto bg-gray-200" />
 
-        {/* zone de recapitulation */}
-        <div className="bg-white p-6 rounded-2xl shadow-xl space-y-6">
-          <h3 className="text-xl font-bold text-gray-800">Récapitulatif</h3>
+            {/* Panier de produits */}
+            <div className="w-full md:w-8/12 ">
+              <Card className="h-full border-0 shadow-none">
+                <div className="flex items-center gap-2 mb-3 ml-3">
+                  <i className="pi pi-list text-indigo-600 text-xl"></i>
+                  <h2 className="text-xl font-bold text-gray-800">
+                    Detail des operations selectionnees
+                  </h2>
+                </div>
 
-          {(() => {
-            const montantFranc = montantDollar * tauxFranc;
-            const produits = watch('produits') || [];
-            const totalMontant = produits.reduce((acc, item) => {
-              const produit = allProduits.find((p) => p._id === item.produit);
-              const prix = produit
-                ? ['Livraison', 'Entrée'].includes(type)
-                  ? produit.prix
-                  : produit.prixVente
-                : 0;
-              return acc + item.quantite * prix;
-            }, 0);
-
-            const valeurRabais = (totalMontant * rabais) / 100;
-            const valeurRemise = ((totalMontant - valeurRabais) * remise) / 100;
-            const netAPayer = totalMontant - valeurRabais - valeurRemise;
-            const reste = montantRecu - netAPayer;
-
-            return (
-              <>
-                {type !== 'Entrée' && (
-                  <>
-                    {/* Ligne 1: Taux et conversion */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                {type && type !== 'Entrée' && pointVente && (
+                  <div className="border border-gray-200 p-5 rounded-2xl bg-gradient-to-r from-gray-50 to-blue-50 shadow-sm m-3">
+                    <div className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <i className="pi pi-map-marker text-blue-500"></i>
+                      Point de vente sélectionné
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Taux du jour en dollar
-                        </label>
-                        <InputText
-                          
-                          type="number"
-                            //@ts-ignore
-                          value={watch('tauxDollar')}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            setValue('tauxDollar', value);
-                            localStorage.setItem('tauxDollar', value.toString());
-                          }}
-                          className="w-full"
-                        />
+                        <div className="text-sm text-gray-500">Nom</div>
+                        <div className="font-medium">{pointVente.nom}</div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Taux en franc
-                        </label>
-                        <InputText
-                          type="number"
-                          //@ts-ignore
-                          value={watch('tauxFranc')}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            setValue('tauxFranc', value);
-                            localStorage.setItem('tauxFranc', value.toString());
-                          }}
-                          className="w-full"
-                        />
+                        <div className="text-sm text-gray-500">Adresse</div>
+                        <div className="font-medium">{pointVente.adresse}</div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Montant en dollar
-                        </label>
-                        <InputText
-                          type="number"
-                          {...register('montantDollar')}
-                          className="w-full"
-                          onBlur={() => setValue('montantFranc', montantFranc)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') setValue('montantFranc', montantFranc);
-                          }}
-                        />
+                        <div className="text-sm text-gray-500">Région</div>
+                        <div className="font-medium">
+                          {typeof pointVente.region === 'object' && pointVente.region !== null
+                            ? pointVente.region.nom
+                            : pointVente.region}
+                        </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Montant en francs
-                        </label>
-                        <div className="w-full border rounded-md p-2 bg-gray-100 text-gray-800">
-                          {montantFranc} FC
+                        <div className="text-sm text-gray-500">Ville</div>
+                        <div className="font-medium">
+                          {typeof pointVente.region === 'object' && pointVente.region !== null
+                            ? pointVente.region.ville
+                            : ''}
                         </div>
                       </div>
                     </div>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="bg-primary-50 p-2 rounded-lg">
+                    <i className="pi pi-shopping-cart text-primary text-xl"></i>
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-800">Panier</h2>
+                  <Badge value={watchProduits?.length || 0} className="ml-2 bg-primary"></Badge>
+                </div>
 
-                    {/* Ligne Infos point de vente (Livraison) */}
-                    {type === 'Livraison' && pointVente && (
-                      <div className="border p-3 rounded-lg bg-gray-50 text-gray-700">
-                        <div className="font-semibold">Point de vente sélectionné :</div>
-                        <div>Nom : {pointVente.nom}</div>
-                        <div>Adresse : {pointVente.adresse}</div>
-                        <div>Région : {pointVente.region?.nom}</div>
-                        <div>Ville : {pointVente.region?.ville}</div>
+                {watchProduits?.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="overflow-auto max-h-[400px]">
+                      <table className="w-full text-sm text-left text-gray-500">
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3">Produit</th>
+                            <th className="px-4 py-3">Quantité</th>
+                            <th className="px-4 py-3">Prix</th>
+                            <th className="px-4 py-3">Total</th>
+                            <th className="px-4 py-3"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {watchProduits.map((item, index) => {
+                            const produit = allProduits.find((p) => p?._id === item.produit);
+                            return (
+                              <tr key={index} className="bg-white border-b hover:bg-gray-50">
+                                <td className="px-4 py-3 font-medium text-gray-900">
+                                  {produit?.nom || 'Produit inconnu'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Tag value={item.quantite} severity="info" rounded />
+                                </td>
+                                <td className="px-4 py-3">{produit?.prix?.toFixed(2)} FC</td>
+                                <td className="px-4 py-3 font-semibold">
+                                  {(item.quantite * (produit?.prix || 0)).toFixed(2)} FC
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex gap-2">
+                                    <Button
+                                      icon="pi pi-pencil"
+                                      className="p-button-text p-button-sm"
+                                      onClick={() => {
+                                        setValue('formulaire', item);
+                                        setEditingIndex(index);
+                                      }}
+                                      tooltip="Modifier"
+                                      tooltipOptions={{ position: 'top' }}
+                                    />
+                                    <Button
+                                      icon="pi pi-trash"
+                                      className="p-button-text p-button-danger p-button-sm"
+                                      onClick={() => remove(index)}
+                                      tooltip="Supprimer"
+                                      tooltipOptions={{ position: 'top' }}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-gray-600">Sous-total:</span>
+                        <span className="font-semibold">{totalMontant.toFixed(2)} FC</span>
                       </div>
-                    )}
+
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-gray-600">Rabais ({rabais}%):</span>
+                        <span className="font-semibold text-red-500">
+                          -{valeurRabais.toFixed(2)} FC
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-gray-600">Remise ({remise}%):</span>
+                        <span className="font-semibold text-red-500">
+                          -{valeurRemise.toFixed(2)} FC
+                        </span>
+                      </div>
+
+                      <Divider className="my-2" />
+
+                      <div className="flex justify-between items-center">
+                        <span className="text-lg font-bold text-gray-800">Total:</span>
+                        <span className="text-xl font-bold text-primary">
+                          {netAPayer.toFixed(2)} FC
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                    <i className="pi pi-shopping-cart text-gray-400 text-4xl mb-3"></i>
+                    <p className="text-gray-500 mb-4">Votre panier est vide</p>
+                    <p className="text-gray-400 text-center max-w-xs">
+                      Ajoutez des produits à partir du formulaire à gauche pour commencer une
+                      opération
+                    </p>
+                  </div>
+                )}
+                {type && !['Livraison', 'Entrée', 'Commande'].includes(type) && (
+                  <>
+                    <div className="text-right text-xl font-bold text-green-600 bg-green-50 p-4 rounded-xl">
+                      {selectedType === 'Vente' &&
+                        `Montant à payer: ${totalMontant.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC`}
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="w-1/2">
+                        <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <i className="pi pi-money-bill text-green-500"></i>
+                          Montant reçu en franc
+                        </label>
+                        <InputText
+                          type="number"
+                          {...register('montantRecu')}
+                          className="w-full border-gray-300 rounded-xl"
+                        />
+                      </div>
+                      <div className="w-1/2">
+                        <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <i className="pi pi-wallet text-green-500"></i>
+                          Reste / à retourner
+                        </label>
+                        <div className="w-full border border-gray-300 rounded-xl p-3 text-right text-white bg-gradient-to-r from-gray-700 to-gray-800 font-bold">
+                          {reste.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC
+                        </div>
+                      </div>
+                    </div>
                   </>
                 )}
 
-                {/* Détails produits (visible aussi pour Entrée) */}
-                <div>
-                  <h4 className="font-semibold text-gray-700">Détails par produit</h4>
-                  <ul className="space-y-2">
-                    {produits.map((item, idx) => {
-                      const produit = allProduits.find((p) => p._id === item.produit);
-                      const prix = produit
-                        ? ['Livraison', 'Entrée'].includes(type)
-                          ? produit.prix
-                          : produit.prixVente
-                        : 0;
-                      if (!produit) return null;
-                      return (
-                        <li key={idx} className="flex justify-between text-gray-700">
-                          <span>{produit.nom}</span>
-                          <span>
-                            {item.quantite} x {prix} = {item.quantite * prix} FC
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-
-                {/* Ligne 3: Total */}
-                <div className="text-right text-lg font-semibold text-gray-800">
-                  Total : {totalMontant} FC
-                </div>
-
-                {/* Ligne 4: Rabais et remise (caché si Livraison ou Entrée) */}
-                {type !== 'Livraison' && type !== 'Entrée' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="grid grid-cols-2 gap-2 items-end">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Rabais (%)
-                        </label>
-                        <InputText type="number" {...register('rabais')} className="w-full" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Valeur rabais
-                        </label>
-                        <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
-                          {valeurRabais} FC
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 items-end">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Remise (%)
-                        </label>
-                        <InputText type="number" {...register('remise')} className="w-full" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Valeur remise
-                        </label>
-                        <div className="w-full border rounded-md p-2 bg-gray-100 text-right">
-                          {valeurRemise} FC
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Ligne 5: Net à payer (caché si Livraison ou Entrée) */}
-                {type !== 'Livraison' && type !== 'Entrée' && (
-                  <div className="text-right text-lg font-bold text-green-700">
-                    Net à payer : {netAPayer} FC
-                  </div>
-                )}
-
-                {/* Ligne 6: Paiement (caché si Livraison ou Entrée) */}
-                {type !== 'Livraison' && type !== 'Entrée' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Montant reçu
-                      </label>
-                      <InputText type="number" {...register('montantRecu')} className="w-full" />
-                    </div>
-                    <div className="text-right">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Reste / à retourner
-                      </label>
-                      <div className="w-full border rounded-md p-2 bg-gray-100">{reste} FC</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Bouton de validation toujours visible */}
-                <div className="flex justify-end pt-4 border-t mt-4">
+                <div className="flex justify-end pt-4 border-t border-gray-200 mt-4">
                   <Button
-                    className="mt-4"
+                    className="mt-4 py-3 px-6 rounded-xl font-bold bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 transition-all duration-300"
                     label="Valider l'opération"
                     icon="pi pi-check"
                     onClick={handleSubmit(onSubmit)}
                   />
                 </div>
-              </>
-            );
-          })()}
+              </Card>
+            </div>
+
+            <Divider layout="vertical" className="hidden md:block h-auto bg-gray-200" />
+
+            {/* Bloc taux/remise: 3/12 */}
+            <div className="w-full md:w-2/12 p-2 bg-gradient-to-br from-gray-50 to-indigo-50">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="bg-primary-50 p-2 rounded-lg">
+                  <i className="pi pi-wallet text-primary text-xl"></i>
+                </div>
+                <h2 className="text-xl font-semibold text-gray-800">Paiement</h2>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className=" font-medium mb-2 text-gray-700 flex items-center gap-2">
+                    <i className="pi pi-dollar text-indigo-500"></i>
+                    Taux dollar
+                  </label>
+                  <InputText
+                    type="number"
+                    value={watch('tauxDollar') !== undefined ? String(watch('tauxDollar')) : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value !== '') {
+                        setValue('tauxDollar', Number(value));
+                        localStorage.setItem('tauxDollar', value);
+                      }
+                    }}
+                    className="w-full border-gray-300 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-medium mb-2 text-gray-700 flex items-center gap-2">
+                    <i className="pi pi-euro text-indigo-500"></i>
+                    Taux en franc
+                  </label>
+                  <InputText
+                    type="number"
+                    value={watch('tauxFranc') !== undefined ? String(watch('tauxFranc')) : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value !== '') {
+                        setValue('tauxFranc', Number(value));
+                        localStorage.setItem('tauxFranc', value);
+                      }
+                    }}
+                    className="w-full border-gray-300 rounded-xl"
+                  />
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="w-1/2">
+                    <label className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <i className="pi pi-dollar text-indigo-500"></i>
+                      Montant reçu en $
+                    </label>
+                    <InputText
+                      type="number"
+                      {...register('montantDollar')}
+                      className="w-full border-gray-300 rounded-xl"
+                    />
+                  </div>
+                  <div className="w-1/2">
+                    <label className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <i className="pi pi-sync text-indigo-500"></i>
+                      Montant converti
+                    </label>
+                    <div className="w-full border border-gray-300 rounded-xl p-3 text-center text-white bg-gradient-to-r from-gray-700 to-gray-800 font-bold">
+                      {montantFranc.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <h3 className="text-gray-700 font-bold mb-4 flex items-center gap-2">
+                    <i className="pi pi-percentage text-purple-500"></i>
+                    Zones de Réduction
+                  </h3>
+                  <Divider className="my-3 bg-gray-300" />
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        <i className="pi pi-tag text-purple-500"></i>
+                        Rabais (%)
+                      </label>
+                      <InputText
+                        type="number"
+                        {...register('rabais')}
+                        className="w-full border-gray-300 rounded-xl"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        <i className="pi pi-tags text-purple-500"></i>
+                        Remise (%)
+                      </label>
+                      <InputText
+                        type="number"
+                        {...register('remise')}
+                        className="w-full border-gray-300 rounded-xl"
+                      />
+                    </div>
+
+                    <div>
+                      <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        <i className="pi pi-money-bill text-purple-500"></i>
+                        Valeur rabais
+                      </label>
+                      <div className="w-full border border-gray-300 rounded-xl p-3 text-center bg-gradient-to-r from-purple-50 to-indigo-50 font-bold text-gray-800">
+                        {valeurRabais.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        <i className="pi pi-wallet text-purple-500"></i>
+                        Valeur remise
+                      </label>
+                      <div className="w-full border border-gray-300 rounded-xl p-3 text-center bg-gradient-to-r from-purple-50 to-indigo-50 font-bold text-gray-800">
+                        {valeurRemise.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
       <ConfirmDialog />
     </div>
   );

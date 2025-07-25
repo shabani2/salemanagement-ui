@@ -4,9 +4,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/rules-of-hooks */
 'use client';
+import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
+import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
+import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
 import { OperationType } from '@/lib/operationType';
+import { MouvementStock } from '@/Models/mouvementStockType';
+import { PointVente } from '@/Models/pointVenteType';
 import { Stock } from '@/Models/stock';
-import { fetchStocks, selectAllStocks } from '@/stores/slices/stock/stockSlice';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
+import {
+  fetchStockByPointVenteId,
+  fetchStockByRegionId,
+  fetchStocks,
+  selectAllStocks,
+} from '@/stores/slices/stock/stockSlice';
 import { AppDispatch, RootState } from '@/stores/store';
 import { Badge } from 'primereact/badge';
 import { BreadCrumb } from 'primereact/breadcrumb';
@@ -14,8 +28,10 @@ import { Button } from 'primereact/button';
 import { Column } from 'primereact/column';
 import { DataTable } from 'primereact/datatable';
 import { Dropdown } from 'primereact/dropdown';
+import { InputText } from 'primereact/inputtext';
 import { Menu } from 'primereact/menu';
-import React, { SetStateAction, useEffect, useRef, useState } from 'react';
+import { Toast } from 'primereact/toast';
+import React, { SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 const typeOptions = Object.values(OperationType).map((op) => ({
@@ -42,133 +58,232 @@ const page = () => {
     // setDialogType(action);
   };
 
-  const actionBodyTemplate = (rowData: any) => {
-    const menuRef = useRef<any>(null);
-    console.log('stock = ', stocks);
-    return (
-      <div>
-        <Menu
-          model={[
-            {
-              label: 'Détails',
-              // @ts-ignore
-              command: () => handleAction('details', rowData),
-            },
-            // @ts-ignore
-            { label: 'Modifier', command: () => handleAction('edit', rowData) },
-            {
-              label: 'Supprimer',
-              // @ts-ignore
-              command: () => handleAction('delete', rowData),
-            },
-          ]}
-          popup
-          ref={menuRef}
-        />
-        <Button
-          icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white bg-green-700"
-          onClick={(event) => menuRef.current.toggle(event)}
-          aria-haspopup
-        />
-      </div>
-    );
-  };
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
 
+  // useEffect(() => {
+  //   if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
+  //     dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
+  //   } else {
+  //     dispatch(fetchStocks());
+  //   }
+  // }, [dispatch, user?.role]);
+
+  // traitement de la recherche dans le stock
+  const [search, setSearch] = useState('');
+  const [filteredBase, setFilteredBase] = useState<Stock[]>(stocks);
+  const [categorie, setCategorie] = useState<any>(null);
+
+  const filteredStocks = useMemo(() => {
+    const lowerSearch = search.toLowerCase();
+    return filteredBase.filter((s) => {
+      const cat =
+        typeof s.produit?.categorie === 'object' &&
+        s.produit?.categorie !== null &&
+        'nom' in s.produit.categorie
+          ? (s.produit.categorie.nom as string)?.toLowerCase()
+          : '';
+      const prod = s.produit?.nom?.toLowerCase() || '';
+      const pv = s.pointVente?.nom?.toLowerCase() || 'depot central';
+      const quantite = String(s.quantite || '').toLowerCase();
+      const montant = String(s.montant || '').toLowerCase();
+      const date = new Date(s.createdAt || '').toLocaleDateString().toLowerCase();
+      return [cat, prod, pv, quantite, montant, date].some((field) => field.includes(lowerSearch));
+    });
+  }, [search, filteredBase]);
+
+  //file management
+  const toast = useRef<Toast>(null);
+
+  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
+
+  // 1. Charger les données une seule fois au mount
   useEffect(() => {
-    dispatch(fetchStocks());
-  }, [dispatch]);
+    if (user?.role === 'AdminPointVente') {
+      dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
+    } else if (user?.role === 'AdminRegion') {
+      dispatch(fetchStockByRegionId(user?.region?._id));
+    } else {
+      dispatch(fetchStocks());
+    }
+  }, [dispatch, user?.pointVente?._id, user?.region?._id, user?.role]);
+
+  // 2. Initialiser filteredBase après que stocks ait été rempli
+  useEffect(() => {
+    if (stocks.length > 0) {
+      setFilteredBase(stocks);
+    }
+  }, [stocks]);
+
+  // console.log('filteredBase');
+  const handlePointVenteSelect = (pointVente: PointVente | null) => {
+    if (!pointVente) {
+      setFilteredBase(stocks);
+      return;
+    }
+
+    const filtered = stocks.filter((s) => s.pointVente?._id === pointVente._id);
+    setFilteredBase(filtered);
+  };
+  const handleFileManagement = async ({
+    type,
+    format,
+    file,
+  }: {
+    type: 'import' | 'export';
+    format: 'csv' | 'excel';
+    file?: File;
+  }) => {
+    if (type === 'import' && file) {
+      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+      toast.current?.show({
+        severity: 'info',
+        summary: `Import ${format.toUpperCase()}`,
+        detail: `File imported: ${file.name}`,
+        life: 3000,
+      });
+      return;
+    }
+
+    if (type === 'export') {
+      // Map "excel" to "xlsx" to satisfy the type requirement
+      const exportFileType = format === 'excel' ? 'xlsx' : format;
+      const result = await dispatch(
+        exportFile({
+          url: '/export/stock',
+          mouvements: filteredStocks,
+          fileType: exportFileType,
+        })
+      );
+
+      if (exportFile.fulfilled.match(result)) {
+        const filename = `stock.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadExportedFile(result.payload, filename);
+
+        toast.current?.show({
+          severity: 'success',
+          summary: `Export ${format.toUpperCase()}`,
+          detail: `File downloaded: ${filename}`,
+          life: 3000,
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: `Export ${format.toUpperCase()} Échoué`,
+          detail: String(result.payload || 'Une erreur est survenue.'),
+          life: 3000,
+        });
+      }
+    }
+  };
+  console.log('filteredStocks', filteredStocks);
+
   return (
-    <div className="bg-gray-100 min-h-screen ">
-      <div className="flex items-center justify-between mb-6">
+    <div className=" min-h-screen ">
+      <div className="flex items-center justify-between pb-6 pt-6">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des stock' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold">Gestion des stock</h2>
+        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des stock</h2>
       </div>
       <div className="bg-white p-4 rounded-lg shadow-md">
-        <div className="gap-4 mb-4   flex justify-between">
-          <div className="relative w-2/3 flex flex-row items-end gap-3">
-            <div className="w-full flex flex-col gap-2">
-              {/* <label htmlFor="type">Type</label> */}
-              <Dropdown
-                id="type"
-                value={selectedType}
-                options={typeOptions}
-                onChange={(e) => {
-                  setSelectedType(e.value);
-                  console.log('Type sélectionné:', e.value);
-                }}
-                placeholder="Sélectionner un type"
-                className="w-full"
-              />
-            </div>
+        <div className="flex mb-4 gap-4">
+          {/* Partie gauche - champ de recherche */}
+          <div className="w-2/3 flex flex-row items-center gap-2">
+            <InputText
+              className="p-2 pl-10 border rounded w-full"
+              placeholder="Rechercher..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <DropdownPointVenteFilter onSelect={handlePointVenteSelect} />
+            <DropdownCategorieFilter
+              onSelect={(categorie) => {
+                setCategorie(categorie);
 
-            <div className="flex gap-2 h-full items-end self-end">
-              <Button
-                label="upload"
-                icon="pi pi-upload"
-                className="p-button-primary text-[16px] h-[46px]"
-              />
-              <Button
-                label="download"
-                icon="pi pi-download"
-                className="p-button-success text-[16px] h-[46px]"
-              />
-            </div>
+                if (categorie === null) {
+                  setFilteredBase(stocks); // doit repartir de stocks (pas filteredBase !)
+                  return;
+                }
+
+                const filtered = stocks.filter((p) => {
+                  return (
+                    typeof p.produit.categorie === 'object' &&
+                    p.produit.categorie !== null &&
+                    '_id' in p.produit.categorie &&
+                    p.produit.categorie._id === categorie._id
+                  );
+                });
+
+                setFilteredBase(filtered);
+              }}
+            />
+
+            <DropdownImportExport onAction={handleFileManagement} />
           </div>
         </div>
+
         {/* dataTable */}
         <DataTable
-          value={stocks}
+          value={Array.isArray(filteredStocks[0]) ? filteredStocks.flat() : filteredStocks}
           dataKey="_id"
           paginator
           loading={loading}
           rows={rows}
           first={first}
           onPage={onPageChange}
-          stripedRows
-          className="rounded-lg custom-datatable"
-// @ts-ignore
-          tableStyle={{ minWidth: '60rem' }}
-          // @ts-ignore
-          rowClassName={(_, index: number) =>
-            index % 2 === 0 ? 'bg-gray-300 text-gray-900' : 'bg-green-700 text-white'
-          }
+          className="rounded-lg custom-datatable text-[11px]"
+          // tableStyle={{ minWidth: '60rem' }}
+          size="small"
+          rowClassName={(_rowData: Stock, options) => {
+            //@ts-ignore
+            const rowIndex = options?.rowIndex ?? 0;
+            const globalIndex = first + rowIndex;
+            return globalIndex % 2 === 0
+              ? '!bg-gray-300 !text-gray-900'
+              : '!bg-green-900 !text-white';
+          }}
         >
-          <Column field="_id" header="#" body={(_, options) => options.rowIndex + 1} />
+          <Column
+            field="_id"
+            header="#"
+            body={(_, options) => options.rowIndex + 1}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
 
           <Column
             field="produit.categorie.nom"
-            header="Catégorie"
-            filter
+            header=""
             body={(rowData: Stock) => {
-              const categorie = rowData.produit?.categorie;
-              if (!categorie) return '—';
-// @ts-ignore
-              const imageUrl = `http://localhost:8000/${categorie.image?.replace('../', '')}`;
-
+              const categorie = rowData?.produit?.categorie;
+              if (!categorie) return <span className="text-[11px]">—</span>;
+              const imageUrl =
+                typeof categorie === 'object' &&
+                categorie !== null &&
+                'image' in categorie &&
+                categorie.image
+                  ? `http://localhost:8000/${(categorie.image as string).replace('../', '')}`
+                  : '';
               return (
-                <div className="flex items-center gap-2">
-                  {
-                    // @ts-ignore
+                <div className="flex items-center gap-2 text-[11px]">
+                  {typeof categorie === 'object' &&
+                    categorie !== null &&
+                    'image' in categorie &&
                     categorie.image && (
-                    <img
+                      <img
                         src={imageUrl}
-                        // @ts-ignore
-                      alt={categorie.nom}
-                      className="w-8 h-8 rounded-full object-cover border border-gray-300"
-                    />
-                  )}
-                  <span>{
-                    // @ts-ignore
-                    categorie.nom}</span>
+                        alt={categorie.nom}
+                        className="w-8 h-8 rounded-full object-cover border border-gray-100"
+                      />
+                    )}
                 </div>
               );
             }}
-            className="px-4 py-1"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column
@@ -176,50 +291,157 @@ const page = () => {
             header="Produit"
             filter
             body={(rowData: Stock) => rowData.produit?.nom || '—'}
-            className="px-4 py-1"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
+          <Column
+            field="pointVente.nom"
+            header="stock"
+            body={(rowData: Stock) => (
+              <span className="text-[11px]">
+                {rowData?.region
+                  ? rowData?.region.nom
+                  : rowData?.pointVente?.nom
+                    ? rowData.pointVente.nom
+                    : 'Depot Central'}
+              </span>
+            )}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column
-            field="pointVente.nom"
-            header="Point de Vente"
+            field="quantite"
+            header="Quantité"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
+          <Column
+            field="stock.produit.seuil"
+            header="quantite seuil"
             filter
-            body={(rowData: Stock) => rowData.pointVente?.nom || 'Depot Central'}
-            className="px-4 py-1"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+            body={(rowData: Stock) => {
+              const isValide = (rowData?.produit?.seuil ?? 0) < rowData.quantite;
+              return (
+                <span
+                  className="flex items-center gap-1 text-sm px-2 py-1 text-[11px]"
+                  style={{
+                    backgroundColor: isValide ? '#4caf50' : '#f44336',
+                    borderRadius: '9999px',
+                    color: '#fff',
+                  }}
+                  title={isValide ? 'Stock suffisant' : 'Stock insuffisant'}
+                  data-testid="stock-severity-badge"
+                  data-severity={isValide ? 'success' : 'warning'}
+                >
+                  <i
+                    className={isValide ? 'pi pi-check' : 'pi pi-exclamation-triangle'}
+                    style={{ fontSize: '0.75rem' }}
+                  />
+                  <span style={{ fontSize: '0.75rem' }}>{rowData?.produit?.seuil || 'N/A'}</span>
+                  <span style={{ fontSize: '0.75rem', marginLeft: '0.25rem' }}>
+                    {isValide ? 'Suffisant' : 'Insuffisant'}
+                  </span>
+                </span>
+              );
+            }}
           />
 
-          <Column field="quantite" filter header="Quantité" className="px-4 py-1" />
+          <Column
+            header="Prix/U"
+            body={(rowData) => (
+              <span className="text-blue-700 font-semibold text-[11px]">
+                {rowData.produit?.prix?.toLocaleString() ?? 'N/A'}
+              </span>
+            )}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
 
           <Column
             field="montant"
-            filter
-            header="Montant"
-            className="px-4 py-1"
-            body={(rowData: Stock) => `${rowData.montant.toLocaleString()} FC`}
+            header="Cout Total"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+            body={(rowData: Stock) => rowData.montant.toLocaleString()}
+          />
+
+          {/* <Column
+            header="Valeur Marge"
+            body={(rowData: MouvementStock) => {
+              const prix = rowData.produit?.prix;
+              const marge = rowData.produit?.marge;
+              const valeur =
+                prix && marge !== undefined ? ((prix * marge) / 100).toFixed(2) : 'N/A';
+              return <span className="text-orange-600 font-medium text-[11px]">{valeur}</span>;
+            }}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          /> */}
+
+          <Column
+            header="Prix de vente Total"
+            body={(rowData: Stock) => {
+              const net = rowData.produit?.netTopay ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const totalNet = net * quantite;
+              return (
+                <span className="text-purple-700 font-semibold text-[11px]">
+                  {totalNet.toFixed(2)}
+                </span>
+              );
+            }}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column
-            field="depotCentral"
-            filter
-            header="Source"
-            className="px-4 py-1"
-            body={(rowData: Stock) => (
-              <Badge
-                value={rowData.depotCentral ? 'Central' : 'Point de vente'}
-                severity={rowData.depotCentral ? 'info' : 'warning'}
-                className="text-sm px-2 py-1"
-              />
-            )}
+            header="Valeur TVA Total"
+            body={(rowData: Stock) => {
+              const net = rowData.produit?.netTopay ?? 0;
+              const tva = rowData.produit?.tva ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const valeurTVA = ((net * tva) / 100) * quantite;
+              return (
+                <span className="text-yellow-600 font-medium text-[11px]">
+                  {valeurTVA.toFixed(2)}
+                </span>
+              );
+            }}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
+          />
+
+          <Column
+            header="TTC"
+            body={(rowData: Stock) => {
+              //@ts-ignore
+              const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
+                ? rowData.produit?.prix
+                : rowData.produit?.prixVente;
+              const prixVente = rowData.produit?.prixVente ?? 0;
+              const quantite = rowData.quantite ?? 0;
+              const totalVente = prixVente * quantite;
+              let colorClass = 'text-blue-600';
+              if (prixVente > prix) colorClass = 'text-green-600 font-bold';
+              else if (prixVente < prix) colorClass = 'text-red-600 font-bold';
+              return <span className={`${colorClass} text-[11px]`}>{totalVente.toFixed(2)}</span>;
+            }}
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
           />
 
           <Column
             field="createdAt"
             filter
             header="Créé le"
-            className="px-4 py-1"
+            className="px-4 py-1 text-[11px]"
+            headerClassName="text-[11px] !bg-green-900 !text-white"
             body={(rowData: Stock) => new Date(rowData.createdAt || '').toLocaleDateString()}
+            sortable
           />
-
-          <Column header="Actions" body={actionBodyTemplate} className="px-4 py-1" />
         </DataTable>
       </div>
     </div>

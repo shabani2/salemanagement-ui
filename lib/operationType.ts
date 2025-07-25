@@ -3,5 +3,13 @@ export enum OperationType {
   SORTIE = 'Sortie',
   VENTE = 'Vente',
   LIVRAISON = 'Livraison',
-  COMMANDE = 'Commande',
+  // COMMANDE = 'Commande',
 }
+
+// export enum RoleType {
+//   ENTRE = 'Entre',
+//   SORTIE = 'Sortie',
+//   VENTE = 'Vente',
+//   LIVRAISON = 'Livraison',
+//   COMMANDE = 'Commande',
+// }

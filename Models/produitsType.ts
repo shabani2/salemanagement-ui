@@ -28,6 +28,7 @@ export interface Produit {
   prixVente: number;
   tva: number;
   marge?: number;
+  seuil?: number;
   netTopay?: number;
   unite?: string;
   createdAt?: Date;
@@ -41,6 +42,7 @@ export interface ProduitModel {
   prixVente: number;
   tva: number;
   marge?: number;
+  seuil?: number;
   netTopay?: number;
   unite?: string;
   createdAt?: Date;

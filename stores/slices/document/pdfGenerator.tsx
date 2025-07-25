@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { apiClient } from '@/lib/apiConfig';
 import { createAsyncThunk } from '@reduxjs/toolkit';
 
@@ -20,6 +21,7 @@ export const generateStockPdf = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
+      // console.log('PDF generated successfully:', payload.mouvements);
       const response = await apiClient.post('/generatePdf', payload, {
         headers: {
           ...getAuthHeaders(),
