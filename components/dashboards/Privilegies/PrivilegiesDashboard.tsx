@@ -102,6 +102,7 @@ export default function PrivilegiesDashboard() {
   // const produitsCritiques = useMemo(() => {
   //   return stocks.filter((s) => (s.quantite ?? 0) < (s.produit?.seuil ?? 0));
   // }, [stocks]);
+  console.log('taux livraison',tauxLivraison)
 
   const regionStats = useMemo(() => {
     return computeRegionStats(
