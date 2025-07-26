@@ -45,7 +45,6 @@ export default function Page() {
 
   return (
     <div>
-  
       <div className="mt-6">{renderDashboard()}</div>
     </div>
   );

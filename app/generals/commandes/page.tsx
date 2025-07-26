@@ -28,9 +28,7 @@ const Page = () => {
         <h2 className="text-2xl font-bold text-gray-500">Gestion des Commandes</h2>
       </div>
 
-      <div className="bg-white p-4 rounded-lg shadow-md">
-        hello world
-      </div>
+      <div className="bg-white p-4 rounded-lg shadow-md">hello world</div>
     </div>
   );
 };
