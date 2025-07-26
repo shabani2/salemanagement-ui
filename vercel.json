@@ -1,0 +1,9 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": ".next",
+  "devCommand": "next dev",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/$1" }
+  ]
+}

@@ -29,7 +29,7 @@ import {
   exportFile,
 } from '@/stores/slices/document/importDocuments/exportDoc';
 
-const page = () => {
+const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
 
   const categories = useSelector((state: RootState) => selectAllCategories(state));
@@ -325,4 +325,4 @@ const page = () => {
   );
 };
 
-export default page;
+export default Page;
