@@ -55,6 +55,23 @@ export const fetchPointVentes = createAsyncThunk(
   }
 );
 
+export const fetchPointVenteById = createAsyncThunk(
+  'pointVentes/fetchPointVenteById',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/point-ventes/${id}`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la récupération du point de vente');
+    }
+  }
+);
+
 export const fetchPointVentesByRegionId = createAsyncThunk(
   'Stock/fetchPointVenteByRegionId',
   async (regionId: string, { rejectWithValue }) => {
@@ -151,6 +168,25 @@ const pointVenteSlice = createSlice({
       .addCase(fetchPointVentesByRegionId.fulfilled, (state, action) => {
         state.status = 'succeeded';
         pointVenteAdapter.setAll(state, action.payload);
+      })
+      .addCase(fetchPointVentesByRegionId.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
+      })
+      .addCase(fetchPointVenteById.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        pointVenteAdapter.upsertOne(state, action.payload);
+      })
+      .addCase(fetchPointVenteById.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
+      })
+      .addCase(updatePointVente.fulfilled, (state, action) => {
+        pointVenteAdapter.upsertOne(state, action.payload);
+      })
+      .addCase(updatePointVente.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
       });
   },
 });

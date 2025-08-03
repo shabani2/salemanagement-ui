@@ -1,14 +1,17 @@
 'use client';
+
 import React, { useEffect, useRef, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+
+import { Commande } from '@/Models/commandeType';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
-import { Skeleton } from 'primereact/skeleton';
-import { AppDispatch, RootState } from '@/stores/store';
-import { BreadCrumb } from 'primereact/breadcrumb';
-import { Dialog } from 'primereact/dialog';
 import { Button } from 'primereact/button';
+import { Dialog } from 'primereact/dialog';
+import { Checkbox } from 'primereact/checkbox';
 import { Menu } from 'primereact/menu';
+import { Toast } from 'primereact/toast';
+import { AppDispatch, RootState } from '@/stores/store';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   fetchCommandes,
   fetchCommandesByPointVente,
@@ -18,14 +21,11 @@ import {
   selectCommandeStatus,
   updateCommande,
 } from '@/stores/slices/commandes/commandeSlice';
-import { Toast } from 'primereact/toast';
-import { Commande } from '@/Models/commandeType';
-import { Checkbox } from 'primereact/checkbox';
-import { useUserRole } from '@/hooks/useUserRole';
 import { CommandeProduit } from '@/Models/CommandeProduitType';
-import { format } from 'date-fns';
+import { useUserRole } from '@/hooks/useUserRole';
+import { BreadCrumb } from 'primereact/breadcrumb';
 
-const GerantDashboard = () => {
+const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
   const commandes = useSelector((state: RootState) => selectAllCommandes(state));
   const loading = useSelector((state: RootState) => selectCommandeStatus(state)) === 'loading';
@@ -36,9 +36,8 @@ const GerantDashboard = () => {
   const [produitsLivrables, setProduitsLivrables] = useState<CommandeProduitWithTempChecked[]>([]);
   const [menuRefs, setMenuRefs] = useState<{ [key: string]: Menu | null }>({});
   const [saving, setSaving] = useState(false);
-  const now = new Date();
   const { user, isSuperAdmin, isAdminPointVente, isAdminRegion } = useUserRole();
-  const formattedDate = format(now, 'dd/MM/yy HH:mm');
+
   useEffect(() => {
     if (!user?.role) return;
     if (isSuperAdmin) {
@@ -154,142 +153,17 @@ const GerantDashboard = () => {
     );
 
   return (
-    <div className="w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mt-3 mb-3">
+    <div className="p-4">
+      <Toast ref={toast} />
+      <div className="flex items-center justify-between mt-5 mb-5">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Tableau de bord' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Commandes' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold text-gray-5000">du {formattedDate}</h2>
-      </div>
-      {/* Section Cartes - Design responsive amélioré */}
-      <div className="flex flex-row gap-5  mb-6">
-        <div className="md:w-1/3">
-          <div className="bg-gradient-to-br from-green-50 to-white rounded-xl shadow-lg overflow-hidden border border-green-100 transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02]">
-            {loading ? (
-              <Skeleton width="100%" height="120px" />
-            ) : (
-              <div className="p-5">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-semibold text-green-700 uppercase tracking-wider">
-                        Commandes(Fc)
-                      </h3>
-                      {/* Vous pouvez ajouter une tendance ici si nécessaire */}
-                      <span className="text-green-600 text-xs font-medium px-2 py-1 rounded-full">
-                        ↗ 2.5%
-                      </span>
-                    </div>
-
-                    <div className="mt-2">
-                      <div className="text-2xl font-bold text-green-900">{0}</div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-green-500 to-green-600 p-3 rounded-xl ml-3">
-                    <i className="pi pi-euro text-white text-xl" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Barre de progression subtile */}
-            <div className="h-1 w-full bg-green-100 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-green-400 to-green-500"
-                style={{ width: '30%' }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="md:w-1/3">
-          <div className="bg-gradient-to-br from-red-50 to-white rounded-xl shadow-lg overflow-hidden border border-red-100 transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02]">
-            {loading ? (
-              <Skeleton width="100%" height="120px" />
-            ) : (
-              <div className="p-5">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-semibold text-red-700 uppercase tracking-wider">
-                        Stock en rupture
-                      </h3>
-                      <span className="text-red-600 text-xs font-medium px-2 py-1 rounded-full">
-                        ↗ 8.2%
-                      </span>
-                    </div>
-
-                    <div className="mt-2">
-                      <div className="text-2xl font-bold text-red-900">
-                        {(0).toLocaleString('fr-FR')} unités
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-red-500 to-red-600 p-3 rounded-xl ml-3">
-                    <i className="pi pi-box text-white text-xl" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="h-1 w-full bg-red-100 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-red-400 to-red-500"
-                style={{ width: '30%' }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="md:w-1/3">
-          <div className="bg-gradient-to-br from-orange-50 to-white rounded-xl shadow-lg overflow-hidden border border-orange-100 transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02]">
-            {loading ? (
-              <Skeleton width="100%" height="120px" />
-            ) : (
-              <div className="p-5">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-semibold text-orange-700 uppercase tracking-wider">
-                        Produits Commandés
-                      </h3>
-
-                      {/* Exemple de tendance rouge */}
-                      <span className="text-red-600 text-xs font-medium px-2 py-1 rounded-full">
-                        ↗ 8.2%
-                      </span>
-                    </div>
-
-                    <div className="mt-2">
-                      <div className="text-2xl font-bold text-orange-900">
-                        {(commandes.length || 0).toLocaleString('fr-FR')}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-3 rounded-xl ml-3">
-                    <i className="pi pi-shopping-cart text-white text-xl" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="h-1 w-full bg-orange-100 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-orange-400 to-orange-500"
-                style={{ width: '30%' }}
-              />
-            </div>
-          </div>
-        </div>
+        <h2 className="text-2xl font-bold text-gray-500">Gestion des Commandes</h2>
       </div>
 
-      {/* DataTable - Pleine largeur avec design optimisé */}
       <div className="gap-4 mb-4 w-full  bg-white flex justify-between p-2 rounded-lg shadow-md">
         <DataTable
           value={commandes}
@@ -351,4 +225,4 @@ const GerantDashboard = () => {
   );
 };
 
-export default GerantDashboard;
+export default Page;

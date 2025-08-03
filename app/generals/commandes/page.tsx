@@ -1,21 +1,11 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
 import { BreadCrumb } from 'primereact/breadcrumb';
 
-import { fetchCommandes } from '@/stores/slices/commandes/commandeSlice';
-import { AppDispatch, RootState } from '@/stores/store';
+import CommandeForm from '@/components/Commandes/CommandeForm';
 
 const Page = () => {
-  const dispatch = useDispatch<AppDispatch>();
-  const commandes = useSelector((state: RootState) => state.commandes);
-
-  useEffect(() => {
-    dispatch(fetchCommandes());
-  }, [dispatch]);
-
-  console.log('commandes', commandes);
+  // console.log('commandes', commandes);
 
   return (
     <div className="min-h-screen">
@@ -27,8 +17,7 @@ const Page = () => {
         />
         <h2 className="text-2xl font-bold text-gray-500">Gestion des Commandes</h2>
       </div>
-
-      <div className="bg-white p-4 rounded-lg shadow-md">hello world</div>
+      <CommandeForm />
     </div>
   );
 };

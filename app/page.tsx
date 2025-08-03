@@ -19,6 +19,7 @@ import VendeurDashboard from '@/components/dashboards/VendeurDashboard';
 import AdminPointVenteDashboard from '@/components/dashboards/AdminPointVenteDashboard';
 //import LogisticienDashboard from '@/components/dashboards/LogisticienDashboard';
 import NotDefined from './NotDifined';
+import GerantDashboard from '@/components/dashboards/GerantDashboard';
 
 export default function Page() {
   //const dispatch = useDispatch<AppDispatch>();
@@ -37,7 +38,7 @@ export default function Page() {
       case 'Vendeur':
         return <VendeurDashboard />;
       case 'Logisticien':
-        return <NotDefined />; //<LogisticienDashboard />;
+        return <GerantDashboard />;
       default:
         return <NotDefined />;
     }

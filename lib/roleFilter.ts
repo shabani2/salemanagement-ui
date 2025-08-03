@@ -28,9 +28,7 @@ export function filterRoutesByRole(role: UserRole) {
       );
 
     case 'logisticien':
-      return base.concat(
-        menuItems.filter((r) => ['Stock', 'Rapports', 'Commandes'].includes(r.title))
-      );
+      return base.concat(menuItems.filter((r) => ['Stock', 'Commandes'].includes(r.title)));
 
     default:
       return base;

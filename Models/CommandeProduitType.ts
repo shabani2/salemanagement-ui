@@ -2,11 +2,14 @@ import { MouvementStock } from './mouvementStockType';
 import { Produit } from './produitsType';
 
 export interface CommandeProduit {
-  _id?: string; // Optional for new products
-  produit: Produit | string;
+  _id: string;
+  commandeId: string;
+  produit: Produit;
   quantite: number;
   statut: 'attente' | 'livré' | 'annulé';
-  mouvementStockId?: MouvementStock | string; // Nullable, rempli quand livré
+  mouvementStockId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CommandeProduitModel {

@@ -132,6 +132,23 @@ export const updateProduit = createAsyncThunk(
   }
 );
 
+export const searchProduits = createAsyncThunk(
+  'produits/searchProduits',
+  async (query: string, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/produits/search?q=${encodeURIComponent(query)}`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue('Erreur lors de la recherche des produits');
+    }
+  }
+);
+
 const produitSlice = createSlice({
   name: 'produits',
   initialState,
@@ -160,6 +177,17 @@ const produitSlice = createSlice({
       })
       .addCase(updateProduit.fulfilled, (state, action) => {
         produitAdapter.upsertOne(state, action.payload);
+      })
+      .addCase(searchProduits.pending, (state) => {
+        state.status = 'loading';
+      })
+      .addCase(searchProduits.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        produitAdapter.setAll(state, action.payload); // tu remplaces les produits actuels
+      })
+      .addCase(searchProduits.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
       });
   },
 });
