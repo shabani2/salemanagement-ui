@@ -23,12 +23,13 @@ const getApiUrl = (): string => {
       return nodeEnv === 'production'
         ? process.env.NEXT_PUBLIC_API_PROD || ''
         : process.env.NEXT_PUBLIC_API_DEV || '';
-    case 'inaf-vente.netlify.app':
-      return process.env.NEXT_PUBLIC_API_DEV || '';
     case 'www.agrecavente.online':
       return process.env.NEXT_PUBLIC_API_PREPROD || '';
     case 'dgi.243technologies.com':
       return process.env.NEXT_PUBLIC_API_PROD || '';
+    case 'agricap-ui-429dded64762.herokuapp.com':
+  return process.env.NEXT_PUBLIC_API_DEV || 'https://agricap-api-3a2d9a422767.herokuapp.com/';
+
     default:
       return process.env.NEXT_PUBLIC_API_LOCAL || 'http://localhost:8000';
   }
