@@ -28,7 +28,7 @@ const getApiUrl = (): string => {
     case 'dgi.243technologies.com':
       return process.env.NEXT_PUBLIC_API_PROD || '';
     case 'agricap-ui-429dded64762.herokuapp.com':
-  return process.env.NEXT_PUBLIC_API_DEV || 'https://agricap-api-3a2d9a422767.herokuapp.com/';
+      return process.env.NEXT_PUBLIC_API_DEV || 'https://agricap-api-3a2d9a422767.herokuapp.com/';
 
     default:
       return process.env.NEXT_PUBLIC_API_LOCAL || 'http://localhost:8000';
