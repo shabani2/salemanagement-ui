@@ -66,10 +66,11 @@ const MultiStepForm: React.FC = () => {
           style={{ width: progressWidth }}
         ></div>
         {step === 1 && <UserForm onNext={handleNextUser} />}
-        {step === 2
+        {step === 2 && (
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
           //@ts-ignore
-          && <OrganisationForm onNext={handleNextOrganisation} user={user} />}
+          <OrganisationForm onNext={handleNextOrganisation} user={user} />
+        )}
 
         {step === 3 && (
           <TarifsAbonnement

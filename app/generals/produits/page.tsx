@@ -310,7 +310,7 @@ const page = () => {
           </div>
           <div>
             <DataTable
-              value={filteredProduits}
+              value={filteredProduits ?? []}
               paginator
               size="small"
               rows={10}

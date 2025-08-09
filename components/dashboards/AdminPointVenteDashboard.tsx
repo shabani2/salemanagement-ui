@@ -273,7 +273,7 @@ const AdminPVDashboard = () => {
       <div className="w-full ">
         <Card title="Mouvements de Stock" className="shadow-2 border-round-lg w-full p-3">
           <DataTable
-            value={tableData}
+            value={tableData ?? []}
             paginator
             rows={10}
             totalRecords={totalRecords}

@@ -244,7 +244,7 @@ export default function PointVenteManagement() {
           />
         </div>
         <DataTable
-          value={filteredPointsVente}
+          value={filteredPointsVente ?? []}
           size="small"
           paginator
           rows={10}

@@ -334,7 +334,7 @@ const VendeurDashboard = () => {
           subTitle="Statistiques de vente par produit"
         >
           <DataTable
-            value={tableData}
+            value={tableData ?? []}
             paginator
             rows={10}
             totalRecords={totalRecords}

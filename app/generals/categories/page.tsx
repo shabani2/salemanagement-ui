@@ -30,7 +30,6 @@ import {
 } from '@/stores/slices/document/importDocuments/exportDoc';
 import { API_URL } from '@/lib/apiConfig';
 
-
 const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
 
@@ -210,7 +209,7 @@ const Page = () => {
               />
             </div>
           </div>
-          <CategorieList categories={categories} onAction={geteActionMade} />
+          <CategorieList categories={categories ?? []} onAction={geteActionMade} />
         </div>
       </div>
 

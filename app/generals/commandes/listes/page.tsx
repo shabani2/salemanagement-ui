@@ -166,7 +166,7 @@ const Page = () => {
 
       <div className="gap-4 mb-4 w-full  bg-white flex justify-between p-2 rounded-lg shadow-md">
         <DataTable
-          value={commandes}
+          value={commandes ?? []}
           paginator
           rows={10}
           loading={loading}

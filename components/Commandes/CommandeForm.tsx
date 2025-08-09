@@ -372,7 +372,7 @@ const CommandeForm = () => {
             ) : (
               <>
                 <DataTable
-                  value={commandeProduits}
+                  value={commandeProduits ?? []}
                   className="shadow-sm rounded-lg"
                   scrollable
                   scrollHeight="280px"

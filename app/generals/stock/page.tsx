@@ -229,7 +229,11 @@ const page = () => {
 
         {/* dataTable */}
         <DataTable
-          value={Array.isArray(filteredStocks[0]) ? filteredStocks.flat() : filteredStocks}
+          value={
+            Array.isArray(filteredStocks[0])
+              ? (filteredStocks ?? []).flat()
+              : (filteredStocks ?? [])
+          }
           dataKey="_id"
           paginator
           loading={loading}

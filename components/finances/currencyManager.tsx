@@ -170,7 +170,7 @@ const CurrencyManager = () => {
 
     return (
       <DataTable
-        value={currencies}
+        value={currencies ?? []}
         // loading={status === 'loading'}
         paginator
         rows={10}

@@ -76,11 +76,11 @@ const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void; user: Us
 
     try {
       const response = await dispatch(addOrganisation(data));
-     
+
       onNext(response.payload);
     } catch (error: unknown) {
       console.error("Erreur lors de la création de l'organisation:", (error as Error).message);
-          }
+    }
   };
 
   return (

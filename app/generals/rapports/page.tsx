@@ -47,7 +47,6 @@ import { PointVente } from '@/Models/pointVenteType';
 import { useUserRole } from '@/hooks/useUserRole';
 import { API_URL } from '@/lib/apiConfig';
 
-
 const typeOptions = Object.values(OperationType).map((op) => ({
   label: op,
   value: op,
@@ -340,7 +339,9 @@ const page = () => {
         <DataTable
           // value={Array.isArray(filteredMvtStocks[0]) ? filteredMvtStocks.flat() : filteredMvtStocks}
           value={
-            Array.isArray(filteredMvtStocks?.[0]) ? filteredMvtStocks.flat() : filteredMvtStocks
+            Array.isArray(filteredMvtStocks?.[0])
+              ? (filteredMvtStocks ?? []).flat()
+              : (filteredMvtStocks ?? [])
           }
           emptyMessage="Aucun mouvement de stock trouvé."
           responsiveLayout="scroll"

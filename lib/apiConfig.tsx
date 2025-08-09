@@ -1,8 +1,7 @@
 import axios from 'axios';
 
 const nodeEnv =
-  (process.env.NEXT_PUBLIC_NODE_ENV as 'development' | 'production' | 'test') ||
-  'development';
+  (process.env.NEXT_PUBLIC_NODE_ENV as 'development' | 'production' | 'test') || 'development';
 
 export const getApiUrl = (): string => {
   // 1️⃣ Si l'URL API est définie explicitement dans .env, on l'utilise toujours
