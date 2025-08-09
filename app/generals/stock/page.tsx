@@ -7,7 +7,8 @@
 import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
 import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { API_URL } from '@/config';
+import { API_URL } from '@/lib/apiConfig';
+
 import { OperationType } from '@/lib/operationType';
 import { MouvementStock } from '@/Models/mouvementStockType';
 import { PointVente } from '@/Models/pointVenteType';

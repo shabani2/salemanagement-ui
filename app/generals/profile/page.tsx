@@ -15,7 +15,8 @@ import { useDispatch } from 'react-redux';
 import { AppDispatch } from '@/stores/store';
 import { updateUser } from '@/stores/slices/users/userSlice';
 import { User } from '@/Models/UserType';
-import { API_URL } from '@/config';
+import { API_URL } from '@/lib/apiConfig';
+
 //import { UserRoleModel } from '@/lib/utils';
 
 const Page = () => {

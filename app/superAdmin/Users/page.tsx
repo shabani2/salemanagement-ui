@@ -41,7 +41,8 @@ import {
   downloadExportedFile,
   exportFile,
 } from '@/stores/slices/document/importDocuments/exportDoc';
-import { API_URL } from '@/config';
+import { API_URL } from '@/lib/apiConfig';
+
 
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 

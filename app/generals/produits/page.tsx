@@ -33,7 +33,8 @@ import {
   downloadExportedFile,
   exportFile,
 } from '@/stores/slices/document/importDocuments/exportDoc';
-import { API_URL } from '@/config';
+import { API_URL } from '@/lib/apiConfig';
+
 const page = () => {
   const menuRef = useRef<any>(null);
   const dispatch = useDispatch<AppDispatch>();

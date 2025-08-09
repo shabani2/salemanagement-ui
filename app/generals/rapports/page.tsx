@@ -45,7 +45,8 @@ import DropdownTypeFilter from '@/components/ui/dropdowns/dropDownFile-filter';
 import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
 import { PointVente } from '@/Models/pointVenteType';
 import { useUserRole } from '@/hooks/useUserRole';
-import { API_URL } from '@/config';
+import { API_URL } from '@/lib/apiConfig';
+
 
 const typeOptions = Object.values(OperationType).map((op) => ({
   label: op,
