@@ -474,16 +474,20 @@ const page = () => {
             <div className="flex-1">
               <label className="block mb-1 text-sm font-medium">Catégorie</label>
               <Dropdown
-                value={
-                  typeof newProduit.categorie === 'string'
-                    ? newProduit.categorie
-                    : newProduit.categorie?._id
-                }
-                options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
-                onChange={(e) => handleInputChange('categorie', e.value)}
-                placeholder="Sélectionner une catégorie"
-                className="w-full border rounded"
-              />
+  value={
+    typeof newProduit.categorie === 'string'
+      ? newProduit.categorie
+      : newProduit.categorie?._id ?? ''
+  }
+  options={(categories ?? []).map((cat) => ({
+    label: cat.nom,
+    value: cat._id
+  }))}
+  onChange={(e) => handleInputChange('categorie', e.value)}
+  placeholder="Sélectionner une catégorie"
+  className="w-full border rounded"
+/>
+
             </div>
           </div>
 
@@ -591,7 +595,7 @@ const page = () => {
             setIsDeleteProduit(false);
           });
         }}
-        item={selectedProduit}
+        item={selectedProduit??{}}
         objectLabel="le produit"
         displayField="nom"
       />

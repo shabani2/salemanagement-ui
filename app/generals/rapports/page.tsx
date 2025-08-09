@@ -143,33 +143,7 @@ const page = () => {
     user?.pointVente?._id,
     user?.region?._id,
   ]);
-
-  // useEffect(() => {
-  //   if (!user?.role) return;
-
-  //   if (user?.role === 'AdminPointVente') {
-  //     console.log('user role : ', user?.role);
-  //     dispatch(fetchMouvementStockByPointVenteId(user?.pointVente?._id)).then((resp) => {
-  //       console.log('mvt = ', resp.payload);
-  //     });
-  //   } else if (user?.role === 'AdminRegion') {
-  //     dispatch(fetchMouvementStockByRegionId(user?.region?._id)).then((resp) => {
-  //       if (resp.meta.requestStatus === 'rejected') {
-  //         console.error('Failed to fetch mouvements stock:', resp.payload);
-  //       }
-  //       console.log('Fetched mouvements stock admin region:', resp.payload);
-  //     });
-  //   } else {
-  //     dispatch(fetchMouvementsStock()).then((resp) => {
-  //       if (resp.meta.requestStatus === 'rejected') {
-  //         console.error('Failed to fetch mouvements stock:', resp.payload);
-  //       }
-  //       console.log('Fetched mouvements stock admin super:', resp.payload);
-  //     });
-  //   }
-  // }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
-
-  // traitement de recherche
+ 
   const [search, setSearch] = useState('');
   const [filteredMvtStocks, setFilteredMvtStocks] = useState(mvtStocks);
 
