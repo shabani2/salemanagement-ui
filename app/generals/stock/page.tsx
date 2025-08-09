@@ -78,7 +78,7 @@ const page = () => {
 
   const filteredStocks = useMemo(() => {
     const lowerSearch = search.toLowerCase();
-    return (filteredBase??[]).filter((s) => {
+    return (filteredBase ?? []).filter((s) => {
       const cat =
         typeof s.produit?.categorie === 'object' &&
         s.produit?.categorie !== null &&
@@ -124,7 +124,7 @@ const page = () => {
       return;
     }
 
-    const filtered = (stocks??[]).filter((s) => s.pointVente?._id === pointVente._id);
+    const filtered = (stocks ?? []).filter((s) => s.pointVente?._id === pointVente._id);
     setFilteredBase(filtered);
   };
   const handleFileManagement = async ({
@@ -210,7 +210,7 @@ const page = () => {
                   return;
                 }
 
-                const filtered = (stocks??[]).filter((p) => {
+                const filtered = (stocks ?? []).filter((p) => {
                   return (
                     typeof p.produit.categorie === 'object' &&
                     p.produit.categorie !== null &&

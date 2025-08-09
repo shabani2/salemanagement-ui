@@ -130,7 +130,7 @@ export default function RegionManagement() {
   const [filteredRegions, setFilteredRegions] = useState(regions || []);
 
   useEffect(() => {
-    const filtered = (regions??[]).filter((region) => {
+    const filtered = (regions ?? []).filter((region) => {
       const query = search.toLowerCase();
       return (
         region.nom?.toLowerCase().includes(query) ||

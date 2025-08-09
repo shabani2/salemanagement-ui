@@ -132,7 +132,7 @@ export default function PointVenteManagement() {
   const [filteredPointsVente, setFilteredPointsVente] = useState(pointsVente || []);
 
   useEffect(() => {
-    const filtered = (pointsVente??[]).filter((pv) => {
+    const filtered = (pointsVente ?? []).filter((pv) => {
       const query = searchPV.toLowerCase();
       return (
         pv.nom?.toLowerCase().includes(query) ||

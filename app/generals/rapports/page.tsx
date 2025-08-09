@@ -122,7 +122,7 @@ const page = () => {
   }, [user?.role]);
 
   const mvtStocks = useMemo(() => {
-    return (allMvtStocks??[]).filter((mvt) => allowedTypes.includes(mvt.type));
+    return (allMvtStocks ?? []).filter((mvt) => allowedTypes.includes(mvt.type));
   }, [allMvtStocks, allowedTypes]);
 
   useEffect(() => {
@@ -174,7 +174,7 @@ const page = () => {
   const [filteredMvtStocks, setFilteredMvtStocks] = useState(mvtStocks);
 
   useEffect(() => {
-    const filtered = (mvtStocks??[]).filter((row) => {
+    const filtered = (mvtStocks ?? []).filter((row) => {
       const q = search.toLowerCase();
       return (
         (typeof row.produit?.categorie === 'object' &&
@@ -198,7 +198,7 @@ const page = () => {
   useEffect(() => {
     if (mvtDefault) {
       setSelectedType(mvtDefault);
-      setFilteredMvtStocks((mvtStocks??[]).filter((s) => s.type === mvtDefault));
+      setFilteredMvtStocks((mvtStocks ?? []).filter((s) => s.type === mvtDefault));
     }
   }, [mvtStocks, mvtDefault]);
 
@@ -265,7 +265,7 @@ const page = () => {
   const [selectedPointVente, setSelectedPointVente] = useState<any>(null);
 
   useEffect(() => {
-    const filtered = (mvtStocks??).filter((row) => {
+    const filtered = (mvtStocks ?? []).filter((row) => {
       const q = search.toLowerCase();
       const matchSearch =
         (typeof row.produit?.categorie === 'object' &&
