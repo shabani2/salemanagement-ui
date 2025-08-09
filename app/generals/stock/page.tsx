@@ -7,6 +7,7 @@
 import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
 import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
+import { API_URL } from '@/config';
 import { OperationType } from '@/lib/operationType';
 import { MouvementStock } from '@/Models/mouvementStockType';
 import { PointVente } from '@/Models/pointVenteType';
@@ -265,7 +266,7 @@ const page = () => {
                 categorie !== null &&
                 'image' in categorie &&
                 categorie.image
-                  ? `http://localhost:8000/${(categorie.image as string).replace('../', '')}`
+                  ? `${API_URL}/${(categorie.image as string).replace('../', '')}`
                   : '';
               return (
                 <div className="flex items-center gap-2 text-[11px]">

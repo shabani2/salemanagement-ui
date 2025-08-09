@@ -28,6 +28,7 @@ import {
   downloadExportedFile,
   exportFile,
 } from '@/stores/slices/document/importDocuments/exportDoc';
+import { API_URL } from '@/config';
 
 const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -285,7 +286,7 @@ const Page = () => {
                 actionMade === 'update' &&
                 selectedCategorie?.image && (
                   <img
-                    src={`http://localhost:8000/${selectedCategorie.image}`}
+                    src={`${API_URL}/${selectedCategorie.image}`}
                     alt="Image actuelle"
                     className="h-24 w-auto object-contain border rounded"
                   />

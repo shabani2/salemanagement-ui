@@ -33,6 +33,7 @@ import {
   downloadExportedFile,
   exportFile,
 } from '@/stores/slices/document/importDocuments/exportDoc';
+import { API_URL } from '@/config';
 const page = () => {
   const menuRef = useRef<any>(null);
   const dispatch = useDispatch<AppDispatch>();
@@ -343,7 +344,7 @@ const page = () => {
                     'image' in categorie &&
                     categorie.image
                   ) {
-                    imageUrl = `http://localhost:8000/${categorie.image.replace('../', '')}`;
+                    imageUrl = `${API_URL}/${categorie.image.replace('../', '')}`;
                   }
                   return (
                     <div className="flex items-center gap-2 text-[11px]">

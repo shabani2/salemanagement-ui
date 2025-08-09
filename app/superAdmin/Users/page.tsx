@@ -41,6 +41,7 @@ import {
   downloadExportedFile,
   exportFile,
 } from '@/stores/slices/document/importDocuments/exportDoc';
+import { API_URL } from '@/config';
 
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
 
@@ -497,7 +498,7 @@ const Page = () => {
               header=""
               body={(data) => (
                 <img
-                  src={`http://localhost:8000/${data.image.replace('../', '')}`}
+                  src={`${API_URL}/${data.image.replace('../', '')}`}
                   alt="Avatar"
                   className="w-10 h-10 rounded-full object-cover border border-gray-300"
                 />

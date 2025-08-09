@@ -1,3 +1,4 @@
+import { API_URL } from '@/config';
 import axios from 'axios';
 
 // Vérifie et affiche les variables d'environnement
@@ -12,10 +13,9 @@ const getApiUrl = (): string => {
     return process.env.NEXT_PUBLIC_API_LOCAL || 'http://localhost:8000';
   }
 
-  const hostname = window.location.hostname;
-  console.log('Hostname détecté:', hostname);
+  console.log('Hostname détecté:', API_URL,);
 
-  switch (hostname) {
+  switch (API_URL) {
     case 'localhost':
     case '127.0.0.1':
       return process.env.NEXT_PUBLIC_API_LOCAL || 'http://localhost:8000';

@@ -15,6 +15,7 @@ import { useDispatch } from 'react-redux';
 import { AppDispatch } from '@/stores/store';
 import { updateUser } from '@/stores/slices/users/userSlice';
 import { User } from '@/Models/UserType';
+import { API_URL } from '@/config';
 //import { UserRoleModel } from '@/lib/utils';
 
 const Page = () => {
@@ -82,7 +83,7 @@ const Page = () => {
           <div className="absolute -bottom-20 md:-bottom-24 z-10">
             {user.image ? (
               <img
-                src={`http://localhost:8000/${user.image.replace('../', '')}`}
+                src={`${API_URL}/${user.image.replace('../', '')}`}
                 alt="Avatar"
                 className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-xl object-cover"
               />

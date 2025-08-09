@@ -45,6 +45,7 @@ import DropdownTypeFilter from '@/components/ui/dropdowns/dropDownFile-filter';
 import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
 import { PointVente } from '@/Models/pointVenteType';
 import { useUserRole } from '@/hooks/useUserRole';
+import { API_URL } from '@/config';
 
 const typeOptions = Object.values(OperationType).map((op) => ({
   label: op,
@@ -377,7 +378,7 @@ const page = () => {
               if (!categorie || typeof categorie !== 'object')
                 return <span className="text-[11px]">—</span>;
               const imageUrl = categorie.image
-                ? `http://localhost:8000/${categorie.image.replace('../', '')}`
+                ? `${API_URL}/${categorie.image.replace('../', '')}`
                 : '';
               return (
                 <div className="flex items-center  text-[11px]">
