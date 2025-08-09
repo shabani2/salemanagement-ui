@@ -312,7 +312,7 @@ const Page = () => {
 
   const filteredTypeOptions = useMemo(() => user && getOptionsByRole(user?.role), [user]);
   const selectedCatId = watch('formulaire.categorie');
-  const filteredProduits = allProduits.filter((p) => (p.categorie as any)?._id === selectedCatId);
+  const filteredProduits = (allProduits??[]).filter((p) => (p.categorie as any)?._id === selectedCatId);
 
   useEffect(() => {
     dispatch(fetchOrganisations()).then((data) => {

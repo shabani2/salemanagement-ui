@@ -178,7 +178,7 @@ const page = () => {
   const [first, setFirst] = useState(0);
   const [categorie, setCategorie] = useState<Categorie | null>(null);
   useEffect(() => {
-    const filtered = produits.filter((p) => {
+    const filtered = (produits??[]).filter((p) => {
       const query = searchProd.toLowerCase();
       return (
         p.nom?.toLowerCase().includes(query) ||
@@ -285,7 +285,7 @@ const page = () => {
                   if (categorie === null) {
                     setFilteredProduits(allProduits);
                   }
-                  const filtered = allProduits.filter((p) => {
+                  const filtered = (allProduits??[]).filter((p) => {
                     if (!categorie) return true;
                     return typeof p.categorie === 'object' &&
                       p.categorie !== null &&
