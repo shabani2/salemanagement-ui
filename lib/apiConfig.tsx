@@ -1,10 +1,16 @@
 import axios from 'axios';
 
+/** === VOS VALEURS PAR DÉFAUT SANS .env === */
+const DEFAULT_API_FALLBACK = 'https://agricap-api-3a2d9a422767.herokuapp.com';
+const HOST_TO_API: Record<string, string> = {
+  // front -> api
+  'agricap-ui-429dded64762.herokuapp.com': DEFAULT_API_FALLBACK,
+};
+
 /** Normalise une URL (supprime les //, retire le trailing slash) */
 const normalizeUrl = (u: string) => {
   if (!u) return '';
   try {
-    // supprime les doubles slash accidentels (sauf après le protocole)
     const fixed = u.replace(/([^:]\/)\/+/g, '$1');
     return fixed.endsWith('/') ? fixed.slice(0, -1) : fixed;
   } catch {
@@ -14,14 +20,12 @@ const normalizeUrl = (u: string) => {
 
 /** Lecture robuste de l'environnement courant */
 const envFromRuntime = (): 'production' | 'preview' | 'development' | 'test' => {
-  // priorité: NEXT_PUBLIC_ENV (manuel) > VERCEL_ENV (vercel) > NODE_ENV
   const v =
     (process.env.NEXT_PUBLIC_ENV as string) ||
     (process.env.VERCEL_ENV as string) ||
     (process.env.NODE_ENV as string) ||
     'development';
 
-  // uniformiser
   if (v === 'prod') return 'production';
   if (v === 'staging') return 'preview';
   if (v === 'preview') return 'preview';
@@ -32,34 +36,39 @@ const envFromRuntime = (): 'production' | 'preview' | 'development' | 'test' => 
 
 /** Résolution déterministe de l'URL d'API */
 export const getApiUrl = (): string => {
-  // 1) URL explicite => toujours prioritaire (build-time env public)
+  // 0) Si une URL explicite est fournie -> prime
   const explicit = process.env.NEXT_PUBLIC_API_URL;
   if (explicit) return normalizeUrl(explicit);
+
+  // 1) Mapping par hostname (exécution côté client)
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const mapped = HOST_TO_API[host];
+    if (mapped) return normalizeUrl(mapped);
+  }
 
   // 2) Choix par environnement
   const currentEnv = envFromRuntime();
 
-  // Map des URLs par environnement (toutes optionnelles; on prend la meilleure dispo)
-  const apiProd = process.env.NEXT_PUBLIC_API_PROD;
-  const apiPreview =
-    process.env.NEXT_PUBLIC_API_PREVIEW || process.env.NEXT_PUBLIC_API_STAGING;
-  const apiDev = process.env.NEXT_PUBLIC_API_DEV;
-  const apiTest = process.env.NEXT_PUBLIC_API_TEST;
-  const apiLocal = process.env.NEXT_PUBLIC_API_LOCAL || 'http://localhost:8000';
+  const apiProd   = process.env.NEXT_PUBLIC_API_PROD;
+  const apiPreview= process.env.NEXT_PUBLIC_API_PREVIEW || process.env.NEXT_PUBLIC_API_STAGING;
+  const apiDev    = process.env.NEXT_PUBLIC_API_DEV;
+  const apiTest   = process.env.NEXT_PUBLIC_API_TEST;
 
   // 3) Sélection en fonction de l'env
   let resolved =
-    (currentEnv === 'production' && apiProd) ||
-    (currentEnv === 'preview' && (apiPreview || apiProd)) ||
-    (currentEnv === 'test' && (apiTest || apiPreview || apiProd)) ||
-    (currentEnv === 'development' && (apiDev || apiLocal)) ||
-    apiDev || apiPreview || apiProd || apiLocal;
+    (currentEnv === 'production'   && (apiProd || DEFAULT_API_FALLBACK)) ||
+    (currentEnv === 'preview'      && (apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||
+    (currentEnv === 'test'         && (apiTest || apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||
+    (currentEnv === 'development'  && (apiDev || DEFAULT_API_FALLBACK)) ||
+    // Si rien n’est défini nulle part, on tombe sur le fallback Heroku
+    DEFAULT_API_FALLBACK;
 
-  // 4) Côté client: si on est vraiment en localhost et que rien n’est défini, fallback sur local
+  // 4) Côté client: si vraiment en localhost et rien de défini, on peut basculer sur localhost
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (!resolved && (host === 'localhost' || host === '127.0.0.1')) {
-      resolved = apiLocal;
+      resolved = 'http://localhost:8000';
     }
   }
 
@@ -90,8 +99,7 @@ apiClient.interceptors.request.use((config) => {
       const token = localStorage.getItem('authToken');
       if (token) {
         config.headers = config.headers ?? {};
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore – axios v1 types autorisent string | number | boolean
+        // @ts-ignore – axios v1 accepte string
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch {
