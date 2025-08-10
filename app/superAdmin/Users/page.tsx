@@ -2,16 +2,13 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/rules-of-hooks */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, SetStateAction, useRef, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
-//import { Dropdown } from 'primereact/dropdown';
-//import { Dialog } from 'primereact/dialog';
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
@@ -24,9 +21,6 @@ import {
 } from '@/stores/slices/users/userSlice';
 import { isPointVente, isRegion, User, UserModel } from '@/Models/UserType';
 import { Menu } from 'primereact/menu';
-//import { UserRoleModel } from '@/lib/utils';
-//import { FileUpload } from 'primereact/fileupload';
-//import { Menu } from 'lucide-react';
 import { Toast } from 'primereact/toast';
 import { registerUser } from '@/stores/slices/auth/authSlice';
 import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
@@ -34,33 +28,54 @@ import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSl
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import UserDialog from '@/components/ui/userComponent/UserDialog';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-//import { saveAs } from 'file-saver';
 import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
 import { PointVente } from '@/Models/pointVenteType';
-import {
-  downloadExportedFile,
-  exportFile,
-} from '@/stores/slices/document/importDocuments/exportDoc';
+import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
 import { API_URL } from '@/lib/apiConfig';
 
+/* --------------------------------- helpers -------------------------------- */
 const breadcrumbItems = [{ label: 'SuperAdmin' }, { label: 'Users' }];
+const home = { icon: 'pi pi-home', url: '/' };
+
+const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const normalize = (s: unknown) =>
+  (typeof s === 'string' ? s : '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+
+/* Pour rendre les menus popup stables par ligne */
+type MenuMap = Record<string, Menu | null>;
 
 const Page = () => {
-  const [setImportedFiles] = useState<{ name: string; format: string }[]>([]);
-  const [loadingCreateOrUpdate] = useState(false);
-  const toastRef = useRef<Toast>(null);
-  const [users, setUsers] = useState<User[] | null[]>([]); //useSelector((state: RootState) => selectAllUsers(state));
-  const [loading, setLoading] = useState(false);
-  const [setLoadingCreate] = useState(false);
+  const dispatch = useDispatch<AppDispatch>();
+  const toast = useRef<Toast>(null);
+  const toastRef = useRef<Toast>(null); // legacy usage conservée si nécessaire
+
+  /* store data */
   const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
   const regions = useSelector((state: RootState) => selectAllRegions(state));
+
+  /* user local (rôle / scope) */
+  const user =
+    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
+
+  /* ui state */
+  const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [dialogType, setDialogType] = useState<string | null>(null);
-  const [deleteDialogType, setDeleteDialogType] = useState<boolean | null>(null);
+  const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
   const [first, setFirst] = useState(0);
   const [rows, setRows] = useState(10);
-  const [newUser, setNewUser] = useState<UserModel>({
+  const [loading, setLoading] = useState(false);
+  const [loadingCreateOrUpdate, setLoadingCreateOrUpdate] = useState(false);
+
+  /* création / édition */
+  const initialUserState: UserModel = {
     nom: '',
     prenom: '',
     email: '',
@@ -71,375 +86,379 @@ const Page = () => {
     region: '',
     pointVente: '',
     image: null,
-  });
-  const initialUserState = {
-    nom: '',
-    prenom: '',
-    telephone: '',
-    email: '',
-    adresse: '',
-    password: '',
-    role: '',
-    region: '',
-    pointVente: '',
-    image: null as File | null, // Permet de stocker un fichier
   };
+  const [newUser, setNewUser] = useState<UserModel>(initialUserState);
+  const [errors, setErrors] = useState<Partial<Record<keyof UserModel, string>>>({});
+  const [previewUrl, setPreviewUrl] = useState<string>('');
 
-  const [errors, setErrors] = useState<{ [key in keyof UserModel]?: string }>({});
-  const [rowIndexes] = useState<{ [key: string]: number }>({});
+  /* Menus par ligne */
+  const menuRefs = useRef<MenuMap>({});
+  const setMenuRef = useCallback((id: string, el: Menu | null) => {
+    if (!id) return;
+    menuRefs.current[id] = el;
+  }, []);
+  const showMenu = useCallback((e: React.MouseEvent, id: string, row: User) => {
+    setSelectedUser(row);
+    menuRefs.current[id]?.toggle(e);
+  }, []);
 
+  /* ------------------------------ chargement data ------------------------------ */
   useEffect(() => {
-    console.log('Row Index Map Updated:', rowIndexes);
-  }, [rowIndexes]);
-  const user =
-    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
-
-  const dispatch = useDispatch<AppDispatch>();
-
-  const onPageChange = (event: { first: SetStateAction<number>; rows: SetStateAction<number> }) => {
-    setFirst(event.first);
-    setRows(event.rows);
-  };
-
-  const handleAction = (action: string, user: any) => {
-    setSelectedUser(user);
-
-    if (action == 'delete') {
-      setDeleteDialogType(true);
-    } else {
-      setDialogType(action);
-    }
-  };
-
-  const actionBodyTemplate = (rowData: any) => {
-    const menuRef = useRef<any>(null);
-
-    return (
-      <div>
-        <Menu
-          model={[
-            {
-              label: 'Détails',
-              command: () => handleAction('details', rowData),
-            },
-            { label: 'Modifier', command: () => handleAction('edit', rowData) },
-            {
-              label: 'Supprimer',
-              command: () => handleAction('delete', rowData),
-            },
-          ]}
-          popup
-          ref={menuRef}
-        />
-        <Button
-          severity={undefined}
-          icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-          onClick={(event) => menuRef.current.toggle(event)}
-          aria-haspopup
-        />
-      </div>
-    );
-  };
-
-  const handleDeleteUser = async () => {
-    if (!selectedUser) return;
-    setLoading(true);
-    try {
-      await dispatch(deleteUser(selectedUser?._id)).then(async () => {
-        await dispatch(fetchUsers()).then((resp) => {
-          setUsers(resp.payload);
-        });
-      });
-      dispatch(fetchUsers());
-      setDialogType(null);
-    } catch (error) {
-      console.error("Erreur lors de la suppression de l'utilisateur", error);
-    }
-    setLoading(false);
-  };
-
-  const home = { icon: 'pi pi-home', url: '/' };
-
-  const handleCreateOrUpdate = async () => {
-    const isEditMode = !!newUser?._id;
-
-    if (
-      !newUser?.nom ||
-      !newUser?.prenom ||
-      !newUser?.email ||
-      (!isEditMode && !newUser?.password)
-    ) {
-      setErrors({
-        ...errors,
-        // @ts-ignore
-        global: 'Veuillez remplir tous les champs requis.',
-      });
-      return;
-    }
-
-    if (isEditMode) {
-      setLoading(true);
+    (async () => {
       try {
-        // @ts-ignore
-        dispatch(updateUser(newUser)).then(() => {
-          dispatch(fetchUsers()).then((resp) => {
-            toastRef.current?.show({
-              severity: 'success',
-              summary: 'Succès',
-              detail: 'Utilisateur ajouté avec succès !',
-              life: 3000,
-            });
-            setUsers(resp.payload);
-          });
+        setLoading(true);
+        await Promise.all([dispatch(fetchPointVentes()), dispatch(fetchRegions())]);
+        if (user?.role === 'SuperAdmin') {
+          const resp = await dispatch(fetchUsers()).unwrap();
+          setUsers(asArray<User>(resp));
+        } else if (user?.role === 'AdminRegion') {
+          const resp = await dispatch(fetchUsersByRegionId(user?.region?._id)).unwrap();
+          setUsers(asArray<User>(resp));
+        } else {
+          const resp = await dispatch(fetchUsersByPointVenteId(user?.pointVente?._id)).unwrap();
+          setUsers(asArray<User>(resp));
+        }
+      } catch {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Erreur',
+          detail: 'Échec du chargement des utilisateurs.',
+          life: 3000,
         });
-        setDialogType(null);
-      } catch (error) {
-        console.error("Erreur lors de la suppression de l'utilisateur", error);
-      }
-      setLoading(false);
-    } else {
-      try {
-        //@ts-ignore
-        setLoadingCreate(true);
-
-        const formData = new FormData();
-        if (newUser?._id) {
-          formData.append('_id', newUser?._id.toString());
-        }
-        formData.append('nom', newUser.nom);
-        formData.append('prenom', newUser.prenom);
-        formData.append('telephone', newUser.telephone);
-        formData.append('email', newUser.email);
-        formData.append('adresse', newUser.adresse);
-        formData.append('password', newUser.password);
-        formData.append('role', newUser?.role);
-
-        if (newUser?.region) {
-          const regionValue = isRegion(newUser?.region) ? newUser?.region?._id : newUser?.region;
-          formData.append('region', regionValue ? String(regionValue) : '');
-        }
-
-        if (newUser?.pointVente) {
-          formData.append(
-            'pointVente',
-            isPointVente(newUser?.pointVente) ? newUser?.pointVente?._id : newUser?.pointVente
-          );
-        }
-
-        if (newUser.image instanceof File) {
-          formData.append('image', newUser.image);
-        }
-
-        await dispatch(registerUser(formData)).then(async (response) => {
-          await dispatch(fetchUsers()).then((resp) => {
-            toastRef.current?.show({
-              severity: 'success',
-              summary: 'Succès',
-              detail: 'Utilisateur ajouté avec succès !',
-              life: 3000,
-            });
-            setUsers(resp.payload);
-          });
-          console.log('user created : ', response.payload);
-        });
-
-        setDialogType(null);
-        setNewUser(initialUserState);
-      } catch (error) {
-        console.error("Erreur lors de la création de l'utilisateur :", error);
-        if (error instanceof Error) {
-          toastRef.current?.show({
-            severity: 'error',
-            summary: 'Erreur',
-            detail: error.message || "Échec de l'inscription",
-            life: 1000,
-          });
-        }
-        setDialogType(null);
-        setNewUser(initialUserState);
       } finally {
-        //@ts-ignore
-        setLoadingCreate(false);
-        setNewUser(initialUserState);
+        setLoading(false);
       }
-    }
-  };
+    })();
+  }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
 
-  useEffect(() => {
-    dispatch(fetchPointVentes());
-    dispatch(fetchRegions());
-  }, [dispatch]);
-
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
+  /* preview image */
   useEffect(() => {
     if (newUser.image instanceof File) {
       const url = URL.createObjectURL(newUser.image);
       setPreviewUrl(url);
-
-      return () => URL.revokeObjectURL(url); // libère l'URL temporaire
-    } else if (typeof newUser.image === 'string') {
-      setPreviewUrl(newUser.image); // mode edit : image déjà hébergée
-    } else {
-      setPreviewUrl(''); // aucun fichier ou URL
+      return () => URL.revokeObjectURL(url);
     }
+    if (typeof newUser.image === 'string') {
+      setPreviewUrl(newUser.image);
+      return;
+    }
+    setPreviewUrl('');
   }, [newUser.image]);
 
+  /* inject edit data */
   useEffect(() => {
     if (dialogType === 'edit' && selectedUser) {
-      setNewUser(selectedUser);
+      // cast souple: l'API d'édition attend UserModel-like
+      setNewUser({
+        _id: selectedUser._id,
+        nom: selectedUser.nom ?? '',
+        prenom: selectedUser.prenom ?? '',
+        email: selectedUser.email ?? '',
+        telephone: selectedUser.telephone ?? '',
+        adresse: selectedUser.adresse ?? '',
+        password: '', // sécurité: ne jamais pré-remplir
+        role: selectedUser.role ?? '',
+        region:
+          typeof selectedUser.region === 'object' && selectedUser.region
+            ? selectedUser.region._id ?? ''
+            : (selectedUser.region as any) ?? '',
+        pointVente:
+            typeof selectedUser.pointVente === 'object' && selectedUser.pointVente
+              ? selectedUser.pointVente._id ?? ''
+              : (selectedUser.pointVente as any) ?? '',
+        image: typeof selectedUser.image === 'string' ? selectedUser.image : null,
+      });
     }
   }, [dialogType, selectedUser]);
 
-  useEffect(() => {
-    if (user?.role === 'SuperAdmin') {
-      dispatch(fetchUsers()).then((resp) => {
-        console.log('users  : ', resp.payload);
-        setUsers(resp.payload);
-      });
-    } else if (user?.role === 'AdminRegion') {
-      dispatch(fetchUsersByRegionId(user?.region?._id)).then((resp) => {
-        console.log('users de la region => : ', resp.payload);
-        setUsers(resp.payload);
-      });
-    } else {
-      dispatch(fetchUsersByPointVenteId(user?.pointVente?._id)).then((resp) => {
-        console.log('users by point vente : ', resp.payload);
-        setUsers(resp.payload);
-      });
-    }
-  }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
-  // console.log('users : ',users)
-  //traitement de la recherche
+  /* ------------------------------ recherche / filtre ------------------------------ */
+  const [pvFilter, setPvFilter] = useState<PointVente | null>(null);
 
   const filteredUsers = useMemo(() => {
-    const lowerSearch = search.toLowerCase();
+    const q = normalize(search);
 
-    return (Array.isArray(users) ? users.filter((user): user is User => user !== null) : []).filter(
-      (u) => {
-        const nom = u.nom?.toLowerCase() || '';
-        const prenom = u.prenom?.toLowerCase() || '';
-        const email = u.email?.toLowerCase() || '';
-        const tel = u.telephone?.toLowerCase() || '';
+    const base = users.filter((u) => {
+      const fields = [
+        normalize(u.nom),
+        normalize(u.prenom),
+        normalize(u.email),
+        normalize(u.telephone),
+        normalize(
+          typeof u?.region === 'object' && u?.region ? u.region.nom : (u?.region as string)
+        ),
+        normalize(
+          typeof u?.pointVente === 'object' && u?.pointVente ? u.pointVente.nom : (u?.pointVente as string)
+        ),
+        normalize(u.role),
+      ];
+      return !q || fields.some((f) => f.includes(q));
+    });
 
-        const pv =
-          typeof u?.pointVente === 'object' && u?.pointVente !== null && 'nom' in u?.pointVente
-            ? u?.pointVente.nom?.toLowerCase() || ''
-            : typeof u?.pointVente === 'string'
-              ? u?.pointVente.toLowerCase()
-              : 'depot central';
+    if (!pvFilter) return base;
 
-        const region =
-          typeof u?.region === 'object' && u?.region !== null && 'nom' in u?.region
-            ? u?.region.nom?.toLowerCase() || ''
-            : typeof u?.region === 'string'
-              ? u?.region.toLowerCase()
-              : '';
-
-        const role = u?.role?.toLowerCase() || '';
-
-        return [nom, prenom, email, tel, region, pv, role].some((field) =>
-          field.includes(lowerSearch)
-        );
-      }
+    return base.filter(
+      (u) =>
+        typeof u?.pointVente === 'object' &&
+        u?.pointVente &&
+        '_id' in u.pointVente &&
+        u.pointVente._id === pvFilter._id
     );
-  }, [search, users]);
+  }, [search, users, pvFilter]);
 
-  //file management
-  const toast = useRef<Toast>(null);
+  /* ------------------------------ actions menu ------------------------------ */
+  const handleAction = (action: 'details' | 'edit' | 'delete', row: User) => {
+    setSelectedUser(row);
+    if (action === 'delete') {
+      setDeleteDialogOpen(true);
+      return;
+    }
+    setDialogType(action);
+  };
 
-  const handleFileManagement = async ({
-    type,
-    format,
-    file,
-  }: {
-    type: 'import' | 'export';
-    format: 'csv' | 'pdf' | 'excel';
-    file?: File;
-  }) => {
-    if (type === 'import' && file) {
-      //@ts-ignore
-      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+  /* ---------------------------------- CRUD ---------------------------------- */
+  const refetchUsers = useCallback(async () => {
+    try {
+      if (user?.role === 'SuperAdmin') {
+        const resp = await dispatch(fetchUsers()).unwrap();
+        setUsers(asArray<User>(resp));
+      } else if (user?.role === 'AdminRegion') {
+        const resp = await dispatch(fetchUsersByRegionId(user?.region?._id)).unwrap();
+        setUsers(asArray<User>(resp));
+      } else {
+        const resp = await dispatch(fetchUsersByPointVenteId(user?.pointVente?._id)).unwrap();
+        setUsers(asArray<User>(resp));
+      }
+    } catch {
+      // toast déjà géré ailleurs si besoin
+    }
+  }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
+
+  const handleDeleteUser = useCallback(async () => {
+    if (!selectedUser?._id) return;
+    try {
+      setLoading(true);
+      await dispatch(deleteUser(selectedUser._id)).unwrap();
       toast.current?.show({
-        severity: 'info',
-        summary: `Import ${format.toUpperCase()}`,
-        detail: `File imported: ${file.name}`,
+        severity: 'success',
+        summary: 'Supprimé',
+        detail: 'Utilisateur supprimé.',
+        life: 2000,
+      });
+      await refetchUsers();
+    } catch {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la suppression.',
         life: 3000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [dispatch, selectedUser?._id, refetchUsers]);
+
+  const validateUserPayload = (payload: UserModel, isEdit: boolean) => {
+    const errs: Partial<Record<keyof UserModel, string>> = {};
+    if (!isNonEmptyString(payload.nom)) errs.nom = 'Requis';
+    if (!isNonEmptyString(payload.prenom)) errs.prenom = 'Requis';
+    if (!isNonEmptyString(payload.email)) errs.email = 'Requis';
+    if (!isEdit && !isNonEmptyString(payload.password)) errs.password = 'Requis';
+    return errs;
+  };
+
+  const handleCreateOrUpdate = useCallback(async () => {
+    const isEditMode = !!newUser?._id;
+    const errs = validateUserPayload(newUser, isEditMode);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Champs requis',
+        detail: 'Veuillez compléter les champs obligatoires.',
+        life: 2500,
       });
       return;
     }
 
-    if (type === 'export') {
-      // Only allow "csv" or "xlsx" as fileType
-      if (format === 'pdf') {
-        toast.current?.show({
-          severity: 'warn',
-          summary: 'Export PDF non supporté',
-          detail: "L'export PDF n'est pas disponible pour ce module.",
-          life: 3000,
-        });
-        return;
-      }
-      // Map "excel" to "xlsx" for backend compatibility
-      const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : format;
-      const result = await dispatch(
-        exportFile({
-          url: '/export/users',
-          mouvements: users,
-          fileType: exportFileType,
-        })
-      );
+    try {
+      setLoadingCreateOrUpdate(true);
 
-      if (exportFile.fulfilled.match(result)) {
-        const filename = `utilisateurs.${format === 'csv' ? 'csv' : 'xlsx'}`;
-        downloadExportedFile(result.payload, filename);
-
+      if (isEditMode) {
+        // Mise à jour (payload type libre dans slice)
+        await dispatch(updateUser(newUser as any)).unwrap();
         toast.current?.show({
           severity: 'success',
-          summary: `Export ${format.toUpperCase()}`,
-          detail: `File downloaded: ${filename}`,
-          life: 3000,
+          summary: 'Modifié',
+          detail: 'Utilisateur mis à jour.',
+          life: 2000,
         });
+        setDialogType(null);
+        await refetchUsers();
       } else {
+        // Création via FormData
+        const fd = new FormData();
+        if (newUser._id) fd.append('_id', String(newUser._id));
+        fd.append('nom', newUser.nom);
+        fd.append('prenom', newUser.prenom);
+        fd.append('telephone', newUser.telephone ?? '');
+        fd.append('email', newUser.email);
+        fd.append('adresse', newUser.adresse ?? '');
+        fd.append('password', newUser.password);
+        fd.append('role', newUser.role ?? '');
+
+        if (newUser.region) {
+          const regionValue = isRegion(newUser.region as any)
+            ? (newUser.region as any)?._id
+            : newUser.region;
+          if (regionValue) fd.append('region', String(regionValue));
+        }
+        if (newUser.pointVente) {
+          const pvValue = isPointVente(newUser.pointVente as any)
+            ? (newUser.pointVente as any)?._id
+            : newUser.pointVente;
+          if (pvValue) fd.append('pointVente', String(pvValue));
+        }
+        if (newUser.image instanceof File) {
+          fd.append('image', newUser.image);
+        }
+
+        await dispatch(registerUser(fd)).unwrap();
         toast.current?.show({
-          severity: 'error',
-          summary: `Export ${format.toUpperCase()} Échoué`,
-          detail: String(result.payload || 'Une erreur est survenue.'),
+          severity: 'success',
+          summary: 'Créé',
+          detail: 'Utilisateur ajouté avec succès !',
+          life: 2000,
+        });
+        setDialogType(null);
+        setNewUser(initialUserState);
+        await refetchUsers();
+      }
+    } catch (err: any) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: String(err?.message || "Échec de l'opération"),
+        life: 3500,
+      });
+    } finally {
+      setLoadingCreateOrUpdate(false);
+    }
+  }, [dispatch, newUser, refetchUsers]);
+
+  /* ------------------------------- import/export ------------------------------ */
+  const handleFileManagement = useCallback(
+    async ({
+      type,
+      format,
+      file,
+    }: {
+      type: 'import' | 'export';
+      format: 'csv' | 'pdf' | 'excel';
+      file?: File;
+    }) => {
+      if (type === 'import' && file) {
+        toast.current?.show({
+          severity: 'info',
+          summary: `Import ${format.toUpperCase()}`,
+          detail: `Fichier importé: ${file.name}`,
           life: 3000,
         });
+        // TODO: implémenter parsing CSV/XLSX + validations
+        return;
       }
+
+      if (type === 'export') {
+        if (format === 'pdf') {
+          toast.current?.show({
+            severity: 'warn',
+            summary: 'Export PDF non supporté',
+            detail: "L'export PDF n'est pas disponible pour ce module.",
+            life: 3000,
+          });
+          return;
+        }
+        const fileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : 'csv';
+        try {
+          const r = await dispatch(
+            exportFile({
+              url: '/export/users',
+              mouvements: filteredUsers,
+              fileType,
+            }) as any
+          );
+          if ((exportFile as any).fulfilled.match(r)) {
+            const filename = `utilisateurs.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
+            downloadExportedFile((r as any).payload, filename);
+            toast.current?.show({
+              severity: 'success',
+              summary: `Export ${format.toUpperCase()}`,
+              detail: `Fichier téléchargé: ${filename}`,
+              life: 3000,
+            });
+          } else {
+            throw new Error();
+          }
+        } catch {
+          toast.current?.show({
+            severity: 'error',
+            summary: `Export ${format.toUpperCase()} échoué`,
+            detail: 'Une erreur est survenue.',
+            life: 3000,
+          });
+        }
+      }
+    },
+    [dispatch, filteredUsers]
+  );
+
+  /* ------------------------------- rendu image ------------------------------- */
+  const avatarTemplate = (data: User) => {
+    const srcRaw = typeof data?.image === 'string' ? data.image : '';
+    const src = isNonEmptyString(srcRaw) ? `${API_URL}/${srcRaw.replace('../', '')}` : '';
+    if (!src) {
+      return (
+        <div
+          className="w-10 h-10 rounded-full border border-gray-300 bg-gray-200 flex items-center justify-center text-gray-600 text-xs"
+          title="Aucune image"
+        >
+          —
+        </div>
+      );
     }
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={`${data?.prenom ?? ''} ${data?.nom ?? ''}`}
+        className="w-10 h-10 rounded-full object-cover border border-gray-300"
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = 'none';
+        }}
+      />
+    );
   };
-  console.log('users  : ', filteredUsers);
-  //zone pour filtrer par point de vente
-  const [setFilteredByPV] = useState<User[]>([]);
+
+  /* ------------------------------- handlers UI ------------------------------- */
+  const onPageChange = (event: { first?: number; rows?: number }) => {
+    setFirst(event.first ?? 0);
+    setRows(event.rows ?? 10);
+  };
 
   const handlePointVenteSelect = (pointVente: PointVente | null) => {
-    if (!pointVente) {
-      // Réinitialiser avec tous les utilisateurs filtrés par la recherche
-      //@ts-ignore
-      setFilteredByPV(filteredUsers);
-      return;
-    }
-
-    const filtered = filteredUsers.filter(
-      (u) =>
-        typeof u?.pointVente === 'object' &&
-        u?.pointVente !== null &&
-        '_id' in u?.pointVente &&
-        u?.pointVente?._id === pointVente?._id
-    );
-    //@ts-ignore
-    setFilteredByPV(filtered);
+    setPvFilter(pointVente);
   };
 
+  /* ---------------------------------- UI ---------------------------------- */
   return (
-    <div className="  h-screen-min">
+    <div className="h-screen-min">
+      <Toast ref={toast} />
+      <Toast ref={toastRef} />
+
       <div className="flex items-center justify-between mt-3 mb-3">
         <BreadCrumb model={breadcrumbItems} home={home} className="bg-none" />
-        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des utilisateurs</h2>
+        <h2 className="text-2xl font-bold text-gray-700">Gestion des utilisateurs</h2>
       </div>
+
       <div className="bg-white p-2 rounded-lg">
         <div className="flex justify-between my-4">
           <div className="relative w-2/3 flex justify-between gap-2">
@@ -447,25 +466,26 @@ const Page = () => {
               className="p-2 pl-10 border rounded w-full"
               placeholder="Rechercher..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => setSearch(e.target.value ?? '')}
             />
-
             <DropdownPointVenteFilter onSelect={handlePointVenteSelect} />
             <DropdownImportExport onAction={handleFileManagement} />
-
-            {/* <i className="pi pi-search absolute -3 top-1/2 transform -translate-y-1/2 text-gray-400"></i> */}
           </div>
+
           {!(user?.role === 'Logisticien' || user?.role === 'Vendeur') && (
             <Button
-              severity={undefined}
               icon="pi pi-plus"
               label="nouveau"
               className="!bg-green-700 text-white p-2 rounded"
-              onClick={() => setDialogType('create')}
+              onClick={() => {
+                setNewUser(initialUserState);
+                setDialogType('create');
+              }}
             />
           )}
         </div>
-        <div className=" p-1 rounded-lg shadow-md ">
+
+        <div className="p-1 rounded-lg shadow-md">
           <DataTable
             value={filteredUsers}
             dataKey="_id"
@@ -477,7 +497,7 @@ const Page = () => {
             onPage={onPageChange}
             className="rounded-lg custom-datatable text-[11px]"
             tableStyle={{ minWidth: '50rem' }}
-            rowClassName={(rowData, options) => {
+            rowClassName={(_, options) => {
               //@ts-ignore
               const index = options?.rowIndex ?? 0;
               const globalIndex = first + index;
@@ -485,96 +505,72 @@ const Page = () => {
                 ? '!bg-gray-300 !text-gray-900'
                 : '!bg-green-900 !text-white';
             }}
+            emptyMessage="Aucun utilisateur trouvé."
           >
             <Column
-              field="_id"
               header="#"
-              body={(_data, options) => <span className="text-[11px]">{options.rowIndex + 1}</span>}
+              body={(_data, options) => <span className="text-[11px]">{(options?.rowIndex ?? 0) + 1}</span>}
               className="px-4 py-1 text-[11px]"
               headerClassName="text-[11px] !bg-green-900 !text-white"
             />
-
             <Column
               header=""
-              body={(data) => (
-                <img
-                  src={`${API_URL}/${data.image.replace('../', '')}`}
-                  alt="Avatar"
-                  className="w-10 h-10 rounded-full object-cover border border-gray-300"
-                />
-              )}
+              body={avatarTemplate}
               className="px-4 py-1 text-[11px]"
               headerClassName="text-[11px] !bg-green-900 !text-white"
             />
-
+            <Column field="nom" header="Nom" sortable className="px-4 py-1 text-[11px]" headerClassName="text-[11px] !bg-green-900 !text-white" />
+            <Column field="prenom" header="Prénom" sortable className="px-4 py-1 text-[11px]" headerClassName="text-[11px] !bg-green-900 !text-white" />
+            <Column field="email" header="Email" sortable className="px-4 py-1 text-[11px]" headerClassName="text-[11px] !bg-green-900 !text-white" />
+            <Column field="telephone" header="Téléphone" className="px-4 py-1 text-[11px]" headerClassName="text-[11px] !bg-green-900 !text-white" />
             <Column
-              field="nom"
-              header="Nom"
-              sortable
-              filter
-              className="px-4 py-1 text-[11px]"
-              headerClassName="text-[11px] !bg-green-900 !text-white"
-            />
-
-            <Column
-              field="prenom"
-              header="Prénom"
-              sortable
-              filter
-              className="px-4 py-1 text-[11px]"
-              headerClassName="text-[11px] !bg-green-900 !text-white"
-            />
-
-            <Column
-              field="email"
-              header="Email"
-              sortable
-              filter
-              className="px-4 py-1 text-[11px]"
-              headerClassName="text-[11px] !bg-green-900 !text-white"
-            />
-
-            <Column
-              field="telephone"
-              header="Téléphone"
-              className="px-4 py-1 text-[11px]"
-              headerClassName="text-[11px] !bg-green-900 !text-white"
-            />
-
-            <Column
-              field="region.nom"
               header="Region"
-              filter
-              body={(rowData) => (
+              body={(rowData: User) => (
                 <span className="text-[11px]">
-                  {rowData?.region?.nom || rowData?.pointVente?.region.nom || 'Depot Central'}
+                  {typeof rowData?.region === 'object' && rowData?.region
+                    ? rowData.region.nom
+                    : (rowData as any)?.pointVente?.region?.nom || 'Depot Central'}
                 </span>
               )}
               className="px-4 py-1 text-[11px]"
               headerClassName="text-[11px] !bg-green-900 !text-white"
             />
-
             <Column
-              field="pointVente.nom"
-              header="point vente"
-              filter
-              body={(rowData) => (
-                <span className="text-[11px]">{rowData?.pointVente?.nom || 'Depot Central'}</span>
+              header="Point de vente"
+              body={(rowData: User) => (
+                <span className="text-[11px]">
+                  {typeof rowData?.pointVente === 'object' && rowData?.pointVente
+                    ? rowData.pointVente.nom
+                    : 'Depot Central'}
+                </span>
               )}
               className="px-4 py-1 text-[11px]"
               headerClassName="text-[11px] !bg-green-900 !text-white"
             />
+            <Column field="role" header="Rôle" className="px-4 py-1 text-[11px]" headerClassName="text-[11px] !bg-green-900 !text-white" />
 
             <Column
-              field="role"
-              header="Rôle"
-              className="px-4 py-1 text-[11px]"
-              headerClassName="text-[11px] !bg-green-900 !text-white"
-            />
-
-            <Column
-              body={actionBodyTemplate}
               header="Actions"
+              body={(row: User) => (
+                <>
+                  <Button
+                    icon="pi pi-bars"
+                    className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                    onClick={(e) => showMenu(e, row?._id ?? '', row)}
+                    disabled={!isNonEmptyString(row?._id)}
+                    aria-haspopup
+                  />
+                  <Menu
+                    popup
+                    ref={(el) => setMenuRef(row?._id ?? '', el)}
+                    model={[
+                      { label: 'Détails', command: () => handleAction('details', row) },
+                      { label: 'Modifier', command: () => handleAction('edit', row) },
+                      { label: 'Supprimer', command: () => handleAction('delete', row) },
+                    ]}
+                  />
+                </>
+              )}
               className="px-4 py-1 text-[11px]"
               headerClassName="text-[11px] !bg-green-900 !text-white"
             />
@@ -582,19 +578,16 @@ const Page = () => {
         </div>
       </div>
 
+      {/* Dialog de création/édition (composant existant) */}
       <UserDialog
-        // @ts-ignore
-        dialogType={dialogType}
-        setDialogType={setDialogType}
-        //@ts-ignore
-        newUser={newUser}
-        //@ts-ignore
-        setNewUser={setNewUser}
+        dialogType={dialogType as any}
+        setDialogType={setDialogType as any}
+        newUser={newUser as any}
+        setNewUser={setNewUser as any}
         errors={errors}
-        showRegionField={true}
-        showPointVenteField={true}
-        // @ts-ignore
-        UserRoleModel={['Admin', 'Manager', 'Vendeur']} // ou depuis un model
+        showRegionField
+        showPointVenteField
+        UserRoleModel={['Admin', 'Manager', 'Vendeur']}
         //@ts-ignore
         regions={regions}
         pointsVente={pointsVente}
@@ -602,22 +595,19 @@ const Page = () => {
         handleCreateOrUpdate={handleCreateOrUpdate}
         loadingCreateOrUpdate={loadingCreateOrUpdate}
       />
-      {/* dialog of deletion */}
 
+      {/* Dialog suppression */}
       <ConfirmDeleteDialog
-        // @ts-ignore
-        visible={deleteDialogType}
-        onHide={() => setDeleteDialogType(false)}
+        visible={deleteDialogOpen}
+        onHide={() => setDeleteDialogOpen(false)}
         onConfirm={() => {
           handleDeleteUser();
-          setDeleteDialogType(false);
+          setDeleteDialogOpen(false);
         }}
-        item={selectedUser}
-        objectLabel="l'utilisateur "
+        item={selectedUser ?? { _id: '', nom: '' }}
+        objectLabel="l'utilisateur"
         displayField="nom"
       />
-
-      <Toast ref={toastRef} />
     </div>
   );
 };

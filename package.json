@@ -65,5 +65,9 @@
     "prettier": "^3.5.3",
     "tailwindcss": "^4",
     "typescript": "^5"
+    
+  },
+  "resolutions": {
+    "eslint": "8.57.0"
   }
 }
