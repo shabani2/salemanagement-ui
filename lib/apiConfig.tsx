@@ -99,7 +99,7 @@ apiClient.interceptors.request.use((config) => {
       const token = localStorage.getItem('authToken');
       if (token) {
         config.headers = config.headers ?? {};
-        // @ts-ignore – axios v1 accepte string
+        //  – axios v1 accepte string
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch {
