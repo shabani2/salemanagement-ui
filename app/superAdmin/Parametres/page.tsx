@@ -154,7 +154,7 @@ const Page = () => {
       return () => URL.revokeObjectURL(url);
     }
     if (typeof formData.logo === 'string' && formData.logo.trim()) {
-      const src = `${API_URL}/${formData.logo.replace('../', '')}`;
+      const src = `${API_URL()}/${formData.logo.replace('../', '')}`;
       setPreviewUrl(src);
       return;
     }

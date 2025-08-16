@@ -80,7 +80,7 @@ const Page: React.FC = () => {
 
   const currentAvatarUrl = useMemo(() => {
     if (avatarFile) return URL.createObjectURL(avatarFile);
-    if (isNonEmptyString(selectedUser?.image)) return safeUrlJoin(API_URL, selectedUser!.image!);
+    if (isNonEmptyString(selectedUser?.image)) return safeUrlJoin(API_URL(), selectedUser!.image!);
     return '';
   }, [avatarFile, selectedUser]);
 

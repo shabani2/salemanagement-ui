@@ -24,6 +24,7 @@ export const CommandeNotification: React.FC = () => {
   useEffect(() => {
     if (!user?.role) return;
     if (isSuperAdmin) {
+      //@ts-ignore
       dispatch(fetchCommandes()).then((resp) => {
         console.log('Commandes fetched:', resp.payload);
       });

@@ -5,182 +5,242 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
-import { DataTable } from 'primereact/datatable';
+import { DataTable, DataTablePageEvent, DataTableSortEvent } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { Dialog } from 'primereact/dialog';
 import { Menu } from 'primereact/menu';
+import { Toast } from 'primereact/toast';
+
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
+
 import {
   addRegion,
-  updateRegion,
-  deleteRegion,
+  updateRegion as updateRegionThunk,
+  deleteRegion as deleteRegionThunk,
   fetchRegions,
   selectAllRegions,
+  selectRegionMeta,
+  selectRegionStatus,
 } from '@/stores/slices/regions/regionSlice';
+
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
 import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
-import { Toast } from 'primereact/toast';
 
-/* ----------------------------- Helpers robustes ---------------------------- */
+/* ----------------------------- Helpers ----------------------------- */
 type Region = { _id?: string; nom?: string; ville?: string; pointVenteCount?: number };
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
-const safeNumber = (v: unknown, fallback = 0) => {
-  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
-  return Number.isFinite(n) ? n : fallback;
-};
-const normalize = (s: unknown) =>
-  (typeof s === 'string' ? s : '')
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .trim();
 
-type MenuMap = Record<string, Menu | null>;
+/* --------------------------------- Page ---------------------------------- */
 
 export default function RegionManagement() {
   const dispatch = useDispatch<AppDispatch>();
   const toast = useRef<Toast>(null);
 
-  /* ------------------------------- Store data ------------------------------- */
+  // Store
   const regions = useSelector((state: RootState) => asArray<Region>(selectAllRegions(state)));
+  const meta = useSelector(selectRegionMeta);
+  const status = useSelector(selectRegionStatus);
+  const loading = status === 'loading';
 
-  /* --------------------------------- UI state ------------------------------- */
-  const [search, setSearch] = useState('');
-  const [dialogType, setDialogType] = useState<'create' | 'edit' | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // Requête serveur (params)
+  const [page, setPage] = useState(1); // 1-based
+  const [rows, setRows] = useState(10);
+  const [sortBy, setSortBy] = useState<string>('createdAt');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchText, setSearchText] = useState('');
+  const [villeFilter, setVilleFilter] = useState('');
+
+  // Modals / sélection
+  const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
-  const [newRegion, setNewRegion] = useState<Region>({ nom: '', ville: '' });
-  const [first, setFirst] = useState(0);
-  const [rows, setRows] = useState(5);
-  const [loading, setLoading] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState<boolean>(false);
 
-  /* ------------------------------ Menus par ligne --------------------------- */
-  const menuRefs = useRef<MenuMap>({});
-  const setMenuRef = useCallback((id: string, el: Menu | null) => {
-    if (!id) return;
-    menuRefs.current[id] = el;
-  }, []);
-  const showMenu = useCallback((e: React.MouseEvent, id: string, row: Region) => {
-    setSelectedRegion(row);
-    menuRefs.current[id]?.toggle(e);
-  }, []);
+  // Formulaire création/édition
+  const [form, setForm] = useState<Pick<Region, 'nom' | 'ville'>>({ nom: '', ville: '' });
 
-  /* ------------------------------ Chargement data --------------------------- */
+  // ✅ Un seul Menu global pour corriger le bug de sélection
+  const menuRef = useRef<Menu>(null);
+  const selectedRowDataRef = useRef<Region | null>(null);
+  const handleAction = useCallback((action: 'details' | 'edit' | 'delete', row: Region) => {
+    setSelectedRegion(row ?? null);
+    if (action === 'delete') {
+      setIsDeleteOpen(true);
+      setDialogType(null);
+    } else {
+      setDialogType(action);
+    }
+  }, []);
+  const menuModel = useMemo(
+    () => [
+      { label: 'Détails', command: () => selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current) },
+      { label: 'Modifier', command: () => selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current) },
+      { label: 'Supprimer', command: () => selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current) },
+    ],
+    [handleAction]
+  );
+
+  /* ------------------------------ Fetch serveur ----------------------------- */
+  const fetchServer = useCallback(() => {
+    dispatch(
+      fetchRegions({
+        page,
+        limit: rows,
+        q: searchText || undefined,
+        ville: villeFilter || undefined,
+        sortBy,
+        order,
+        includeTotal: true,
+      })
+    );
+  }, [dispatch, page, rows, searchText, villeFilter, sortBy, order]);
+
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        await dispatch(fetchRegions());
-      } catch {
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Erreur',
-          detail: 'Impossible de charger les régions.',
-          life: 3000,
-        });
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [dispatch]);
+    fetchServer();
+  }, [fetchServer]);
 
-  /* --------------------------------- Filtrage ------------------------------- */
-  const filteredRegions = useMemo(() => {
-    const q = normalize(search);
-    return regions.filter((r) => {
-      const nom = normalize(r?.nom);
-      const ville = normalize(r?.ville);
-      const pvc = String(safeNumber(r?.pointVenteCount)).toLowerCase();
-      return !q || nom.includes(q) || ville.includes(q) || pvc.includes(q);
-    });
-  }, [regions, search]);
+  /* ------------------------------- Handlers UI ------------------------------ */
+  const onPage = useCallback(
+    (e: DataTablePageEvent) => {
+      const newPage = (e.page ?? 0) + 1; // PrimeReact 0-based
+      setPage(newPage);
+      setRows(e.rows);
+      dispatch(
+        fetchRegions({
+          page: newPage,
+          limit: e.rows,
+          q: searchText || undefined,
+          ville: villeFilter || undefined,
+          sortBy,
+          order,
+          includeTotal: true,
+        })
+      );
+    },
+    [dispatch, searchText, villeFilter, sortBy, order]
+  );
 
-  /* ------------------------------ CRUD handlers ----------------------------- */
+  const onSort = useCallback(
+    (e: DataTableSortEvent) => {
+      const newSortBy = (e.sortField as string) || 'createdAt';
+      const newOrder = e.sortOrder === 1 ? 'asc' : 'desc';
+      setSortBy(newSortBy);
+      setOrder(newOrder);
+      setPage(1);
+      dispatch(
+        fetchRegions({
+          page: 1,
+          limit: rows,
+          q: searchText || undefined,
+          ville: villeFilter || undefined,
+          sortBy: newSortBy,
+          order: newOrder,
+          includeTotal: true,
+        })
+      );
+    },
+    [dispatch, rows, searchText, villeFilter]
+  );
+
+  const applyFilters = useCallback(() => {
+    setPage(1);
+    dispatch(
+      fetchRegions({
+        page: 1,
+        limit: rows,
+        q: searchText || undefined,
+        ville: villeFilter || undefined,
+        sortBy,
+        order,
+        includeTotal: true,
+      })
+    );
+  }, [dispatch, rows, searchText, villeFilter, sortBy, order]);
+
+  // Actions CRUD
+  const resetForm = useCallback(() => {
+    setForm({ nom: '', ville: '' });
+    setDialogType(null);
+    setSelectedRegion(null);
+  }, []);
+
+  useEffect(() => {
+    if (dialogType === 'edit' || dialogType === 'details') {
+      setForm({ nom: selectedRegion?.nom ?? '', ville: selectedRegion?.ville ?? '' });
+    } else if (dialogType === 'create') {
+      setForm({ nom: '', ville: '' });
+    }
+  }, [dialogType, selectedRegion]);
+
   const handleCreate = useCallback(async () => {
-    if (!isNonEmptyString(newRegion.nom) || !isNonEmptyString(newRegion.ville)) {
-      toast.current?.show({
-        severity: 'warn',
-        summary: 'Champs requis',
-        detail: 'Veuillez renseigner Nom et Ville.',
-        life: 2500,
-      });
+    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.ville)) {
+      toast.current?.show({ severity: 'warn', summary: 'Champs requis', detail: 'Nom et Ville sont requis', life: 2500 });
       return;
     }
-    try {
-      setLoading(true);
-      const res = await dispatch(addRegion({ nom: newRegion.nom.trim(), ville: newRegion.ville.trim() }) as any);
-      // @ts-ignore
-      if (addRegion.fulfilled?.match?.(res) || res?.meta?.requestStatus === 'fulfilled') {
-        toast.current?.show({ severity: 'success', summary: 'Ajouté', detail: 'Région créée.', life: 2000 });
-        setDialogType(null);
-        setNewRegion({ nom: '', ville: '' });
-        await dispatch(fetchRegions());
-      } else {
-        throw new Error();
-      }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'ajout.", life: 3000 });
-    } finally {
-      setLoading(false);
+    const r = await dispatch(addRegion({ nom: form.nom.trim(), ville: form.ville.trim() }) as any);
+    if ((addRegion as any).fulfilled.match(r)) {
+      toast.current?.show({ severity: 'success', summary: 'Ajouté', detail: 'Région créée', life: 2000 });
+      resetForm();
+      fetchServer();
+    } else {
+      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'ajout", life: 3000 });
     }
-  }, [dispatch, newRegion]);
+  }, [dispatch, form, fetchServer, resetForm]);
 
   const handleUpdate = useCallback(async () => {
     if (!selectedRegion?._id) return;
-    if (!isNonEmptyString(selectedRegion.nom) || !isNonEmptyString(selectedRegion.ville)) {
-      toast.current?.show({
-        severity: 'warn',
-        summary: 'Champs requis',
-        detail: 'Veuillez renseigner Nom et Ville.',
-        life: 2500,
-      });
+    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.ville)) {
+      toast.current?.show({ severity: 'warn', summary: 'Champs requis', detail: 'Nom et Ville sont requis', life: 2500 });
       return;
     }
-    try {
-      setLoading(true);
-      const res = await dispatch(updateRegion(selectedRegion as any) as any);
-      // @ts-ignore
-      if (updateRegion.fulfilled?.match?.(res) || res?.meta?.requestStatus === 'fulfilled') {
-        toast.current?.show({ severity: 'success', summary: 'Modifié', detail: 'Région mise à jour.', life: 2000 });
-        setDialogType(null);
-        await dispatch(fetchRegions());
-      } else {
-        throw new Error();
-      }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la modification.', life: 3000 });
-    } finally {
-      setLoading(false);
+    const r = await dispatch(
+      updateRegionThunk({
+        _id: selectedRegion._id,
+        nom: form.nom.trim(),
+        ville: form.ville.trim(),
+      } as any)
+    );
+    if ((updateRegionThunk as any).fulfilled.match(r)) {
+      toast.current?.show({ severity: 'success', summary: 'Modifié', detail: 'Région mise à jour', life: 2000 });
+      resetForm();
+      fetchServer();
+    } else {
+      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la modification', life: 3000 });
     }
-  }, [dispatch, selectedRegion]);
+  }, [dispatch, selectedRegion, form, fetchServer, resetForm]);
 
   const handleDelete = useCallback(async () => {
     if (!selectedRegion?._id) return;
-    try {
-      setLoading(true);
-      const res = await dispatch(deleteRegion(selectedRegion._id) as any);
-      // @ts-ignore
-      if (deleteRegion.fulfilled?.match?.(res) || res?.meta?.requestStatus === 'fulfilled') {
-        toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Région supprimée.', life: 2000 });
-        await dispatch(fetchRegions());
-      } else {
-        throw new Error();
-      }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la suppression.', life: 3000 });
-    } finally {
-      setLoading(false);
+    const r = await dispatch(deleteRegionThunk(selectedRegion._id) as any);
+    if ((deleteRegionThunk as any).fulfilled.match(r)) {
+      toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Région supprimée', life: 2000 });
+      // si la page devient vide, reculer d’une page
+      const nextPage = regions.length === 1 && (meta?.page ?? 1) > 1 ? (meta!.page - 1) : (meta?.page ?? page);
+      setPage(nextPage);
+      dispatch(
+        fetchRegions({
+          page: nextPage,
+          limit: rows,
+          q: searchText || undefined,
+          ville: villeFilter || undefined,
+          sortBy,
+          order,
+          includeTotal: true,
+        })
+      );
+    } else {
+      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la suppression', life: 3000 });
     }
-  }, [dispatch, selectedRegion?._id]);
+  }, [dispatch, selectedRegion, regions.length, meta, page, rows, searchText, villeFilter, sortBy, order]);
 
-  /* ----------------------------- Import / Export ---------------------------- */
+  // Export
   const handleFileManagement = useCallback(
     async ({
       type,
@@ -191,23 +251,12 @@ export default function RegionManagement() {
       format: 'csv' | 'pdf' | 'excel';
       file?: File;
     }) => {
-      if (type === 'import' && file) {
-        toast.current?.show({
-          severity: 'info',
-          summary: `Import ${format.toUpperCase()}`,
-          detail: `Fichier importé: ${file.name}`,
-          life: 3000,
-        });
-        // TODO: implémenter parsing + validations
-        return;
-      }
-
       if (type === 'export') {
         if (format === 'pdf') {
           toast.current?.show({
             severity: 'warn',
-            summary: 'Export PDF non supporté',
-            detail: "L'export PDF n'est pas disponible pour ce module.",
+            summary: 'Export non supporté',
+            detail: "L'export PDF n'est pas disponible",
             life: 3000,
           });
           return;
@@ -217,7 +266,7 @@ export default function RegionManagement() {
           const r = await dispatch(
             exportFile({
               url: '/export/regions',
-              mouvements: filteredRegions,
+              mouvements: regions, // idéalement: endpoint backend d’export avec les mêmes filtres
               fileType,
             }) as any
           );
@@ -243,184 +292,205 @@ export default function RegionManagement() {
         }
       }
     },
-    [dispatch, filteredRegions]
+    [dispatch, regions]
   );
 
-  /* --------------------------------- UI ------------------------------------ */
+  const actionBodyTemplate = useCallback(
+    (rowData: Region) => (
+      <div className="flex items-center">
+        <Button
+          icon="pi pi-bars"
+          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+          onClick={(event) => {
+            selectedRowDataRef.current = rowData ?? null;
+            menuRef.current?.toggle(event);
+          }}
+          aria-haspopup
+        />
+      </div>
+    ),
+    []
+  );
+
+  /* --------------------------------- UI ----------------------------------- */
   return (
     <div className="min-h-screen">
-      <Toast ref={toast} />
+      <Toast ref={toast} position="top-right" />
+      {/* Menu global */}
+      <Menu model={menuModel} popup ref={menuRef} />
 
-      <div className="flex items-center justify-between mb-3 mt-3">
+      <div className="flex items-center justify-between mt-3 mb-3">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des régions' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Régions' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
         <h2 className="text-2xl font-bold text-gray-700">Gestion des Régions</h2>
       </div>
 
-      <div className="bg-white p-2 rounded-lg">
-        <div className="flex justify-between my-4">
-          <div className="relative w-2/3 flex justify-between gap-2">
-            <InputText
-              className="p-2 pl-10 border rounded w-full"
-              placeholder="Rechercher..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value ?? '')}
-            />
-            <div className="ml-3 flex gap-2 w-2/5">
+      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row w-full">
+        <div className="bg-white p-4 rounded-lg w-full">
+          <div className="gap-4 mb-4 w-full flex justify-between flex-wrap">
+            <div className="relative w-full md:w-2/3 flex flex-row gap-2 flex-wrap">
+              <InputText
+                className="p-2 border rounded w-full md:w-1/3"
+                placeholder="Rechercher (nom, ville, etc.)"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value ?? '')}
+                onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+              />
+              <InputText
+                className="p-2 border rounded w-full md:w-1/3"
+                placeholder="Filtrer par ville"
+                value={villeFilter}
+                onChange={(e) => setVilleFilter(e.target.value ?? '')}
+                onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+              />
+
+              <Button label="Filtrer" icon="pi pi-search" className="!bg-green-700 text-white" onClick={applyFilters} />
+
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
+
+            <Button
+              label="Nouveau"
+              icon="pi pi-plus"
+              className="!bg-green-700 text-white p-2 rounded"
+              onClick={() => setDialogType('create')}
+            />
           </div>
 
-          <Button
-            icon="pi pi-plus"
-            label="nouveau"
-            className="!bg-green-700 text-white p-2 rounded border-none"
-            onClick={() => {
-              setNewRegion({ nom: '', ville: '' });
-              setDialogType('create');
-            }}
-          />
-        </div>
+          <div>
+            <DataTable
+              value={regions}
+              lazy
+              paginator
+              size="small"
+              rows={rows}
+              totalRecords={meta?.total ?? 0}
+              first={((meta?.page ?? page) - 1) * rows}
+              onPage={onPage}
+              onSort={onSort}
+              sortField={sortBy}
+              sortOrder={order === 'asc' ? 1 : -1}
+              className="rounded-lg text-sm text-gray-900 w-full"
+              tableStyle={{ minWidth: '60rem' }}
+              rowClassName={(_, options) =>
+                // @ts-ignore
+                options.rowIndex % 2 === 0 ? '!bg-gray-100 !text-gray-900' : '!bg-green-50 !text-gray-900'
+              }
+              emptyMessage={loading ? 'Chargement...' : 'Aucune région trouvée'}
+              loading={loading}
+            >
+              <Column
+                header="#"
+                body={(_, { rowIndex }) =>
+                  Number.isFinite(rowIndex) ? ((meta?.page ?? page) - 1) * rows + (rowIndex as number) + 1 : '-'
+                }
+                headerClassName="text-sm !bg-green-800 !text-white"
+                className="text-sm"
+              />
 
-        <div className="rounded-lg shadow-md">
-          <DataTable
-            value={filteredRegions}
-            paginator
-            rows={rows}
-            first={first}
-            onPage={(e) => {
-              setFirst(e.first ?? 0);
-              setRows(e.rows ?? 5);
-            }}
-            loading={loading}
-            size="small"
-            className="rounded-lg text-[11px]"
-            tableStyle={{ minWidth: '50rem' }}
-            rowClassName={(_, options) => {
-              //@ts-ignore
-              const idx = options?.rowIndex ?? 0;
-              const global = first + idx;
-              return global % 2 === 0 ? '!bg-gray-300 !text-gray-900' : '!bg-green-900 !text-white';
-            }}
-          >
-            <Column
-              header="#"
-              body={(_, options) => <span className="text-[11px]">{(options?.rowIndex ?? 0) + 1}</span>}
-              headerClassName="text-[11px] !bg-green-900 !text-white"
-            />
-            <Column field="nom" header="Nom" sortable headerClassName="text-[11px] !bg-green-900 !text-white" />
-            <Column
-              field="pointVenteCount"
-              header="Points de vente"
-              body={(r: Region) => safeNumber(r?.pointVenteCount).toString()}
-              headerClassName="text-[11px] !bg-green-900 !text-white"
-            />
-            <Column field="ville" header="Ville" sortable headerClassName="text-[11px] !bg-green-900 !text-white" />
+              <Column
+                field="nom"
+                header="Nom"
+                sortable
+                className="text-sm"
+                headerClassName="text-sm !bg-green-800 !text-white"
+                body={(r: Region) => r?.nom ?? '—'}
+              />
 
-            <Column
-              header="Actions"
-              body={(row: Region) => (
-                <>
-                  <Button
-                    icon="pi pi-bars"
-                    className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-                    onClick={(e) => showMenu(e, row?._id ?? '', row)}
-                    disabled={!isNonEmptyString(row?._id)}
-                    aria-haspopup
-                  />
-                  <Menu
-                    popup
-                    ref={(el) => setMenuRef(row?._id ?? '', el)}
-                    model={[
-                      { label: 'Détails', command: () => setSelectedRegion(row) },
-                      {
-                        label: 'Modifier',
-                        command: () => {
-                          setSelectedRegion(row);
-                          setDialogType('edit');
-                        },
-                      },
-                      {
-                        label: 'Supprimer',
-                        command: () => {
-                          setSelectedRegion(row);
-                          setDeleteDialogOpen(true);
-                        },
-                      },
-                    ]}
-                  />
-                </>
-              )}
-              headerClassName="!text-[11px] !bg-green-900 !text-white"
-            />
-          </DataTable>
+              <Column
+                field="pointVenteCount"
+                header="Points de vente"
+                className="text-sm"
+                headerClassName="text-sm !bg-green-800 !text-white"
+                body={(r: Region) => String(r?.pointVenteCount ?? 0)}
+              />
+
+              <Column
+                field="ville"
+                header="Ville"
+                sortable
+                className="text-sm"
+                headerClassName="text-sm !bg-green-800 !text-white"
+                body={(r: Region) => r?.ville ?? '—'}
+              />
+
+              <Column
+                body={actionBodyTemplate}
+                header="Actions"
+                className="px-4 py-1 text-sm"
+                headerClassName="text-sm !bg-green-800 !text-white"
+              />
+            </DataTable>
+          </div>
         </div>
       </div>
 
-      {/* Dialog édition */}
+      {/* Dialog Create/Edit */}
       <Dialog
-        visible={dialogType === 'edit'}
-        header="Modifier une région"
-        onHide={() => setDialogType(null)}
-        style={{ width: '40vw', maxWidth: 700 }}
+        visible={dialogType === 'create' || dialogType === 'edit'}
+        header={dialogType === 'edit' ? 'Modifier la région' : 'Ajouter une région'}
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
         modal
       >
-        <div className="p-4">
-          {(['nom', 'ville'] as const).map((key) => (
-            <div key={key} className="mb-4">
+        <div className="p-4 space-y-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Nom*</label>
               <InputText
-                type="text"
-                placeholder={key === 'nom' ? 'Nom' : 'Ville'}
-                value={(selectedRegion as any)?.[key] ?? ''}
-                onChange={(e) => setSelectedRegion((p) => (p ? { ...p, [key]: e.target.value } : p))}
+                value={form.nom ?? ''}
+                onChange={(e) => setForm((p) => ({ ...p, nom: e.target.value ?? '' }))}
                 required
                 className="w-full p-2 border rounded"
               />
             </div>
-          ))}
-          <div className="flex justify-end mt-4">
-            <Button label="Modifier" className="!bg-green-700 text-white" onClick={handleUpdate} loading={loading} />
-          </div>
-        </div>
-      </Dialog>
-
-      {/* Dialog création */}
-      <Dialog
-        visible={dialogType === 'create'}
-        header="Ajouter une région"
-        onHide={() => setDialogType(null)}
-        style={{ width: '40vw', maxWidth: 700 }}
-        modal
-      >
-        <div className="p-4">
-          {(['nom', 'ville'] as const).map((key) => (
-            <div key={key} className="mb-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Ville*</label>
               <InputText
-                type="text"
-                placeholder={key === 'nom' ? 'Nom' : 'Ville'}
-                value={(newRegion as any)?.[key] ?? ''}
-                onChange={(e) => setNewRegion((p) => ({ ...p, [key]: e.target.value }))}
+                value={form.ville ?? ''}
+                onChange={(e) => setForm((p) => ({ ...p, ville: e.target.value ?? '' }))}
                 required
                 className="w-full p-2 border rounded"
               />
             </div>
-          ))}
-          <div className="flex justify-end mt-4">
-            <Button label="Ajouter" className="!bg-green-700 text-white" onClick={handleCreate} loading={loading} />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
+            <Button
+              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              className="!bg-green-700 text-white"
+              onClick={dialogType === 'edit' ? handleUpdate : handleCreate}
+            />
           </div>
         </div>
       </Dialog>
 
-      {/* Dialog suppression */}
+      {/* Dialog Details */}
+      <Dialog
+        visible={dialogType === 'details'}
+        header="Détails de la région"
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
+        modal
+      >
+        <div className="p-4 space-y-3 text-sm">
+          <div className="flex justify-between"><span className="font-medium">Nom</span><span>{selectedRegion?.nom ?? '—'}</span></div>
+          <div className="flex justify-between"><span className="font-medium">Ville</span><span>{selectedRegion?.ville ?? '—'}</span></div>
+          <div className="flex justify-between"><span className="font-medium">Points de vente</span><span>{selectedRegion?.pointVenteCount ?? 0}</span></div>
+        </div>
+      </Dialog>
+
+      {/* Confirm Delete */}
       <ConfirmDeleteDialog
-        visible={deleteDialogOpen}
-        onHide={() => setDeleteDialogOpen(false)}
+        visible={isDeleteOpen}
+        onHide={() => setIsDeleteOpen(false)}
         onConfirm={() => {
+          setIsDeleteOpen(false);
           handleDelete();
-          setDeleteDialogOpen(false);
         }}
         item={selectedRegion ?? { _id: '', nom: '' }}
         objectLabel="la région"

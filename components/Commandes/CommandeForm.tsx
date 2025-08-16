@@ -73,6 +73,7 @@ const CommandeForm = () => {
   useEffect(() => {
     const handler = setTimeout(() => {
       if (searchTerm.trim().length > 1) {
+        //@ts-ignore
         dispatch(searchProduits(searchTerm));
       } else {
         setSuggestions([]);

@@ -278,9 +278,9 @@ const Page: React.FC = () => {
   const currentImageUrl = useMemo(() => {
     // si image = File, on fera un preview via URL.createObjectURL ; sinon on tente l’URL API
     if (isFile(formState.image)) return URL.createObjectURL(formState.image);
-    if (isNonEmptyString(formState.image)) return safeUrlJoin(API_URL, formState.image);
+    if (isNonEmptyString(formState.image)) return safeUrlJoin(API_URL(), formState.image);
     if (actionMade === 'update' && isNonEmptyString(selectedCategorie?.image)) {
-      return safeUrlJoin(API_URL, selectedCategorie?.image);
+      return safeUrlJoin(API_URL(), selectedCategorie?.image);
     }
     return '';
   }, [formState.image, selectedCategorie, actionMade]);

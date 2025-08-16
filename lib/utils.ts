@@ -84,3 +84,14 @@ export function formatNombre(value: number): string {
     .format(value)
     .replace(/\u202f/g, '.');
 }
+
+
+
+
+export const safeUrlJoin = (...parts: Array<string | undefined | null>) => {
+  const joined = parts.filter(Boolean).join('/');
+  // supprime les doubles //, puis le trailing slash
+  const normalized = joined.replace(/([^:]\/)\/+/g, '$1');
+  return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+};
+

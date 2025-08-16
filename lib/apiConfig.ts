@@ -3,7 +3,6 @@ import axios from 'axios';
 /** === VOS VALEURS PAR DÉFAUT SANS .env === */
 const DEFAULT_API_FALLBACK = 'https://agricap-api-3a2d9a422767.herokuapp.com';
 const HOST_TO_API: Record<string, string> = {
-  // front -> api
   'agricap-ui-429dded64762.herokuapp.com': DEFAULT_API_FALLBACK,
 };
 
@@ -34,63 +33,57 @@ const envFromRuntime = (): 'production' | 'preview' | 'development' | 'test' => 
   return 'development';
 };
 
-/** Résolution déterministe de l'URL d'API */
+/** Résolution dynamique de l'URL d'API */
 export const getApiUrl = (): string => {
-  // 0) Si une URL explicite est fournie -> prime
   const explicit = process.env.NEXT_PUBLIC_API_URL;
   if (explicit) return normalizeUrl(explicit);
 
-  // 1) Mapping par hostname (exécution côté client)
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     const mapped = HOST_TO_API[host];
     if (mapped) return normalizeUrl(mapped);
+
+    // Localhost case (client side only)
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:8000';
+    }
   }
 
-  // 2) Choix par environnement
   const currentEnv = envFromRuntime();
 
-  const apiProd   = process.env.NEXT_PUBLIC_API_PROD;
-  const apiPreview= process.env.NEXT_PUBLIC_API_PREVIEW || process.env.NEXT_PUBLIC_API_STAGING;
-  const apiDev    = process.env.NEXT_PUBLIC_API_DEV;
-  const apiTest   = process.env.NEXT_PUBLIC_API_TEST;
+  const apiProd    = process.env.NEXT_PUBLIC_API_PROD;
+  const apiPreview = process.env.NEXT_PUBLIC_API_PREVIEW || process.env.NEXT_PUBLIC_API_STAGING;
+  const apiDev     = process.env.NEXT_PUBLIC_API_DEV;
+  const apiTest    = process.env.NEXT_PUBLIC_API_TEST;
 
-  // 3) Sélection en fonction de l'env
   let resolved =
     (currentEnv === 'production'   && (apiProd || DEFAULT_API_FALLBACK)) ||
     (currentEnv === 'preview'      && (apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||
     (currentEnv === 'test'         && (apiTest || apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||
     (currentEnv === 'development'  && (apiDev || DEFAULT_API_FALLBACK)) ||
-    // Si rien n’est défini nulle part, on tombe sur le fallback Heroku
     DEFAULT_API_FALLBACK;
-
-  // 4) Côté client: si vraiment en localhost et rien de défini, on peut basculer sur localhost
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (!resolved && (host === 'localhost' || host === '127.0.0.1')) {
-      resolved = 'http://localhost:8000';
-    }
-  }
 
   return normalizeUrl(resolved);
 };
 
-/** Variable résolue à l’import, mais surchargable runtime par setApiBaseUrl */
-let API_URL_RUNTIME = getApiUrl();
-export const API_URL = API_URL_RUNTIME;
+/** Base URL dynamique */
+let API_URL_RUNTIME = '';
 
-/** Client Axios (unique). Si besoin, on peut changer la baseURL au runtime via setApiBaseUrl */
+/** Client Axios (baseURL mise à jour dynamiquement à chaque appel) */
 export const apiClient = axios.create({
-  baseURL: API_URL_RUNTIME,
+  baseURL: getApiUrl(),
   headers: { 'Content-Type': 'application/json' },
 });
 
-/** Override runtime pratique (ex: tests, preview, A/B) */
+/** Setter dynamique utilisable au runtime */
 export const setApiBaseUrl = (nextBaseUrl: string) => {
   const url = normalizeUrl(nextBaseUrl);
   API_URL_RUNTIME = url;
   apiClient.defaults.baseURL = url;
 };
+
+/** Getter d'URL dynamique en priorité */
+export const API_URL = (): string => API_URL_RUNTIME || getApiUrl();
 
 /** Auth header (client-only) */
 apiClient.interceptors.request.use((config) => {
@@ -99,7 +92,6 @@ apiClient.interceptors.request.use((config) => {
       const token = localStorage.getItem('authToken');
       if (token) {
         config.headers = config.headers ?? {};
-        //  – axios v1 accepte string
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch {
