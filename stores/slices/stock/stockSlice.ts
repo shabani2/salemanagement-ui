@@ -16,7 +16,7 @@ import { PointVente } from '@/Models/pointVenteType';
 
 interface ListMeta {
   total: number;
-  page: number;
+  first: number; // <- offset courant
   pages: number;
   limit: number;
 }
@@ -28,38 +28,35 @@ interface StockState {
 }
 
 type FetchStocksParams = {
-  page?: number;
+  first?: number; // <- offset
   limit?: number;
   q?: string;
-  sortBy?: string;               // ex: "createdAt" ou "produit.nom"
+  sortBy?: string; // ex: "updatedAt" | "produit.nom"
   order?: 'asc' | 'desc';
   pointVente?: string;
   region?: string;
   produit?: string;
   depotCentral?: boolean;
-  includeTotal?: boolean;        // par défaut true
-  includeRefs?: boolean;         // par défaut true
+  includeTotal?: boolean; // par défaut true
+  includeRefs?: boolean; // par défaut true
 };
 
 /* -------------------------------- Adapter --------------------------------- */
 
-const stockAdapter: EntityAdapter<Stock, string> =
-  createEntityAdapter<Stock, string>({
-    selectId: (stock) => stock._id,
-  });
+const stockAdapter: EntityAdapter<Stock, string> = createEntityAdapter<Stock, string>({
+  selectId: (stock) => stock._id,
+});
 
 const initialState = stockAdapter.getInitialState<StockState>({
   status: 'idle',
   error: null,
-  meta: { total: 0, page: 1, pages: 0, limit: 10 },
+  meta: { total: 0, first: 0, pages: 0, limit: 10 },
 });
 
 /* ------------------------------- Helpers ---------------------------------- */
 
 const getAuthHeaders = () => {
-  const token = typeof window !== 'undefined'
-    ? localStorage.getItem('token-agricap')
-    : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token-agricap') : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
@@ -76,11 +73,6 @@ const toQueryString = (obj: Record<string, any>) => {
 
 /* -------------------------------- Thunks ---------------------------------- */
 
-/**
- * GET /stocks avec pagination/tri/recherche/filtres
- * Retour attendu: { data: Stock[], meta: { total, page, pages, limit } }
- * (Tolère aussi un tableau simple si l'API n'a pas encore été migrée)
- */
 export const fetchStocks = createAsyncThunk(
   'stocks/fetchAll',
   async (params: FetchStocksParams | undefined, { rejectWithValue }) => {
@@ -88,6 +80,8 @@ export const fetchStocks = createAsyncThunk(
       const query = toQueryString({
         includeTotal: true,
         includeRefs: true,
+        sortBy: 'updatedAt', // <- défaut côté front
+        order: 'desc',
         ...params,
       });
       const response = await apiClient.get(`/stocks${query}`, {
@@ -95,18 +89,19 @@ export const fetchStocks = createAsyncThunk(
       });
       const payload = response.data;
 
-      // Mode rétro-compat si l’API renvoie un tableau brut
       if (Array.isArray(payload)) {
-        return { data: payload, meta: { total: payload.length, page: 1, pages: 1, limit: payload.length || 10 } };
+        return {
+          data: payload,
+          meta: { total: payload.length, first: 0, pages: 1, limit: payload.length || 10 },
+        };
       }
-      // Sinon on attend { data, meta }
       return {
         data: Array.isArray(payload?.data) ? payload.data : [],
         meta: {
           total: Number(payload?.meta?.total ?? 0),
-          page: Number(payload?.meta?.page ?? 1),
+          first: Number(payload?.meta?.first ?? 0), // <- lit l’offset renvoyé par l’API
           pages: Number(payload?.meta?.pages ?? 0),
-          limit: Number(payload?.meta?.limit ?? (params?.limit ?? 10)),
+          limit: Number(payload?.meta?.limit ?? params?.limit ?? 10),
         } as ListMeta,
       };
     } catch (error: unknown) {
@@ -116,14 +111,14 @@ export const fetchStocks = createAsyncThunk(
   }
 );
 
-/** DÉPRÉCIÉS côté UI — utilisent la nouvelle route unique */
 export const fetchStockByRegionId = createAsyncThunk(
   'stocks/fetchByRegionId',
   async (regionId: string, { rejectWithValue, dispatch }) => {
     try {
-      // délègue au nouveau fetch avec filtres
-      const res = await dispatch(fetchStocks({ region: regionId, includeTotal: true, includeRefs: true }) as any);
-      // @ts-ignore - on retourne le même shape que fetchStocks
+      const res = await dispatch(
+        fetchStocks({ region: regionId, includeTotal: true, includeRefs: true }) as any
+      );
+      // @ts-ignore
       return res.payload;
     } catch (error: unknown) {
       if (error instanceof Error) return rejectWithValue(error.message);
@@ -136,7 +131,9 @@ export const fetchStockByPointVenteId = createAsyncThunk(
   'stocks/fetchByPointVenteId',
   async (pointVenteId: string, { rejectWithValue, dispatch }) => {
     try {
-      const res = await dispatch(fetchStocks({ pointVente: pointVenteId, includeTotal: true, includeRefs: true }) as any);
+      const res = await dispatch(
+        fetchStocks({ pointVente: pointVenteId, includeTotal: true, includeRefs: true }) as any
+      );
       // @ts-ignore
       return res.payload;
     } catch (error: unknown) {
@@ -223,7 +220,7 @@ export const checkStock = createAsyncThunk(
         { ...params },
         { headers: getAuthHeaders() }
       );
-      return response.data; // { success: boolean, quantiteDisponible: number, suffisant: boolean }
+      return response.data;
     } catch (error: unknown) {
       if (error instanceof Error) return rejectWithValue(error.message);
       return rejectWithValue('Erreur lors de la vérification du stock');
@@ -239,7 +236,6 @@ const stockSlice = createSlice({
   reducers: {},
   extraReducers: (builder) => {
     builder
-      // fetchStocks
       .addCase(fetchStocks.pending, (state) => {
         state.status = 'loading';
         state.error = null;
@@ -250,20 +246,22 @@ const stockSlice = createSlice({
           stockAdapter.setAll(state, (action.payload as any).data);
           state.meta = (action.payload as any).meta ?? state.meta;
         } else if (Array.isArray(action.payload)) {
-          // rétro-compat: payload = Stock[]
           stockAdapter.setAll(state, action.payload as any);
-          state.meta = { total: (action.payload as any).length, page: 1, pages: 1, limit: (action.payload as any).length || 10 };
+          state.meta = {
+            total: (action.payload as any).length,
+            first: 0,
+            pages: 1,
+            limit: (action.payload as any).length || 10,
+          };
         } else {
           stockAdapter.setAll(state, []);
-          state.meta = { total: 0, page: 1, pages: 0, limit: 10 };
+          state.meta = { total: 0, first: 0, pages: 0, limit: 10 };
         }
       })
       .addCase(fetchStocks.rejected, (state, action) => {
         state.status = 'failed';
         state.error = action.payload as string;
       })
-
-      // compat wrappers
       .addCase(fetchStockByRegionId.fulfilled, (state, action) => {
         state.status = 'succeeded';
         if ((action.payload as any)?.data) {
@@ -278,13 +276,9 @@ const stockSlice = createSlice({
           state.meta = (action.payload as any).meta ?? state.meta;
         }
       })
-
-      // byId
       .addCase(fetchStockById.fulfilled, (state, action) => {
         stockAdapter.upsertOne(state, action.payload);
       })
-
-      // create/update/delete
       .addCase(createStock.fulfilled, (state, action) => {
         stockAdapter.addOne(state, action.payload);
       })

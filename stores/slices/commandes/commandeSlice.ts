@@ -23,9 +23,9 @@ interface CommandeState {
 
 // ✅ types d’input pour la création
 type CommandeProduitInput = {
-  produit: string;        // ObjectId as string
+  produit: string; // ObjectId as string
   quantite: number;
-  uniteMesure?: string;   // optionnel
+  uniteMesure?: string; // optionnel
 };
 
 export interface CommandePayload {
@@ -36,11 +36,9 @@ export interface CommandePayload {
   produits: CommandeProduitInput[]; // ⬅️ au lieu du Pick<>
 }
 
-
-const commandeAdapter: EntityAdapter<Commande, string> =
-  createEntityAdapter<Commande, string>({
-    selectId: (commande) => (commande as any)?._id as string,
-  });
+const commandeAdapter: EntityAdapter<Commande, string> = createEntityAdapter<Commande, string>({
+  selectId: (commande) => (commande as any)?._id as string,
+});
 
 const initialState = commandeAdapter.getInitialState<CommandeState>({
   status: 'idle',
@@ -68,10 +66,7 @@ const q = (params?: Record<string, any>) => {
 // All (paginated)
 export const fetchCommandes = createAsyncThunk(
   'commandes/fetchCommandes',
-  async (
-    { page = 1, limit = 10 }: { page?: number; limit?: number } = {},
-    { rejectWithValue }
-  ) => {
+  async ({ page = 1, limit = 10 }: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
     try {
       const res = await apiClient.get(`/commandes${q({ page, limit })}`, {
         headers: getAuthHeaders(),
@@ -92,15 +87,12 @@ export const fetchCommandesByUser = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const res = await apiClient.get(
-        `/commandes/by-user/${userId}${q({ page, limit })}`,
-        { headers: getAuthHeaders() }
-      );
+      const res = await apiClient.get(`/commandes/by-user/${userId}${q({ page, limit })}`, {
+        headers: getAuthHeaders(),
+      });
       return { ...res.data, page, limit };
     } catch (error: any) {
-      return rejectWithValue(
-        error?.message || 'Erreur de récupération des commandes utilisateur'
-      );
+      return rejectWithValue(error?.message || 'Erreur de récupération des commandes utilisateur');
     }
   }
 );
@@ -134,15 +126,12 @@ export const fetchCommandesByRegion = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const res = await apiClient.get(
-        `/commandes/by-region/${regionId}${q({ page, limit })}`,
-        { headers: getAuthHeaders() }
-      );
+      const res = await apiClient.get(`/commandes/by-region/${regionId}${q({ page, limit })}`, {
+        headers: getAuthHeaders(),
+      });
       return { ...res.data, page, limit };
     } catch (error: any) {
-      return rejectWithValue(
-        error?.message || 'Erreur de récupération des commandes par région'
-      );
+      return rejectWithValue(error?.message || 'Erreur de récupération des commandes par région');
     }
   }
 );

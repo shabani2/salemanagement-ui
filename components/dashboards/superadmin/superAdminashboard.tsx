@@ -15,10 +15,9 @@ import DropdownTypeFilter from '@/components/ui/dropdowns/dropDownFile-filter';
 
 // Icônes
 import { Package, Box, CreditCard, Building, Truck } from 'lucide-react';
-//import { mockData } from '@/lib/mockData';
 import { PointVente } from '@/Models/pointVenteType';
 import { MouvementStock } from '@/Models/mouvementStockType';
-import MouvementStockChart from './charts/mvtChart';
+import MouvementStockAreaChart from './charts/mvtChart';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
 import {
@@ -26,11 +25,9 @@ import {
   fetchMouvementStockByPointVenteId,
   selectAllMouvementsStock,
 } from '@/stores/slices/mvtStock/mvtStock';
-import MouvementStockAreaChart from './charts/mvtChart';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { computeRegionStats } from '@/lib/utils/DataConvertRegion';
-//import RegionDistributionPieChart from './charts/regionPiehatr';
 import {
   fetchStockByPointVenteId,
   fetchStocks,
@@ -43,51 +40,103 @@ import { Stock } from '@/Models/stock';
 import EvolutionProduitRegionChart from './charts/evolutionProduitChart';
 import RegionDistributionPieChart from './charts/regionPieChart';
 
-// Données simulées
+/* ----------------------------- Helpers ----------------------------- */
+const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 
+/* -------------------------------- Page -------------------------------- */
 export default function SuperAdminDashboard() {
-  // const { produits, stocks, mouvementsStock, pointsVente } = mockData;
-
-  // États de filtrage
-  // const [filteredMouvements, setFilteredMouvements] = useState(mouvementsStock);
-  const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(null);
-  const [selectedType, setSelectedType] = useState<string>('Tout');
   const dispatch = useDispatch<AppDispatch>();
+
+  // Filtres UI
+  const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(null);
+  const [selectedType, setSelectedType] = useState<string>('Tout'); // UI only, pas envoyé si "Tout"
+  const [period, setPeriod] = useState<'jour' | 'semaine' | 'mois' | 'annee'>('mois');
+
+  // Store
   const stocks = useSelector((state: RootState) => selectAllStocks(state));
   const allMvtStocks = useSelector((state: RootState) => selectAllMouvementsStock(state));
+  const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
+
+  // User (client)
   const user =
     typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
-  useEffect(() => {
-    if (!user?.role) return;
-    if (user?.role === 'SuperAdmin' || user?.role === 'AdminRegion') {
-      dispatch(fetchMouvementsStock());
-    } else {
-      dispatch(fetchMouvementStockByPointVenteId(user?.pointVente?._id));
-    }
-  }, [dispatch, user?.pointVente?._id, user?.role]);
 
-  // -----------------------------
-  // Calcul des KPIs
-  // -----------------------------
-  const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
+  /* -------------------- Chargements initiaux -------------------- */
   useEffect(() => {
     dispatch(fetchPointVentes());
-    // dispatch(fetchRegions());
   }, [dispatch]);
+
+  // Produits (KPI)
   const [produits, setProduits] = useState<Produit[]>([]);
   const [allProduits, setAllProduits] = useState<Produit[]>([]);
   useEffect(() => {
-    //dispatch(fetchCategories());
-    dispatch(fetchProduits()).then((resp) => {
-      setAllProduits(resp.payload); // garde la version complète
-      setProduits(resp.payload); // version visible (filtrée ou pas)
+    dispatch(fetchProduits()).then((resp: any) => {
+      setAllProduits(resp.payload ?? []);
+      setProduits(resp.payload ?? []);
     });
   }, [dispatch]);
+
+  // Stocks
+  useEffect(() => {
+    if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
+      if (isNonEmptyString((user as any)?.pointVente?._id)) {
+        dispatch(fetchStockByPointVenteId((user as any).pointVente._id));
+      }
+    } else {
+      dispatch(fetchStocks());
+    }
+  }, [dispatch, user?.pointVente?._id, user?.role]);
+
+  /* -------------------- Filtres serveur unifiés -------------------- */
+  // On ne met PAS de filtre type tant que l’utilisateur n’a pas choisi un type explicite différent de "Tout".
+  const serverFilters = useMemo(() => {
+    const f: Record<string, any> = {
+      includeTotal: true,
+      includeRefs: true,
+      sortBy: 'createdAt',
+      order: 'desc',
+      // NOTE: pas de q ici ; si tu ajoutes une barre de recherche, ajoute-la en q
+    };
+
+    // Filtre rôle par défaut
+    if (user?.role === 'AdminPointVente' && isNonEmptyString((user as any)?.pointVente?._id)) {
+      f.pointVente = (user as any).pointVente._id;
+    } else if (user?.role === 'AdminRegion' && isNonEmptyString((user as any)?.region?._id)) {
+      f.region = (user as any).region._id;
+    }
+
+    // Filtre PV choisi dans le dropdown (prend le dessus)
+    if (selectedPointVente?._id) {
+      f.pointVente = selectedPointVente._id;
+      delete f.region;
+    }
+
+    // Type uniquement si explicite
+    if (selectedType && selectedType !== 'Tout') {
+      f.type = selectedType;
+    }
+
+    return f;
+  }, [
+    user?.role,
+    (user as any)?.pointVente?._id,
+    (user as any)?.region?._id,
+    selectedPointVente?._id,
+    selectedType,
+  ]);
+
+  // Chargement mouvements sur changement de filtres serveur
+  useEffect(() => {
+    dispatch(fetchMouvementsStock(serverFilters as any));
+  }, [dispatch, serverFilters]);
+
+  /* ----------------------------- KPI ----------------------------- */
   const totalProduits = produits.length;
-  const stockTotalValue = stocks.reduce((acc, s) => acc + s.montant, 0);
+  const stockTotalValue = stocks.reduce((acc, s) => acc + (s?.montant ?? 0), 0);
   const caGlobal = allMvtStocks
     .filter((m) => m.type === 'Vente')
-    .reduce((acc, m) => acc + m.montant, 0);
+    .reduce((acc, m) => acc + (m?.montant ?? 0), 0);
   const totalPointsVente = pointsVente.length;
 
   const totalCommandes = allMvtStocks.filter((m) => m.type === 'Commande').length;
@@ -95,38 +144,21 @@ export default function SuperAdminDashboard() {
   const tauxLivraison =
     totalCommandes > 0 ? `${Math.round((totalLivraisons / totalCommandes) * 100)}%` : 'N/A';
 
-  // -----------------------------
-  // Gestion des filtres
-  // -----------------------------
+  /* ----------------------------- Handlers ----------------------------- */
   const handleTimeChange = (data: MouvementStock[]) => {
-    // setFilteredMouvements(data);
+    // Tu pourras brancher un vrai filtre date serveur (dateFrom/dateTo) si besoin.
   };
 
   const handlePointVenteChange = (pv: PointVente | null) => {
-    setSelectedPointVente(pv);
-    const filtered = pv ? allMvtStocks.filter((m) => m.pointVente?._id === pv._id) : allMvtStocks;
-    //  setFilteredMouvements(filtered);
+    setSelectedPointVente(pv); // le useEffect serveur se déclenche et recharge côté API
   };
 
   const handleTypeChange = (_: MouvementStock[], type: string | null) => {
+    // 'Tout' => pas de filtre serveur envoyé
     setSelectedType(type || 'Tout');
   };
 
-  const [period, setPeriod] = useState<'jour' | 'semaine' | 'mois' | 'annee'>('mois');
-  // -----------------------------
-  // Données préparées pour les tableaux
-  // -----------------------------
-  const dernièresVentes = allMvtStocks.filter((m) => m.type === 'Vente');
-  const produitsCritiques = stocks.filter((s) => s.quantite < 30);
-  const activitéStock = allMvtStocks.filter((m) => m.type !== 'Vente');
-  useEffect(() => {
-    if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
-      dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
-    } else {
-      dispatch(fetchStocks());
-    }
-  }, [dispatch, user?.pointVente?._id, user?.role]);
-
+  /* ----------------------------- Données tables ----------------------------- */
   const filteredData = useMemo(() => {
     return stocks.filter((rowData) => {
       const seuil = rowData.produit?.seuil ?? 0;
@@ -135,13 +167,15 @@ export default function SuperAdminDashboard() {
     });
   }, [stocks]);
 
+  const allMvtForCharts = allMvtStocks; // déjà filtrés côté serveur suivant PV/type
+
   return (
     <div className="p-4 space-y-4">
       {/* Filtres */}
       <div className="flex flex-wrap gap-4">
-        <DropdownTimeFilter data={allMvtStocks} onChange={handleTimeChange} />
+        <DropdownTimeFilter data={allMvtForCharts} onChange={handleTimeChange} />
         <DropdownPointVenteFilter onSelect={handlePointVenteChange} />
-        <DropdownTypeFilter mvtStocks={allMvtStocks} onChange={handleTypeChange} />
+        <DropdownTypeFilter mvtStocks={allMvtForCharts} onChange={handleTypeChange} />
       </div>
 
       {/* KPIs */}
@@ -153,13 +187,11 @@ export default function SuperAdminDashboard() {
         <KpiCard title="Taux Livraison" value={tauxLivraison} icon={Truck} />
       </div>
 
-      {/* Graphiques */}
-
-      {/* gestion stock*/}
+      {/* Graphiques & Table faible stock */}
       <div className="w-full flex gap-4">
         <div className="bg-white rounded-lg shadow-md p-4 mb-4 w-full md:w-8/12">
           <EvolutionProduitRegionChart
-            data={allMvtStocks}
+            data={allMvtForCharts}
             //@ts-ignore
             operationType={
               selectedType === 'Tout'
@@ -169,6 +201,7 @@ export default function SuperAdminDashboard() {
             userRole={user?.role as 'SuperAdmin' | 'AdminRegion' | 'AdminPointVente'}
           />
         </div>
+
         <div className="bg-white rounded-lg shadow-md p-4 mb-4 w-full md:w-4/12">
           <DataTable
             value={filteredData}
@@ -192,19 +225,6 @@ export default function SuperAdminDashboard() {
               className="px-4 py-1 text-[11px]"
               headerClassName="text-[11px] !bg-green-900 !text-white"
             />
-            {/* <Column
-          header="Région"
-          body={(rowData: Stock) => {
-            const region = rowData.pointVente?.region;
-            return typeof region === 'object' && region !== null && 'nom' in region
-              ? (region as { nom: string }).nom
-              : typeof region === 'string'
-                ? region
-                : 'N/A';
-          }}
-          className="px-4 py-1 text-[11px]"
-          headerClassName="text-[11px] !bg-green-900 !text-white"
-        /> */}
             <Column
               header="Stock"
               body={(rowData: Stock) => rowData.pointVente?.nom || 'Depot Central'}
@@ -220,7 +240,6 @@ export default function SuperAdminDashboard() {
             <Column
               header="Quantité"
               body={(rowData: Stock) => {
-                const seuil = rowData.produit?.seuil ?? 0;
                 const quantite = rowData.quantite ?? 0;
                 return (
                   <span
@@ -243,19 +262,21 @@ export default function SuperAdminDashboard() {
           </DataTable>
         </div>
       </div>
-      {/* evolution dans le temps */}
+
+      {/* Evolution */}
       <div className="flex w-full bg-white rounded-lg shadow-md p-4 mb-4">
         <MouvementStockAreaChart
-          data={allMvtStocks}
+          data={allMvtForCharts}
           userRole={user?.role as 'SuperAdmin' | 'AdminRegion' | 'AdminPointVente'}
         />
       </div>
 
+      {/* Résumé des régions + Pie */}
       <div className="w-full flex gap-5">
         <div className="w-full md:w-9/12 bg-white rounded-lg shadow-md p-4 mb-4">
           <DataTable
             //@ts-ignore
-            value={computeRegionStats(allMvtStocks)}
+            value={computeRegionStats(allMvtForCharts)}
             paginator
             size="small"
             rows={10}
@@ -277,38 +298,39 @@ export default function SuperAdminDashboard() {
               field="Entrée"
               header="Entrée (FC)"
               sortable
-              body={(rowData) => rowData.Entrée.toLocaleString()}
-            ></Column>
+              body={(r) => r.Entrée.toLocaleString()}
+            />
             <Column
               field="Sortie"
               header="Sortie (FC)"
               sortable
-              body={(rowData) => rowData.Sortie.toLocaleString()}
-            ></Column>
+              body={(r) => r.Sortie.toLocaleString()}
+            />
             <Column
               field="Vente"
               header="Vente (FC)"
               sortable
-              body={(rowData) => rowData.Vente.toLocaleString()}
-            ></Column>
+              body={(r) => r.Vente.toLocaleString()}
+            />
             <Column
               field="Livraison"
               header="Livraison (FC)"
               sortable
-              body={(rowData) => rowData.Livraison.toLocaleString()}
-            ></Column>
+              body={(r) => r.Livraison.toLocaleString()}
+            />
             <Column
               field="Commande"
               header="Commande (FC)"
               sortable
-              body={(rowData) => rowData.Commande.toLocaleString()}
-            ></Column>
+              body={(r) => r.Commande.toLocaleString()}
+            />
           </DataTable>
         </div>
+
         <div className="w-full md:w-3/12 bg-white rounded-lg shadow-md p-4 mb-4">
           <RegionDistributionPieChart
             //@ts-ignore
-            data={computeRegionStats(allMvtStocks)}
+            data={computeRegionStats(allMvtForCharts)}
             operationType={
               selectedType === 'Tout'
                 ? 'Vente'

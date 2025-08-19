@@ -14,17 +14,23 @@ import { Toast } from 'primereact/toast';
 import { classNames } from 'primereact/utils';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
-import { fetchCategories, selectAllCategories } from '@/stores/slices/produits/categoriesSlice';
+
+import { selectAllCategories, fetchCategories } from '@/stores/slices/produits/categoriesSlice';
 import { Produit, Categorie } from '@/Models/produitsType';
-import { fetchProduits } from '@/stores/slices/produits/produitsSlice';
-import { MouvementStock } from '@/Models/mouvementStockType';
+import {
+  fetchProduits,
+  selectAllProduits,
+  searchProduits,
+} from '@/stores/slices/produits/produitsSlice';
 import { createMouvementStock } from '@/stores/slices/mvtStock/mvtStock';
+
 import { PointVente } from '@/Models/pointVenteType';
 import {
   fetchPointVentes,
   fetchPointVentesByRegionId,
   selectAllPointVentes,
 } from '@/stores/slices/pointvente/pointventeSlice';
+
 import { checkStock } from '@/stores/slices/stock/stockSlice';
 import { User } from '@/Models/UserType';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
@@ -37,8 +43,9 @@ import { Region } from '@/Models/regionTypes';
 import { Badge } from 'primereact/badge';
 import { Card } from 'primereact/card';
 import { Tag } from 'primereact/tag';
+import { AutoComplete, AutoCompleteCompleteEvent } from 'primereact/autocomplete';
 
-/* ----------------------------- Helpers robustes ---------------------------- */
+/* ----------------------------- Helpers ----------------------------- */
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
@@ -46,27 +53,17 @@ const safeNumber = (v: unknown, fallback = 0) => {
   const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
   return Number.isFinite(n) ? n : fallback;
 };
-const toCategorieId = (c: unknown): string =>
-  typeof c === 'string' ? c : c && typeof c === 'object' && '_id' in (c as any) ? ((c as any)._id ?? '') : '';
 
-/* --------------------------------- Types ----------------------------------- */
+/* ----------------------------- Types ------------------------------- */
 
 type FormValues = {
   type: string;
   depotCentral?: boolean;
-  pointVente?: PointVente | string | null;
-  user?: User | string;
-  region?: Region | string;
-  produits: {
-    categorie: string;
-    produit: string;
-    quantite: number;
-  }[];
-  formulaire: {
-    categorie: string;
-    produit: string;
-    quantite: number;
-  };
+  pointVente?: string | PointVente | null;
+  user?: string | User;
+  region?: string | Region;
+  produits: { produit: string; quantite: number }[];
+  formulaire: { produit: string; quantite: number };
   remise?: number;
   rabais?: number;
   montantRecu?: number;
@@ -76,7 +73,7 @@ type FormValues = {
   tauxDollar?: number;
 };
 
-/* --------------------------------- Page ------------------------------------ */
+/* ------------------------------ Page ------------------------------- */
 
 const Page = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -84,12 +81,17 @@ const Page = () => {
 
   const categories = useSelector((s: RootState) => asArray<Categorie>(selectAllCategories(s)));
   const pointsVente = useSelector((s: RootState) => asArray<PointVente>(selectAllPointVentes(s)));
+  const allProduits = useSelector((s: RootState) => asArray<Produit>(selectAllProduits(s)));
 
-  const [allProduits, setAllProduits] = useState<Produit[]>([]);
   const [org, setOrg] = useState<Organisation[]>([]);
   const [selectedType, setSelectedType] = useState<string>('');
 
-  // lecture user côté client uniquement
+  // Autocomplete: texte affiché et suggestions
+  const [searchText, setSearchText] = useState<string>(''); // <- ce qu’on voit dans l’input
+  const [productSuggestions, setProductSuggestions] = useState<Produit[]>([]);
+  const productCacheRef = useRef<Record<string, Produit>>({});
+
+  // user
   const user: User | null =
     typeof window !== 'undefined'
       ? (() => {
@@ -106,12 +108,14 @@ const Page = () => {
     depotCentral: false,
     pointVente:
       user && user?.role && !['SuperAdmin', 'AdminRegion'].includes(user?.role)
-        ? (user as any).pointVente ?? null
+        ? ((typeof (user as any).pointVente === 'string'
+            ? (user as any).pointVente
+            : (user as any).pointVente?._id) ?? null)
         : null,
-    region: user?.region ?? undefined,
-    user: user ?? undefined,
+    region: typeof user?.region === 'string' ? user.region : (user as any)?.region?._id,
+    user: typeof user === 'object' && (user as any)?._id ? (user as any)._id : undefined,
     produits: [],
-    formulaire: { categorie: '', produit: '', quantite: 0 },
+    formulaire: { produit: '', quantite: 0 },
     remise: 0,
     rabais: 0,
     tauxDollar: undefined,
@@ -132,7 +136,6 @@ const Page = () => {
     clearErrors,
     getValues,
     resetField,
-    unregister,
     trigger,
   } = useForm<FormValues>({ defaultValues, mode: 'onChange' });
 
@@ -151,26 +154,20 @@ const Page = () => {
 
   const montantFranc = useMemo(() => montantDollar * tauxFranc, [montantDollar, tauxFranc]);
 
-  /* --------------------------- Chargements initiaux ------------------------- */
+  /* ------------------------- Chargements initiaux -------------------------- */
   useEffect(() => {
     let isActive = true;
     (async () => {
       try {
-        const [orgRes, catRes, prodRes] = await Promise.all([
-          dispatch(fetchOrganisations()),
+        const [orgRes] = await Promise.all([
+          (await dispatch(fetchOrganisations()).then((res) =>
+            setOrg(res.payload)
+          )) as Organisation[],
           dispatch(fetchCategories()),
           dispatch(fetchProduits()),
         ]);
 
         if (!isActive) return;
-
-        if (prodRes && 'payload' in prodRes) {
-          const produits = asArray<Produit>((prodRes as any).payload);
-          setAllProduits(produits);
-        }
-        if (orgRes && 'payload' in orgRes) {
-          setOrg(asArray<Organisation>((orgRes as any).payload));
-        }
 
         if (user?.role === 'SuperAdmin') {
           await dispatch(fetchPointVentes());
@@ -186,10 +183,11 @@ const Page = () => {
         });
       }
 
-      // hydrate les taux depuis localStorage si présents
       try {
-        const savedTauxDollar = typeof window !== 'undefined' ? localStorage.getItem('tauxDollar') : null;
-        const savedTauxFranc = typeof window !== 'undefined' ? localStorage.getItem('tauxFranc') : null;
+        const savedTauxDollar =
+          typeof window !== 'undefined' ? localStorage.getItem('tauxDollar') : null;
+        const savedTauxFranc =
+          typeof window !== 'undefined' ? localStorage.getItem('tauxFranc') : null;
         if (isNonEmptyString(savedTauxDollar)) setValue('tauxDollar', Number(savedTauxDollar));
         if (isNonEmptyString(savedTauxFranc)) setValue('tauxFranc', Number(savedTauxFranc));
       } catch {}
@@ -200,50 +198,33 @@ const Page = () => {
     };
   }, [dispatch, user?.role, (user as any)?.region?._id, setValue]);
 
-  /* ---------------------------- Point de vente lock ------------------------- */
+  /* -------------------------- Point de vente lock -------------------------- */
   const rolesWithFixedPointVente = ['AdminRegion', 'AdminPointVente', 'Vendeur', 'Logisticien'];
   const isPointVenteLocked = !!(user && rolesWithFixedPointVente.includes(user.role as any));
 
   useEffect(() => {
-    // vérouille/force PV et Région si nécessaires
     if (isPointVenteLocked && user?.pointVente && pointsVente.length > 0) {
       const targetId = typeof user.pointVente === 'string' ? user.pointVente : user.pointVente?._id;
-      const matched = pointsVente.find((pv) => pv?._id === targetId);
-      if (matched && (getValues('pointVente') as any)?._id !== matched._id) {
-        setValue('pointVente', matched);
-      }
+      if (targetId && getValues('pointVente') !== targetId) setValue('pointVente', targetId);
     }
-    
-
-const regionValue = getValues('region');
-
-if (
-  user?.region &&
-  typeof regionValue !== 'string' && // ⬅️ élimine le cas string
-  //@ts-ignore
-  regionValue?._id !== user?.region?._id
-) {
-  setValue('region', user.region);
-}
-
-
-    
+    const regionVal = getValues('region');
+    const userRegionId =
+      typeof user?.region === 'string' ? user?.region : (user as any)?.region?._id;
+    if (userRegionId && regionVal !== userRegionId) setValue('region', userRegionId);
   }, [isPointVenteLocked, pointsVente, user?.pointVente, user?.region, getValues, setValue]);
 
-  /* ------------------------------- Options UI ------------------------------- */
-  const filteredTypeOptions = useMemo(() => (user ? getOptionsByRole((user as any).role) : []), [user]);
+  /* ------------------------------ UI helpers ------------------------------- */
+  const filteredTypeOptions = useMemo(
+    () => (user ? getOptionsByRole((user as any).role) : []),
+    [user]
+  );
 
-  const selectedCatId = watch('formulaire.categorie');
-  const filteredProduits = useMemo(() => {
-    const catId = selectedCatId ?? '';
-    if (!isNonEmptyString(catId)) return [];
-    return asArray<Produit>(allProduits).filter((p) => toCategorieId(p.categorie) === catId);
-  }, [allProduits, selectedCatId]);
-
-  /* ------------------------------- Calculs panier --------------------------- */
+  /* ----------------------------- Calculs panier ---------------------------- */
   const totalMontant = useMemo(() => {
     const t = asArray<{ produit: string; quantite: number }>(watchProduits).reduce((acc, item) => {
-      const produit = asArray<Produit>(allProduits).find((p) => p?._id === item.produit);
+      const produit =
+        asArray<Produit>(allProduits).find((p) => p?._id === item.produit) ||
+        productCacheRef.current[item.produit];
       if (!produit) return acc;
 
       const quantite = safeNumber(item.quantite, 0);
@@ -263,11 +244,17 @@ if (
   }, [watchProduits, allProduits, selectedType]);
 
   const valeurRabais = useMemo(() => (totalMontant * rabais) / 100, [totalMontant, rabais]);
-  const valeurRemise = useMemo(() => ((totalMontant - valeurRabais) * remise) / 100, [totalMontant, valeurRabais, remise]);
-  const netAPayer = useMemo(() => totalMontant - valeurRabais - valeurRemise, [totalMontant, valeurRabais, valeurRemise]);
+  const valeurRemise = useMemo(
+    () => ((totalMontant - valeurRabais) * remise) / 100,
+    [totalMontant, valeurRabais, remise]
+  );
+  const netAPayer = useMemo(
+    () => totalMontant - valeurRabais - valeurRemise,
+    [totalMontant, valeurRabais, valeurRemise]
+  );
   const reste = useMemo(() => montantRecu - netAPayer, [montantRecu, netAPayer]);
 
-  /* --------------------------- Validation de stock -------------------------- */
+  /* --------------------------- Validation de stock ------------------------- */
   const validateStock = useCallback(
     async (value: number) => {
       const produitId = getValues('formulaire.produit');
@@ -276,17 +263,13 @@ if (
       if (op === 'Entrée' || op === 'Commande') return true;
 
       const pvId =
-        (selectedPointVente as any)?._id ??
-        (typeof selectedPointVente === 'string' ? selectedPointVente : undefined);
+        typeof selectedPointVente === 'string'
+          ? selectedPointVente
+          : (selectedPointVente as any)?._id;
 
       try {
         const result = await dispatch(
-          checkStock({
-            type: op,
-            produitId,
-            quantite: value,
-            pointVenteId: pvId,
-          })
+          checkStock({ type: op, produitId, quantite: value, pointVenteId: pvId })
         ).unwrap();
 
         if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
@@ -300,7 +283,49 @@ if (
     [dispatch, selectedPointVente, getValues]
   );
 
-  /* --------------------------------- Submit --------------------------------- */
+  /* --------------------------- Autocomplete produits ----------------------- */
+
+  const suggestionItemTemplate = (item: Produit) => {
+    const catName =
+      typeof item.categorie === 'object' && item.categorie
+        ? (item.categorie as any)?.nom
+        : categories.find((c) => c._id === (item.categorie as any))?.nom;
+
+    return (
+      <div className="flex flex-col">
+        <div className="font-medium text-gray-800">{item.nom}</div>
+        <div className="text-xs text-gray-500">
+          {catName ? `${catName} • ` : ''}Prix: {safeNumber(item.prix).toLocaleString()} FC
+        </div>
+      </div>
+    );
+  };
+
+  const completeProduits = async (e: AutoCompleteCompleteEvent) => {
+    const q = String(e.query || '').trim();
+    if (!q) {
+      setProductSuggestions([]);
+      return;
+    }
+    try {
+      const action = await dispatch(
+        searchProduits({ q, page: 1, limit: 10, includeTotal: false }) as any
+      );
+      if ((searchProduits as any).fulfilled.match(action)) {
+        const list = asArray<Produit>(action.payload?.data);
+        list.forEach((p) => {
+          if (p?._id) productCacheRef.current[p._id] = p;
+        });
+        setProductSuggestions(list);
+      } else {
+        setProductSuggestions([]);
+      }
+    } catch {
+      setProductSuggestions([]);
+    }
+  };
+
+  /* ------------------------------- Submit ---------------------------------- */
   const onSubmit = useCallback(
     async (data: FormValues) => {
       if (!data?.produits?.length) {
@@ -315,22 +340,28 @@ if (
 
       try {
         const mouvements = data.produits.map((item) => {
-          const produitObj = asArray<Produit>(allProduits).find((p) => p?._id === item.produit);
+          const produitObj =
+            asArray<Produit>(allProduits).find((p) => p?._id === item.produit) ||
+            productCacheRef.current[item.produit];
           if (!produitObj) throw new Error('Produit introuvable');
 
           const prix =
-            ['Entrée', 'Livraison', 'Commande', 'Sortie'].includes(data.type) && Number.isFinite(produitObj.prix)
+            ['Entrée', 'Livraison', 'Sortie'].includes(data.type) &&
+            Number.isFinite(produitObj.prix)
               ? safeNumber(produitObj.prix)
               : safeNumber(produitObj.prixVente, safeNumber(produitObj.prix));
 
           const pointVenteId =
-            (data.pointVente as any)?._id ?? (typeof data.pointVente === 'string' ? data.pointVente : null);
+            typeof data.pointVente === 'string'
+              ? data.pointVente
+              : ((data.pointVente as any)?._id ?? null);
           const regionId =
-            (data.region as any)?._id ?? (typeof data.region === 'string' ? data.region : null);
-          const userId = (data.user as any)?._id ?? (typeof data.user === 'string' ? data.user : null);
+            typeof data.region === 'string' ? data.region : ((data.region as any)?._id ?? null);
+          const userId =
+            typeof data.user === 'string' ? data.user : ((data.user as any)?._id ?? null);
 
           return {
-            produit: produitObj._id, // ID uniquement
+            produit: produitObj._id,
             produitNom: produitObj.nom,
             quantite: safeNumber(item.quantite, 0),
             montant: prix * safeNumber(item.quantite, 0),
@@ -339,7 +370,7 @@ if (
             pointVente: pointVenteId,
             region: regionId,
             user: userId,
-            statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type), // bool attendu (selon ton backend)
+            statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type),
           };
         });
 
@@ -399,6 +430,9 @@ if (
           });
 
           reset(defaultValues);
+          setSearchText(''); // clear input
+          setProductSuggestions([]);
+          productCacheRef.current = {};
         }
       } catch (err) {
         toast.current?.show({
@@ -412,8 +446,8 @@ if (
     [dispatch, allProduits, org, user, reset]
   );
 
-  /* ---------------------------------- UI ------------------------------------ */
-
+  /* ------------------------------- UI -------------------------------------- */
+  console.log('org : ', org[0]);
   return (
     <div className="min-h-screen p-4 text-xs">
       <Toast ref={toast} />
@@ -430,7 +464,10 @@ if (
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="flex flex-col md:flex-row gap-0">
             {/* Formulaire: 2/12 */}
-            <form onSubmit={handleSubmit(onSubmit)} className="w-full md:w-2/12 p-3 bg-gradient-to-br from-blue-50 to-indigo-50">
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="w-full md:w-2/12 p-3 bg-gradient-to-br from-blue-50 to-indigo-50"
+            >
               <div className="flex items-center gap-3 mb-6">
                 <i className="pi pi-pencil text-blue-600 text-xl"></i>
                 <h2 className="text-xl font-bold text-gray-800">Nouvelle Operation</h2>
@@ -454,6 +491,9 @@ if (
                         onChange={(e) => {
                           field.onChange(e.value);
                           setSelectedType(e.value);
+                          setValue('formulaire', { produit: '', quantite: 0 } as any);
+                          setSearchText('');
+                          clearErrors('formulaire.quantite');
                         }}
                         placeholder="Sélectionner une operation"
                         className={classNames('w-full border-gray-300 rounded-xl', {
@@ -491,10 +531,12 @@ if (
                         <i className="pi pi-building text-blue-600 text-xl"></i>
                         <div>
                           <div className="font-bold">Dépôt régional</div>
-                          <div className="text-sm font-normal">{
-                            //@ts-ignore
-                            user?.region?.nom || 'Région non définie'
-                          }</div>
+                          <div className="text-sm font-normal">
+                            {
+                              //@ts-ignore
+                              user?.region?.nom || 'Région non définie'
+                            }
+                          </div>
                         </div>
                       </div>
                     ) : null}
@@ -515,10 +557,14 @@ if (
                         rules={{ required: 'Point de vente est requis' }}
                         render={({ field }) => (
                           <Dropdown
-                            {...field}
-                            value={field.value as any}
+                            value={
+                              typeof field.value === 'string'
+                                ? field.value
+                                : (field.value as any)?._id
+                            }
                             options={pointsVente}
                             optionLabel="nom"
+                            optionValue="_id"
                             onChange={(e) => field.onChange(e.value)}
                             placeholder="Sélectionner un point de vente"
                             className="w-full border-gray-300 rounded-xl"
@@ -532,10 +578,28 @@ if (
                         control={control}
                         render={({ field }) => (
                           <Dropdown
-                            {...field}
-                            value={(user as any)?.pointVente ?? null}
-                            options={(user as any)?.pointVente ? [(user as any).pointVente] : []}
+                            value={
+                              typeof (user as any)?.pointVente === 'string'
+                                ? (user as any).pointVente
+                                : (user as any)?.pointVente?._id
+                            }
+                            options={
+                              (user as any)?.pointVente
+                                ? [
+                                    {
+                                      ...(typeof (user as any).pointVente === 'object'
+                                        ? (user as any).pointVente
+                                        : {}),
+                                      _id:
+                                        typeof (user as any).pointVente === 'string'
+                                          ? (user as any).pointVente
+                                          : (user as any).pointVente?._id,
+                                    },
+                                  ]
+                                : []
+                            }
                             optionLabel="nom"
+                            optionValue="_id"
                             placeholder="Votre point de vente"
                             className="w-full border-gray-300 rounded-xl"
                             disabled
@@ -553,50 +617,47 @@ if (
                   </div>
                 )}
 
-                {/* Sélection Catégorie/Produit/Quantité */}
+                {/* Recherche Produit + Quantité */}
                 <div className="space-y-6 mt-6">
                   <div className="grid grid-cols-1 gap-4">
+                    {/* Recherche Produit */}
                     <div>
                       <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
-                        <i className="pi pi-tag text-blue-500"></i>
-                        Catégorie
-                      </label>
-                      <Controller
-                        name="formulaire.categorie"
-                        control={control}
-                        render={({ field }) => (
-                          <Dropdown
-                            {...field}
-                            options={categories.map((cat) => ({ label: cat?.nom ?? '—', value: cat?._id ?? '' }))}
-                            onChange={(e) => field.onChange(e.value)}
-                            placeholder="Choisir une catégorie"
-                            className="w-full border-gray-300 rounded-xl"
-                            disabled={!watch('type')}
-                          />
-                        )}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
-                        <i className="pi pi-box text-blue-500"></i>
-                        Produit
+                        <i className="pi pi-search text-blue-500"></i>
+                        Rechercher un produit
                       </label>
                       <Controller
                         name="formulaire.produit"
                         control={control}
                         render={({ field }) => (
-                          <Dropdown
-                            {...field}
-                            options={filteredProduits.map((p) => ({ label: p?.nom ?? '—', value: p?._id ?? '' }))}
-                            placeholder="Choisir un produit"
-                            className="w-full border-gray-300 rounded-xl"
-                            onChange={(e) => field.onChange(e.value)}
+                          <AutoComplete
+                            value={searchText} // <- on contrôle le texte affiché
+                            suggestions={productSuggestions}
+                            completeMethod={completeProduits}
+                            delay={250}
+                            field="nom"
+                            dropdown
+                            placeholder="Tape le nom du produit"
+                            itemTemplate={suggestionItemTemplate}
+                            className="w-full"
+                            onChange={(e) => {
+                              setSearchText(String(e.value ?? '')); // tape libre
+                            }}
+                            onSelect={(e) => {
+                              const p: Produit = e.value;
+                              if (p && p._id) {
+                                productCacheRef.current[p._id] = p;
+                                field.onChange(p._id); // on stocke l’id dans le form
+                                setSearchText(p.nom); // on affiche le nom
+                                clearErrors('formulaire.produit');
+                              }
+                            }}
                           />
                         )}
                       />
                     </div>
 
+                    {/* Quantité */}
                     <div>
                       <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
                         <i className="pi pi-calculator text-blue-500"></i>
@@ -629,41 +690,55 @@ if (
                   <div className="flex mt-4">
                     <Button
                       type="button"
-                      className={`w-full p-3 rounded-xl font-bold transition-all duration-300 ${
-                        getValues('formulaire')?.produit && getValues('formulaire')?.quantite && getValues('formulaire')?.categorie
-                          ? ''
-                          : ''
-                      } ${/* garder styles existants */ ''} ${
-                        // styles d’origine
-                        // eslint-disable-next-line no-nested-ternary
-                        (getValues('formulaire') as any)?.editingIndex !== undefined
-                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600'
-                          : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
-                      }`}
+                      className="w-full p-3 rounded-xl font-bold transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                       icon={null}
-                      label={typeof (getValues('formulaire') as any)?.editingIndex === 'number' ? 'Modifier Produit' : 'Ajouter Produit'}
+                      label="Ajouter Produit"
                       onClick={async () => {
-                        const isValid = await trigger(['formulaire.categorie', 'formulaire.produit', 'formulaire.quantite']);
-                        if (!isValid) return;
+                        // On valide seulement les champs rapides pour l’ajout
+                        const produitId = getValues('formulaire.produit');
+                        const qte = safeNumber(getValues('formulaire.quantite'), 0);
 
-                        const quantite = safeNumber(getValues('formulaire.quantite'), 0);
-                        const stockValidation = await validateStock(quantite);
-                        if (stockValidation !== true) {
-                          setError('formulaire.quantite', { type: 'manual', message: String(stockValidation) });
+                        if (!isNonEmptyString(produitId)) {
+                          setError('formulaire.produit', {
+                            type: 'manual',
+                            message: 'Produit requis',
+                          });
+                          return;
+                        }
+                        if (!qte || qte <= 0) {
+                          setError('formulaire.quantite', {
+                            type: 'manual',
+                            message: 'Quantité invalide',
+                          });
                           return;
                         }
 
-                        const formData = getValues('formulaire');
-                        const idx = (getValues('formulaire') as any)?.editingIndex as number | undefined;
-
-                        if (Number.isInteger(idx)) {
-                          update(idx as number, formData);
-                          // nettoie le flag local
-                          setValue('formulaire', { categorie: '', produit: '', quantite: 0 } as any);
-                        } else {
-                          append(formData);
-                          resetField('formulaire');
+                        const stockValidation = await validateStock(qte);
+                        if (stockValidation !== true) {
+                          setError('formulaire.quantite', {
+                            type: 'manual',
+                            message: String(stockValidation),
+                          });
+                          return;
                         }
+
+                        // Merge si déjà présent
+                        const idx = (watchProduits || []).findIndex(
+                          (it) => it.produit === produitId
+                        );
+                        if (idx >= 0) {
+                          update(idx, {
+                            ...watchProduits[idx],
+                            quantite: safeNumber(watchProduits[idx].quantite, 0) + qte,
+                          });
+                        } else {
+                          append({ produit: produitId, quantite: qte });
+                        }
+
+                        // reset champ rapide
+                        resetField('formulaire');
+                        setSearchText('');
+                        setProductSuggestions([]);
                       }}
                     />
                   </div>
@@ -678,7 +753,9 @@ if (
               <Card className="h-full border-0 shadow-none">
                 <div className="flex items-center gap-2 mb-3 ml-3">
                   <i className="pi pi-list text-indigo-600 text-xl"></i>
-                  <h2 className="text-xl font-bold text-gray-800">Detail des operations selectionnees</h2>
+                  <h2 className="text-xl font-bold text-gray-800">
+                    Detail des operations selectionnees
+                  </h2>
                 </div>
 
                 {type && type !== 'Entrée' && selectedPointVente && (
@@ -690,26 +767,18 @@ if (
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <div className="text-sm text-gray-500">Nom</div>
-                        <div className="font-medium">{(selectedPointVente as any)?.nom ?? '-'}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-gray-500">Adresse</div>
-                        <div className="font-medium">{(selectedPointVente as any)?.adresse ?? '-'}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-gray-500">Région</div>
                         <div className="font-medium">
-                          {typeof (selectedPointVente as any)?.region === 'object'
-                            ? (selectedPointVente as any)?.region?.nom
-                            : (selectedPointVente as any)?.region ?? '-'}
+                          {(typeof selectedPointVente === 'string'
+                            ? pointsVente.find((pv) => pv._id === selectedPointVente)?.nom
+                            : (selectedPointVente as any)?.nom) ?? '-'}
                         </div>
                       </div>
                       <div>
-                        <div className="text-sm text-gray-500">Ville</div>
+                        <div className="text-sm text-gray-500">Adresse</div>
                         <div className="font-medium">
-                          {typeof (selectedPointVente as any)?.region === 'object'
-                            ? (selectedPointVente as any)?.region?.ville ?? ''
-                            : ''}
+                          {(typeof selectedPointVente === 'string'
+                            ? pointsVente.find((pv) => pv._id === selectedPointVente)?.adresse
+                            : (selectedPointVente as any)?.adresse) ?? '-'}
                         </div>
                       </div>
                     </div>
@@ -739,16 +808,29 @@ if (
                         </thead>
                         <tbody>
                           {watchProduits.map((item, index) => {
-                            const produit = asArray<Produit>(allProduits).find((p) => p?._id === item.produit);
+                            const produit =
+                              asArray<Produit>(allProduits).find((p) => p?._id === item.produit) ||
+                              productCacheRef.current[item.produit];
                             return (
                               <tr key={index} className="bg-white border-b hover:bg-gray-50">
-                                <td className="px-4 py-3 font-medium text-gray-900">{produit?.nom ?? 'Produit inconnu'}</td>
-                                <td className="px-4 py-3">
-                                  <Tag value={safeNumber(item.quantite).toString()} severity="info" rounded />
+                                <td className="px-4 py-3 font-medium text-gray-900">
+                                  {produit?.nom ?? 'Produit inconnu'}
                                 </td>
-                                <td className="px-4 py-3">{safeNumber(produit?.prix).toFixed(2)} FC</td>
+                                <td className="px-4 py-3">
+                                  <Tag
+                                    value={safeNumber(item.quantite).toString()}
+                                    severity="info"
+                                    rounded
+                                  />
+                                </td>
+                                <td className="px-4 py-3">
+                                  {safeNumber(produit?.prix).toFixed(2)} FC
+                                </td>
                                 <td className="px-4 py-3 font-semibold">
-                                  {(safeNumber(item.quantite) * safeNumber(produit?.prix)).toFixed(2)} FC
+                                  {(safeNumber(item.quantite) * safeNumber(produit?.prix)).toFixed(
+                                    2
+                                  )}{' '}
+                                  FC
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <div className="flex gap-2">
@@ -756,7 +838,17 @@ if (
                                       icon="pi pi-pencil"
                                       className="p-button-text p-button-sm"
                                       onClick={() => {
-                                        setValue('formulaire', { ...item, editingIndex: index } as any);
+                                        setValue('formulaire', {
+                                          produit: item.produit,
+                                          quantite: item.quantite,
+                                        } as any);
+                                        setSearchText(
+                                          productCacheRef.current[item.produit]?.nom ||
+                                            asArray<Produit>(allProduits).find(
+                                              (p) => p?._id === item.produit
+                                            )?.nom ||
+                                            ''
+                                        );
                                       }}
                                       tooltip="Modifier"
                                       tooltipOptions={{ position: 'top' }}
@@ -785,19 +877,25 @@ if (
 
                       <div className="flex justify-between items-center mb-3">
                         <span className="text-gray-600">Rabais ({rabais}%):</span>
-                        <span className="font-semibold text-red-500">-{valeurRabais.toFixed(2)} FC</span>
+                        <span className="font-semibold text-red-500">
+                          -{valeurRabais.toFixed(2)} FC
+                        </span>
                       </div>
 
                       <div className="flex justify-between items-center mb-3">
                         <span className="text-gray-600">Remise ({remise}%):</span>
-                        <span className="font-semibold text-red-500">-{valeurRemise.toFixed(2)} FC</span>
+                        <span className="font-semibold text-red-500">
+                          -{valeurRemise.toFixed(2)} FC
+                        </span>
                       </div>
 
                       <Divider className="my-2" />
 
                       <div className="flex justify-between items-center">
                         <span className="text-lg font-bold text-gray-800">Total:</span>
-                        <span className="text-xl font-bold text-primary">{netAPayer.toFixed(2)} FC</span>
+                        <span className="text-xl font-bold text-primary">
+                          {netAPayer.toFixed(2)} FC
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -806,7 +904,8 @@ if (
                     <i className="pi pi-shopping-cart text-gray-400 text-4xl mb-3"></i>
                     <p className="text-gray-500 mb-4">Votre panier est vide</p>
                     <p className="text-gray-400 text-center max-w-xs">
-                      Ajoutez des produits à partir du formulaire à gauche pour commencer une opération
+                      Ajoutez des produits via le champ de recherche à gauche pour commencer une
+                      opération
                     </p>
                   </div>
                 )}
@@ -823,7 +922,11 @@ if (
                           <i className="pi pi-money-bill text-green-500"></i>
                           Montant reçu en franc
                         </label>
-                        <InputText type="number" {...register('montantRecu')} className="w-full border-gray-300 rounded-xl" />
+                        <InputText
+                          type="number"
+                          {...register('montantRecu')}
+                          className="w-full border-gray-300 rounded-xl"
+                        />
                       </div>
                       <div className="w-1/2">
                         <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
@@ -911,7 +1014,11 @@ if (
                       <i className="pi pi-dollar text-indigo-500"></i>
                       Montant reçu en $
                     </label>
-                    <InputText type="number" {...register('montantDollar')} className="w-full border-gray-300 rounded-xl" />
+                    <InputText
+                      type="number"
+                      {...register('montantDollar')}
+                      className="w-full border-gray-300 rounded-xl"
+                    />
                   </div>
                   <div className="w-1/2">
                     <label className="font-medium text-gray-700 mb-2 flex items-center gap-2">
@@ -937,7 +1044,11 @@ if (
                         <i className="pi pi-tag text-purple-500"></i>
                         Rabais (%)
                       </label>
-                      <InputText type="number" {...register('rabais')} className="w-full border-gray-300 rounded-xl" />
+                      <InputText
+                        type="number"
+                        {...register('rabais')}
+                        className="w-full border-gray-300 rounded-xl"
+                      />
                     </div>
 
                     <div>
@@ -945,7 +1056,11 @@ if (
                         <i className="pi pi-tags text-purple-500"></i>
                         Remise (%)
                       </label>
-                      <InputText type="number" {...register('remise')} className="w-full border-gray-300 rounded-xl" />
+                      <InputText
+                        type="number"
+                        {...register('remise')}
+                        className="w-full border-gray-300 rounded-xl"
+                      />
                     </div>
 
                     <div>

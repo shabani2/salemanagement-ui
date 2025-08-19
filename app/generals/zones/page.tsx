@@ -9,8 +9,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
-import { DataTable, DataTablePageEvent, DataTableSortEvent } from 'primereact/datatable';
-import { Column } from 'primereact/column';
 import { Dialog } from 'primereact/dialog';
 import { Menu } from 'primereact/menu';
 import { Toast } from 'primereact/toast';
@@ -30,13 +28,29 @@ import {
 
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 
 /* ----------------------------- Helpers ----------------------------- */
-type Region = { _id?: string; nom?: string; ville?: string; pointVenteCount?: number };
+type Region = {
+  _id?: string;
+  nom?: string;
+  ville?: string;
+  pointVenteCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
+  <span className="inline-block align-middle ml-1">
+    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+  </span>
+);
 
 /* --------------------------------- Page ---------------------------------- */
 
@@ -50,10 +64,10 @@ export default function RegionManagement() {
   const status = useSelector(selectRegionStatus);
   const loading = status === 'loading';
 
-  // Requête serveur (params)
+  // Requête serveur (params) — 1-based + tri custom
   const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
-  const [sortBy, setSortBy] = useState<string>('createdAt');
+  const [sortBy, setSortBy] = useState<string>('createdAt'); // tu peux passer à 'updatedAt' si tu préfères
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [searchText, setSearchText] = useState('');
   const [villeFilter, setVilleFilter] = useState('');
@@ -80,9 +94,21 @@ export default function RegionManagement() {
   }, []);
   const menuModel = useMemo(
     () => [
-      { label: 'Détails', command: () => selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current) },
-      { label: 'Modifier', command: () => selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current) },
-      { label: 'Supprimer', command: () => selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current) },
+      {
+        label: 'Détails',
+        command: () =>
+          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
+      },
+      {
+        label: 'Modifier',
+        command: () =>
+          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
+      },
+      {
+        label: 'Supprimer',
+        command: () =>
+          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
+      },
     ],
     [handleAction]
   );
@@ -106,63 +132,39 @@ export default function RegionManagement() {
     fetchServer();
   }, [fetchServer]);
 
-  /* ------------------------------- Handlers UI ------------------------------ */
-  const onPage = useCallback(
-    (e: DataTablePageEvent) => {
-      const newPage = (e.page ?? 0) + 1; // PrimeReact 0-based
-      setPage(newPage);
-      setRows(e.rows);
-      dispatch(
-        fetchRegions({
-          page: newPage,
-          limit: e.rows,
-          q: searchText || undefined,
-          ville: villeFilter || undefined,
-          sortBy,
-          order,
-          includeTotal: true,
-        })
-      );
-    },
-    [dispatch, searchText, villeFilter, sortBy, order]
-  );
+  /* -------------------------- Tri & pagination (UI) ------------------------- */
+  const total = meta?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const firstIndex = (page - 1) * rows;
 
-  const onSort = useCallback(
-    (e: DataTableSortEvent) => {
-      const newSortBy = (e.sortField as string) || 'createdAt';
-      const newOrder = e.sortOrder === 1 ? 'asc' : 'desc';
-      setSortBy(newSortBy);
-      setOrder(newOrder);
+  const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
+  const toggleSort = (field: string) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
       setPage(1);
-      dispatch(
-        fetchRegions({
-          page: 1,
-          limit: rows,
-          q: searchText || undefined,
-          ville: villeFilter || undefined,
-          sortBy: newSortBy,
-          order: newOrder,
-          includeTotal: true,
-        })
-      );
-    },
-    [dispatch, rows, searchText, villeFilter]
-  );
+    } else {
+      setOrder(order === 'asc' ? 'desc' : 'asc');
+      setPage(1);
+    }
+  };
+
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
+
+  const onChangeRows = (n: number) => {
+    setRows(n);
+    const newTotalPages = Math.max(1, Math.ceil(total / n));
+    const fixed = Math.min(page, newTotalPages);
+    setPage(fixed);
+  };
 
   const applyFilters = useCallback(() => {
     setPage(1);
-    dispatch(
-      fetchRegions({
-        page: 1,
-        limit: rows,
-        q: searchText || undefined,
-        ville: villeFilter || undefined,
-        sortBy,
-        order,
-        includeTotal: true,
-      })
-    );
-  }, [dispatch, rows, searchText, villeFilter, sortBy, order]);
+    fetchServer();
+  }, [fetchServer]);
 
   // Actions CRUD
   const resetForm = useCallback(() => {
@@ -181,23 +183,43 @@ export default function RegionManagement() {
 
   const handleCreate = useCallback(async () => {
     if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.ville)) {
-      toast.current?.show({ severity: 'warn', summary: 'Champs requis', detail: 'Nom et Ville sont requis', life: 2500 });
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Champs requis',
+        detail: 'Nom et Ville sont requis',
+        life: 2500,
+      });
       return;
     }
     const r = await dispatch(addRegion({ nom: form.nom.trim(), ville: form.ville.trim() }) as any);
     if ((addRegion as any).fulfilled.match(r)) {
-      toast.current?.show({ severity: 'success', summary: 'Ajouté', detail: 'Région créée', life: 2000 });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Ajouté',
+        detail: 'Région créée',
+        life: 2000,
+      });
       resetForm();
       fetchServer();
     } else {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'ajout", life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: "Échec de l'ajout",
+        life: 3000,
+      });
     }
   }, [dispatch, form, fetchServer, resetForm]);
 
   const handleUpdate = useCallback(async () => {
     if (!selectedRegion?._id) return;
     if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.ville)) {
-      toast.current?.show({ severity: 'warn', summary: 'Champs requis', detail: 'Nom et Ville sont requis', life: 2500 });
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Champs requis',
+        detail: 'Nom et Ville sont requis',
+        life: 2500,
+      });
       return;
     }
     const r = await dispatch(
@@ -208,11 +230,21 @@ export default function RegionManagement() {
       } as any)
     );
     if ((updateRegionThunk as any).fulfilled.match(r)) {
-      toast.current?.show({ severity: 'success', summary: 'Modifié', detail: 'Région mise à jour', life: 2000 });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Modifié',
+        detail: 'Région mise à jour',
+        life: 2000,
+      });
       resetForm();
       fetchServer();
     } else {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la modification', life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la modification',
+        life: 3000,
+      });
     }
   }, [dispatch, selectedRegion, form, fetchServer, resetForm]);
 
@@ -220,9 +252,15 @@ export default function RegionManagement() {
     if (!selectedRegion?._id) return;
     const r = await dispatch(deleteRegionThunk(selectedRegion._id) as any);
     if ((deleteRegionThunk as any).fulfilled.match(r)) {
-      toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Région supprimée', life: 2000 });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Supprimé',
+        detail: 'Région supprimée',
+        life: 2000,
+      });
       // si la page devient vide, reculer d’une page
-      const nextPage = regions.length === 1 && (meta?.page ?? 1) > 1 ? (meta!.page - 1) : (meta?.page ?? page);
+      const nextPage =
+        regions.length === 1 && (meta?.page ?? 1) > 1 ? meta!.page - 1 : (meta?.page ?? page);
       setPage(nextPage);
       dispatch(
         fetchRegions({
@@ -236,9 +274,25 @@ export default function RegionManagement() {
         })
       );
     } else {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la suppression', life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la suppression',
+        life: 3000,
+      });
     }
-  }, [dispatch, selectedRegion, regions.length, meta, page, rows, searchText, villeFilter, sortBy, order]);
+  }, [
+    dispatch,
+    selectedRegion,
+    regions.length,
+    meta,
+    page,
+    rows,
+    searchText,
+    villeFilter,
+    sortBy,
+    order,
+  ]);
 
   // Export
   const handleFileManagement = useCallback(
@@ -295,19 +349,17 @@ export default function RegionManagement() {
     [dispatch, regions]
   );
 
-  const actionBodyTemplate = useCallback(
+  const actionButton = useCallback(
     (rowData: Region) => (
-      <div className="flex items-center">
-        <Button
-          icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-          onClick={(event) => {
-            selectedRowDataRef.current = rowData ?? null;
-            menuRef.current?.toggle(event);
-          }}
-          aria-haspopup
-        />
-      </div>
+      <Button
+        icon="pi pi-bars"
+        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+        onClick={(event) => {
+          selectedRowDataRef.current = rowData ?? null;
+          menuRef.current?.toggle(event);
+        }}
+        aria-haspopup
+      />
     ),
     []
   );
@@ -347,7 +399,12 @@ export default function RegionManagement() {
                 onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
               />
 
-              <Button label="Filtrer" icon="pi pi-search" className="!bg-green-700 text-white" onClick={applyFilters} />
+              <Button
+                label="Filtrer"
+                icon="pi pi-search"
+                className="!bg-green-700 text-white"
+                onClick={applyFilters}
+              />
 
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
@@ -360,70 +417,133 @@ export default function RegionManagement() {
             />
           </div>
 
-          <div>
-            <DataTable
-              value={regions}
-              lazy
-              paginator
-              size="small"
-              rows={rows}
-              totalRecords={meta?.total ?? 0}
-              first={((meta?.page ?? page) - 1) * rows}
-              onPage={onPage}
-              onSort={onSort}
-              sortField={sortBy}
-              sortOrder={order === 'asc' ? 1 : -1}
-              className="rounded-lg text-sm text-gray-900 w-full"
-              tableStyle={{ minWidth: '60rem' }}
-              rowClassName={(_, options) =>
-                // @ts-ignore
-                options.rowIndex % 2 === 0 ? '!bg-gray-100 !text-gray-900' : '!bg-green-50 !text-gray-900'
-              }
-              emptyMessage={loading ? 'Chargement...' : 'Aucune région trouvée'}
-              loading={loading}
-            >
-              <Column
-                header="#"
-                body={(_, { rowIndex }) =>
-                  Number.isFinite(rowIndex) ? ((meta?.page ?? page) - 1) * rows + (rowIndex as number) + 1 : '-'
-                }
-                headerClassName="text-sm !bg-green-800 !text-white"
-                className="text-sm"
-              />
+          {/* -------- TABLE TAILWIND (look DataTable) -------- */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-[60rem] w-full text-sm">
+              <thead>
+                <tr className="bg-green-800 text-white">
+                  <th className="px-4 py-2 text-left">N°</th>
 
-              <Column
-                field="nom"
-                header="Nom"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Region) => r?.nom ?? '—'}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('nom')}
+                    title="Trier par nom"
+                  >
+                    Nom <SortIcon order={sortedOrderFor('nom')} />
+                  </th>
 
-              <Column
-                field="pointVenteCount"
-                header="Points de vente"
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Region) => String(r?.pointVenteCount ?? 0)}
-              />
+                  <th className="px-4 py-2 text-left">Points de vente</th>
 
-              <Column
-                field="ville"
-                header="Ville"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Region) => r?.ville ?? '—'}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('ville')}
+                    title="Trier par ville"
+                  >
+                    Ville <SortIcon order={sortedOrderFor('ville')} />
+                  </th>
 
-              <Column
-                body={actionBodyTemplate}
-                header="Actions"
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-            </DataTable>
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('createdAt')}
+                    title="Trier par date de création"
+                  >
+                    Créée le <SortIcon order={sortedOrderFor('createdAt')} />
+                  </th>
+
+                  <th className="px-4 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading && regions.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={6}>
+                      Chargement...
+                    </td>
+                  </tr>
+                ) : regions.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={6}>
+                      Aucune région trouvée
+                    </td>
+                  </tr>
+                ) : (
+                  regions.map((r, idx) => (
+                    <tr
+                      key={r._id}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{firstIndex + idx + 1}</td>
+                      <td className="px-4 py-2">{r?.nom ?? '—'}</td>
+                      <td className="px-4 py-2">{String(r?.pointVenteCount ?? 0)}</td>
+                      <td className="px-4 py-2">{r?.ville ?? '—'}</td>
+                      <td className="px-4 py-2">
+                        {(() => {
+                          try {
+                            return new Date((r as any)?.createdAt || '').toLocaleDateString();
+                          } catch {
+                            return '—';
+                          }
+                        })()}
+                      </td>
+                      <td className="px-4 py-2">{actionButton(r)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* -------- PAGINATION TAILWIND -------- */}
+          <div className="flex items-center justify-between mt-3">
+            <div className="text-sm text-gray-700">
+              Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+              <span className="font-semibold">{total}</span> éléments
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={rows}
+                onChange={(e) => onChangeRows(Number(e.target.value))}
+              >
+                {[10, 20, 30, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+                onClick={() => goTo(1)}
+                disabled={page <= 1}
+              >
+                «
+              </button>
+              <button
+                className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+                onClick={() => goTo(page - 1)}
+                disabled={page <= 1}
+              >
+                ‹
+              </button>
+              <button
+                className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+                onClick={() => goTo(page + 1)}
+                disabled={page >= totalPages}
+              >
+                ›
+              </button>
+              <button
+                className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+                onClick={() => goTo(totalPages)}
+                disabled={page >= totalPages}
+              >
+                »
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -478,9 +598,18 @@ export default function RegionManagement() {
         modal
       >
         <div className="p-4 space-y-3 text-sm">
-          <div className="flex justify-between"><span className="font-medium">Nom</span><span>{selectedRegion?.nom ?? '—'}</span></div>
-          <div className="flex justify-between"><span className="font-medium">Ville</span><span>{selectedRegion?.ville ?? '—'}</span></div>
-          <div className="flex justify-between"><span className="font-medium">Points de vente</span><span>{selectedRegion?.pointVenteCount ?? 0}</span></div>
+          <div className="flex justify-between">
+            <span className="font-medium">Nom</span>
+            <span>{selectedRegion?.nom ?? '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Ville</span>
+            <span>{selectedRegion?.ville ?? '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Points de vente</span>
+            <span>{selectedRegion?.pointVenteCount ?? 0}</span>
+          </div>
         </div>
       </Dialog>
 

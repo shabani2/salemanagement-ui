@@ -23,14 +23,11 @@ const DropdownTypeFilter: React.FC<DropdownTypeFilterProps> = ({
   includeAll = true,
   className,
 }) => {
-  const items = useMemo(
-    () => {
-      const uniques = Array.from(new Set(options?.filter(Boolean)));
-      const base = uniques.map(v => ({ label: v, value: v }));
-      return includeAll ? [{ label: 'Tout', value: 'Tout' }, ...base] : base;
-    },
-    [options, includeAll]
-  );
+  const items = useMemo(() => {
+    const uniques = Array.from(new Set(options?.filter(Boolean)));
+    const base = uniques.map((v) => ({ label: v, value: v }));
+    return includeAll ? [{ label: 'Tout', value: 'Tout' }, ...base] : base;
+  }, [options, includeAll]);
 
   // On affiche "Tout" côté UI quand value === null
   const uiValue = value ?? (includeAll ? 'Tout' : null);
@@ -49,7 +46,9 @@ const DropdownTypeFilter: React.FC<DropdownTypeFilterProps> = ({
         options={items}
         optionLabel="label"
         placeholder="Sélectionner le type d'opération"
-        className={className ?? 'w-full !bg-green-700 !text-gray-100 font-semibold rounded-md border-none'}
+        className={
+          className ?? 'w-full !bg-green-700 !text-gray-100 font-semibold rounded-md border-none'
+        }
         valueTemplate={valueTemplate}
         showClear
         onChange={(e) => {
@@ -63,4 +62,3 @@ const DropdownTypeFilter: React.FC<DropdownTypeFilterProps> = ({
 };
 
 export default React.memo(DropdownTypeFilter);
-

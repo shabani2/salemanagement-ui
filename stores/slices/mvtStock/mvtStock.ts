@@ -9,7 +9,6 @@ import {
   PayloadAction,
 } from '@reduxjs/toolkit';
 import { RootState } from '../../store';
-  // Assure-toi que apiClient pointe vers ton backend
 import { apiClient } from '../../../lib/apiConfig';
 import { MouvementStock } from '@/Models/mouvementStockType';
 
@@ -19,38 +18,52 @@ type Status = 'idle' | 'loading' | 'succeeded' | 'failed';
 export type Order = 'asc' | 'desc';
 
 export interface PaginationMeta {
-  page: number;
+  page: number; // 1-based (avec page1=true côté back)
   limit: number;
   total: number;
+  skip: number; // offset réel renvoyé par le back
   totalPages: number;
   hasPrev: boolean;
   hasNext: boolean;
 }
 
 export interface FetchParams {
-  page?: number;
+  page?: number; // 1-based
   limit?: number;
   q?: string;
-  sortBy?: string;     // ex: 'createdAt' | 'type' | ...
-  order?: Order;       // 'asc' | 'desc'
-  includeTotal?: boolean; // default true
-  includeRefs?: boolean;  // default true
+  sortBy?: string;
+  order?: Order;
+  includeTotal?: boolean;
+  includeRefs?: boolean;
+  // astuce pour forcer le back à traiter page en 1-based
+  page1?: boolean;
 
   // Filtres
   region?: string;
   pointVente?: string;
   user?: string;
   produit?: string;
-  type?: string;       // 'Livraison' | 'Retour' | ...
-  statut?: boolean;    // validé ou non
+  type?: string;
+  statut?: boolean;
   depotCentral?: boolean;
-  dateFrom?: string;   // 'YYYY-MM-DD'
-  dateTo?: string;     // 'YYYY-MM-DD'
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 interface MouvementListResponse<T = MouvementStock> {
   data: T[];
-  meta?: PaginationMeta | null;
+  // meta du back: { page, limit, skip, total, sortBy, order, q }
+  meta?:
+    | (Partial<PaginationMeta> & {
+        page?: number;
+        limit?: number;
+        skip?: number;
+        total?: number;
+        sortBy?: string;
+        order?: Order;
+        q?: string;
+      })
+    | null;
 }
 
 /* ---------------- State ---------------- */
@@ -59,8 +72,6 @@ interface MouvementStockStateExtra {
   status: Status;
   error: string | null;
   meta: PaginationMeta | null;
-
-  // Espace pour les résultats d'agrégation (optionnel)
   aggregate: {
     status: Status;
     error: string | null;
@@ -69,11 +80,13 @@ interface MouvementStockStateExtra {
   };
 }
 
-const mouvementStockAdapter: EntityAdapter<MouvementStock, string> =
-  createEntityAdapter<MouvementStock, string>({
-    selectId: (mouvement) => mouvement._id,
-    sortComparer: false, // tri côté serveur
-  });
+const mouvementStockAdapter: EntityAdapter<MouvementStock, string> = createEntityAdapter<
+  MouvementStock,
+  string
+>({
+  selectId: (mouvement) => mouvement._id,
+  sortComparer: false, // tri côté serveur
+});
 
 const initialState = mouvementStockAdapter.getInitialState<MouvementStockStateExtra>({
   status: 'idle',
@@ -100,9 +113,27 @@ const toQueryString = (params: Record<string, any>) => {
   return s ? `?${s}` : '';
 };
 
+const normalizeMeta = (raw?: MouvementListResponse['meta'] | null): PaginationMeta | null => {
+  if (!raw) return null;
+  const page = Math.max(1, Number(raw.page || 1)); // 1-based (car page1=true côté client)
+  const limit = Math.max(1, Number(raw.limit || 10));
+  const total = Math.max(0, Number(raw.total || 0));
+  const skip = Math.max(0, Number(raw.skip || 0));
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  return {
+    page,
+    limit,
+    total,
+    skip,
+    totalPages,
+    hasPrev: page > 1,
+    hasNext: page < totalPages,
+  };
+};
+
 /* ---------------- Thunks (API /mouvements) ---------------- */
 
-// Liste paginée/triée/filtrée
+// Liste paginée/triée/filtrée (1-based)
 export const fetchMouvementsStock = createAsyncThunk<
   MouvementListResponse<MouvementStock>,
   FetchParams | undefined,
@@ -110,7 +141,7 @@ export const fetchMouvementsStock = createAsyncThunk<
 >('mouvementStock/fetchAll', async (params, { rejectWithValue }) => {
   try {
     const {
-      page = 1,
+      page = 0,
       limit = 10,
       q,
       sortBy = 'createdAt',
@@ -126,10 +157,13 @@ export const fetchMouvementsStock = createAsyncThunk<
       depotCentral,
       dateFrom,
       dateTo,
+      // toujours vrai pour mode 1-based
+      page1 = true,
     } = params || {};
 
     const query = toQueryString({
       page,
+      page1,
       limit,
       q,
       sortBy,
@@ -157,7 +191,7 @@ export const fetchMouvementsStock = createAsyncThunk<
   }
 });
 
-// Recherche (alias du listing, mais dédié si tu veux distinguer côté UI)
+// Recherche (mêmes params, 1-based)
 export const searchMouvementsStock = createAsyncThunk<
   MouvementListResponse<MouvementStock>,
   FetchParams & { q: string },
@@ -181,10 +215,12 @@ export const searchMouvementsStock = createAsyncThunk<
       depotCentral,
       dateFrom,
       dateTo,
+      page1 = true,
     } = params;
 
     const query = toQueryString({
       page,
+      page1,
       limit,
       q,
       sortBy,
@@ -267,21 +303,20 @@ export const updateMouvementStock = createAsyncThunk<
 });
 
 // Suppression
-export const deleteMouvementStock = createAsyncThunk<
-  string,
-  string,
-  { rejectValue: string }
->('mouvementStock/delete', async (id, { rejectWithValue }) => {
-  try {
-    await apiClient.delete(`/mouvements/${id}`, {
-      headers: getAuthHeaders(),
-    });
-    return id;
-  } catch (error: unknown) {
-    if (error instanceof Error) return rejectWithValue(error.message);
-    return rejectWithValue('Erreur lors de la suppression du mouvement de stock');
+export const deleteMouvementStock = createAsyncThunk<string, string, { rejectValue: string }>(
+  'mouvementStock/delete',
+  async (id, { rejectWithValue }) => {
+    try {
+      await apiClient.delete(`/mouvements/${id}`, {
+        headers: getAuthHeaders(),
+      });
+      return id;
+    } catch (error: unknown) {
+      if (error instanceof Error) return rejectWithValue(error.message);
+      return rejectWithValue('Erreur lors de la suppression du mouvement de stock');
+    }
   }
-});
+);
 
 // Validation (statut=true)
 export const validateMouvementStock = createAsyncThunk<
@@ -290,10 +325,13 @@ export const validateMouvementStock = createAsyncThunk<
   { rejectValue: string }
 >('mouvementStock/validate', async (id, { rejectWithValue }) => {
   try {
-    const response = await apiClient.patch(`/mouvements/${id}/validate`, {}, {
-      headers: getAuthHeaders(),
-    });
-    // le contrôleur renvoie { message, mouvement }, on renvoie l’objet mouvement
+    const response = await apiClient.patch(
+      `/mouvements/${id}/validate`,
+      {},
+      {
+        headers: getAuthHeaders(),
+      }
+    );
     return (response.data?.mouvement ?? response.data) as MouvementStock;
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
@@ -301,10 +339,7 @@ export const validateMouvementStock = createAsyncThunk<
   }
 });
 
-/* Agrégation générique
-   groupBy: 'produit' | 'produit_type'
-   + accepte les mêmes filtres que le listing
-*/
+/* Agrégation générique (optionnel) */
 export const fetchMouvementsAggregate = createAsyncThunk<
   { data: any[]; meta: PaginationMeta },
   { groupBy?: 'produit' | 'produit_type' } & FetchParams,
@@ -312,11 +347,13 @@ export const fetchMouvementsAggregate = createAsyncThunk<
 >('mouvementStock/aggregate', async (args, { rejectWithValue }) => {
   try {
     const { groupBy = 'produit', ...params } = args;
-    const query = toQueryString({ groupBy, ...params });
+    const query = toQueryString({ groupBy, ...params, page1: true });
     const response = await apiClient.get(`/mouvements/aggregate${query}`, {
       headers: getAuthHeaders(),
     });
-    return response.data as { data: any[]; meta: PaginationMeta };
+    // si le back renvoie page/limit/total/skip, on normalise pareil
+    const meta = normalizeMeta(response.data?.meta) as PaginationMeta;
+    return { data: response.data?.data ?? [], meta };
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
     return rejectWithValue("Erreur lors de l'agrégation des mouvements");
@@ -347,7 +384,7 @@ const mouvementStockSlice = createSlice({
         state.status = 'succeeded';
         const { data, meta } = action.payload;
         mouvementStockAdapter.setAll(state, data ?? []);
-        state.meta = meta ?? null;
+        state.meta = normalizeMeta(meta);
       })
       .addCase(fetchMouvementsStock.rejected, (state, action) => {
         state.status = 'failed';
@@ -363,7 +400,7 @@ const mouvementStockSlice = createSlice({
         state.status = 'succeeded';
         const { data, meta } = action.payload;
         mouvementStockAdapter.setAll(state, data ?? []);
-        state.meta = meta ?? null;
+        state.meta = normalizeMeta(meta);
       })
       .addCase(searchMouvementsStock.rejected, (state, action) => {
         state.status = 'failed';
@@ -384,6 +421,8 @@ const mouvementStockSlice = createSlice({
         if (state.meta) {
           state.meta.total += 1;
           state.meta.totalPages = Math.max(1, Math.ceil(state.meta.total / state.meta.limit));
+          state.meta.hasNext = state.meta.page < state.meta.totalPages;
+          state.meta.hasPrev = state.meta.page > 1;
         }
       })
       .addCase(createMouvementStock.rejected, (state, action) => {
@@ -412,6 +451,8 @@ const mouvementStockSlice = createSlice({
         if (state.meta) {
           state.meta.total = Math.max(0, state.meta.total - 1);
           state.meta.totalPages = Math.max(1, Math.ceil(state.meta.total / state.meta.limit));
+          state.meta.hasNext = state.meta.page < state.meta.totalPages;
+          state.meta.hasPrev = state.meta.page > 1;
         }
       })
       .addCase(deleteMouvementStock.rejected, (state, action) => {

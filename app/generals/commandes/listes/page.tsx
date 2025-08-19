@@ -1,11 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-
+import { fr } from 'date-fns/locale';
 import { BreadCrumb } from 'primereact/breadcrumb';
-import { DataTable } from 'primereact/datatable';
-import { Column } from 'primereact/column';
 import { Button } from 'primereact/button';
 import { Dialog } from 'primereact/dialog';
 import { Checkbox } from 'primereact/checkbox';
@@ -29,6 +27,7 @@ import {
 
 import type { Commande } from '@/Models/commandeType';
 import type { CommandeProduit } from '@/Models/CommandeProduitType';
+import { format } from 'date-fns';
 
 /* ----------------------------- Helpers ----------------------------- */
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
@@ -43,6 +42,13 @@ const formatCDF = (n: unknown) =>
 type CommandeProduitWithTempChecked = CommandeProduit & { _tempChecked?: boolean };
 type MenuMap = Record<string, MenuRef | null>;
 
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
+  <span className="inline-block align-middle ml-1">
+    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+  </span>
+);
+
+/* -------------------------------- Page -------------------------------- */
 const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const toast = useRef<ToastRef>(null);
@@ -52,9 +58,15 @@ const Page: React.FC = () => {
   const commandes = useSelector((s: RootState) => asArray<Commande>(selectAllCommandes(s)));
   const loading = useSelector((s: RootState) => selectCommandeStatus(s)) === 'loading';
 
-  // UI state
-  const [rows, setRows] = useState(10);
-  const [first, setFirst] = useState(0);
+  // UI state (pagination + tri)
+  const [rows, setRows] = useState(10); // lignes par page
+  const [page, setPage] = useState(1); // 1-based
+  const [sortBy, setSortBy] = useState<
+    'numero' | 'region' | 'pointVente' | 'nb' | 'statut' | 'montant' | 'createdAt'
+  >('createdAt');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+
+  // détails commande
   const [selectedCommande, setSelectedCommande] = useState<Commande | null>(null);
   const [visible, setVisible] = useState(false);
   const [produitsLivrables, setProduitsLivrables] = useState<CommandeProduitWithTempChecked[]>([]);
@@ -78,7 +90,6 @@ const Page: React.FC = () => {
         } else if (isAdminRegion && isNonEmptyString((user as any)?.region?._id)) {
           await dispatch(fetchCommandesByRegion((user as any).region._id));
         } else if (user?.role === 'Logisticien' && isNonEmptyString(user?._id)) {
-          // ✅ bon paramètre: id utilisateur (pas le pv)
           await dispatch(fetchCommandesByUser(user._id));
         } else {
           //@ts-ignore
@@ -97,7 +108,16 @@ const Page: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [dispatch, user?.role, (user as any)?.pointVente?._id, (user as any)?.region?._id, user?._id, isSuperAdmin, isAdminPointVente, isAdminRegion]);
+  }, [
+    dispatch,
+    user?.role,
+    (user as any)?.pointVente?._id,
+    (user as any)?.region?._id,
+    user?._id,
+    isSuperAdmin,
+    isAdminPointVente,
+    isAdminRegion,
+  ]);
 
   /* ------------------------------ Menu actions ------------------------------ */
   const setMenuRef = useCallback((id: string, el: MenuRef | null) => {
@@ -118,7 +138,9 @@ const Page: React.FC = () => {
   }, []);
 
   const handleCheck = useCallback((checked: boolean, index: number) => {
-    setProduitsLivrables((prev) => prev.map((p, i) => (i === index ? { ...p, _tempChecked: !!checked } : p)));
+    setProduitsLivrables((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, _tempChecked: !!checked } : p))
+    );
   }, []);
 
   const effectuerLivraison = useCallback(async () => {
@@ -157,43 +179,54 @@ const Page: React.FC = () => {
     }
   }, [dispatch, selectedCommande, produitsLivrables]);
 
-  /* ------------------------------ Templates UI ------------------------------ */
-  const regionTemplate = useCallback((row: Commande) => row?.region?.nom ?? '-', []);
-  const pvTemplate = useCallback((row: Commande) => row?.pointVente?.nom ?? '-', []);
-  const nbProduitsTemplate = useCallback((row: Commande) => asArray<CommandeProduit>(row?.produits).length, []);
-  const montantTemplate = useCallback((row: Commande) => formatCDF((row as any)?.montant), []);
-  const statutTemplate = useCallback((row: Commande) => {
-    const s = row?.statut ?? '-';
-    const cls = s === 'livrée' ? 'bg-green-600' : s === 'annulée' ? 'bg-red-500' : 'bg-amber-500';
-    return <span className={`px-2 py-1 rounded text-white text-xs ${cls}`}>{s}</span>;
-  }, []);
+  /* ----------------------------- Tri + pagination (client) ----------------------------- */
+  const toggleSort = (field: typeof sortBy) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
+      setPage(1);
+    } else {
+      setOrder(order === 'asc' ? 'desc' : 'asc');
+      setPage(1);
+    }
+  };
 
-  const actionTemplate = useCallback(
-    (row: Commande) => (
-      <>
-        <Button
-          icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-          onClick={(e) => showMenu(e, row?._id ?? '')}
-          disabled={!isNonEmptyString(row?._id)}
-          aria-haspopup
-        />
-        <Menu
-          popup
-          model={[
-            { label: 'Voir produits', icon: 'pi pi-eye', command: () => handleOpenModal(row) },
-          ]}
-          ref={(el) => setMenuRef(row?._id ?? '', el)}
-        />
-      </>
-    ),
-    [handleOpenModal, setMenuRef, showMenu]
+  const sorted = useMemo(() => {
+    const arr = [...commandes];
+    const cmp = (a: Commande, b: Commande): number => {
+      const dir = order === 'asc' ? 1 : -1;
+      if (sortBy === 'numero') return (a.numero ?? '').localeCompare(b.numero ?? '') * dir;
+      if (sortBy === 'region')
+        return ((a.region as any)?.nom ?? '').localeCompare((b.region as any)?.nom ?? '') * dir;
+      if (sortBy === 'pointVente')
+        return (
+          ((a.pointVente as any)?.nom ?? '').localeCompare((b.pointVente as any)?.nom ?? '') * dir
+        );
+      if (sortBy === 'nb') return (asArray(a.produits).length - asArray(b.produits).length) * dir;
+      if (sortBy === 'statut') return (a.statut ?? '').localeCompare(b.statut ?? '') * dir;
+      if (sortBy === 'montant')
+        return (safeNumber((a as any).montant) - safeNumber((b as any).montant)) * dir;
+      // createdAt
+      const da = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const db = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return (da - db) * dir;
+    };
+    arr.sort(cmp);
+    return arr;
+  }, [commandes, sortBy, order]);
+
+  const total = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const firstIndex = (page - 1) * rows;
+  const paged = useMemo(
+    () => sorted.slice(firstIndex, firstIndex + rows),
+    [sorted, firstIndex, rows]
   );
 
-  const onPage = useCallback((e: any) => {
-    setFirst(e.first ?? 0);
-    setRows(e.rows ?? 10);
-  }, []);
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
 
   /* ---------------------------------- UI ----------------------------------- */
   return (
@@ -210,74 +243,202 @@ const Page: React.FC = () => {
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow-md">
-        <DataTable
-          value={commandes}
-          paginator
-          rows={rows}
-          first={first}
-          onPage={onPage}
-          loading={loading}
-          size="small"
-          className="rounded-lg text-sm"
-          tableStyle={{ minWidth: '70rem' }}
-          emptyMessage="Aucune commande trouvée."
-          // zébrage identique aux autres pages
-          //@ts-ignore PrimeReact passe (data, options)
-          rowClassName={(_, opt) => (opt?.rowIndex % 2 === 0 ? '!bg-gray-100 !text-gray-900' : '!bg-green-50 !text-gray-900')}
-        >
-          <Column
-            header="#"
-            body={(_, opt) => <span className="text-sm">{first + (opt?.rowIndex ?? 0) + 1}</span>}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            field="numero"
-            header="Numéro"
-            body={(r: Commande) => r?.numero ?? '-'}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Région"
-            body={regionTemplate}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Point de vente"
-            body={pvTemplate}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Nb produits"
-            body={nbProduitsTemplate}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Statut"
-            body={statutTemplate}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Montant"
-            body={montantTemplate}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Actions"
-            body={actionTemplate}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-        </DataTable>
+        {/* ---------- TABLE TAILWIND (style DataTable) ---------- */}
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-[70rem] w-full text-sm">
+            <thead>
+              <tr className="bg-green-800 text-white">
+                <th className="px-4 py-2 text-left">N°</th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('numero')}
+                >
+                  Numéro <SortIcon order={sortBy === 'numero' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('region')}
+                >
+                  Région <SortIcon order={sortBy === 'region' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('pointVente')}
+                >
+                  Point de vente <SortIcon order={sortBy === 'pointVente' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('nb')}
+                >
+                  Nb produits <SortIcon order={sortBy === 'nb' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('statut')}
+                >
+                  Statut <SortIcon order={sortBy === 'statut' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('montant')}
+                >
+                  Montant <SortIcon order={sortBy === 'montant' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('createdAt')}
+                >
+                  Créée le <SortIcon order={sortBy === 'createdAt' ? order : null} />
+                </th>
+
+                <th className="px-4 py-2 text-left">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading && commandes.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={9}>
+                    Chargement...
+                  </td>
+                </tr>
+              ) : paged.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={9}>
+                    Aucune commande trouvée.
+                  </td>
+                </tr>
+              ) : (
+                paged.map((row, idx) => {
+                  const idxGlobal = firstIndex + idx + 1;
+                  const regionNom = (row?.region as any)?.nom ?? '-';
+                  const pvNom = (row?.pointVente as any)?.nom ?? '-';
+                  const nbProduits = asArray<CommandeProduit>(row?.produits).length;
+                  const montant = formatCDF((row as any)?.montant);
+                  const created = row?.createdAt
+                    ? format(new Date(row.createdAt), 'dd/MM/yyyy HH:mm', { locale: fr })
+                    : '-';
+                  const s = row?.statut ?? '-';
+                  const clsStatut =
+                    s === 'livrée'
+                      ? 'bg-green-600'
+                      : s === 'annulée'
+                        ? 'bg-red-500'
+                        : 'bg-amber-500';
+
+                  return (
+                    <tr
+                      key={row?._id ?? idx}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{idxGlobal}</td>
+                      <td className="px-4 py-2">{row?.numero ?? '-'}</td>
+                      <td className="px-4 py-2">{regionNom}</td>
+                      <td className="px-4 py-2">{pvNom}</td>
+                      <td className="px-4 py-2">{nbProduits}</td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-1 rounded text-white text-xs ${clsStatut}`}>
+                          {s}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">{montant}</td>
+                      <td className="px-4 py-2">{created}</td>
+                      <td className="px-4 py-2">
+                        <Button
+                          icon="pi pi-bars"
+                          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                          onClick={(e) => showMenu(e, row?._id ?? '')}
+                          disabled={!isNonEmptyString(row?._id)}
+                          aria-haspopup
+                        />
+                        <Menu
+                          popup
+                          model={[
+                            {
+                              label: 'Voir produits',
+                              icon: 'pi pi-eye',
+                              command: () => handleOpenModal(row),
+                            },
+                          ]}
+                          ref={(el) => setMenuRef(row?._id ?? '', el)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* -------- PAGINATION -------- */}
+        <div className="flex items-center justify-between mt-3">
+          <div className="text-sm text-gray-700">
+            Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+            <span className="font-semibold">{total}</span> éléments
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+            <select
+              className="border rounded px-2 py-1 text-sm"
+              value={rows}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setRows(n);
+                // ajuste la page si besoin
+                const newTotalPages = Math.max(1, Math.ceil(total / n));
+                setPage((p) => Math.min(p, newTotalPages));
+              }}
+            >
+              {[10, 20, 30, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(1)}
+              disabled={page <= 1}
+            >
+              «
+            </button>
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(page - 1)}
+              disabled={page <= 1}
+            >
+              ‹
+            </button>
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(page + 1)}
+              disabled={page >= totalPages}
+            >
+              ›
+            </button>
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(totalPages)}
+              disabled={page >= totalPages}
+            >
+              »
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* MODAL */}
+      {/* MODAL (petit tableau => PrimeReact OK) */}
       <Dialog
         header="Détails de la commande"
         visible={visible}
@@ -285,51 +446,58 @@ const Page: React.FC = () => {
         style={{ width: '95vw', maxWidth: 880 }}
         modal
       >
-        <DataTable
-          value={asArray<CommandeProduitWithTempChecked>(produitsLivrables)}
-          responsiveLayout="scroll"
-          emptyMessage="Aucun produit."
-          size="small"
-          className="rounded-lg text-sm"
-          //@ts-ignore
-          rowClassName={(row) => (row?.statut === 'livré' ? '!bg-green-50' : '')}
-        >
-          <Column
-            header="#"
-            body={(_, opt) => <span className="text-sm">{(opt?.rowIndex ?? 0) + 1}</span>}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Produit"
-            body={(row: CommandeProduitWithTempChecked) => row?.produit?.nom ?? '-'}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Quantité"
-            body={(row: CommandeProduitWithTempChecked) => safeNumber(row?.quantite).toString()}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Livré"
-            body={(row: CommandeProduitWithTempChecked, options) => (
-              <Checkbox
-                checked={!!row?._tempChecked}
-                disabled={row?.statut === 'livré'}
-                onChange={(e) =>
-                  Number.isInteger(options?.rowIndex) && handleCheck(!!e.checked, options.rowIndex as number)
-                }
-              />
-            )}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-        </DataTable>
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-[40rem] w-full text-sm">
+            <thead>
+              <tr className="bg-green-800 text-white">
+                <th className="px-4 py-2 text-left">#</th>
+                <th className="px-4 py-2 text-left">Produit</th>
+                <th className="px-4 py-2 text-left">Quantité</th>
+                <th className="px-4 py-2 text-left">Livré</th>
+              </tr>
+            </thead>
+            <tbody>
+              {asArray<CommandeProduitWithTempChecked>(produitsLivrables).map((row, i) => (
+                <tr
+                  key={(row as any)?._id ?? i}
+                  className={
+                    (row?.statut === 'livré'
+                      ? 'bg-green-50'
+                      : i % 2 === 0
+                        ? 'bg-gray-100'
+                        : 'bg-white') + ' text-gray-900'
+                  }
+                >
+                  <td className="px-4 py-2">{i + 1}</td>
+                  <td className="px-4 py-2">{row?.produit?.nom ?? '-'}</td>
+                  <td className="px-4 py-2">{safeNumber(row?.quantite).toString()}</td>
+                  <td className="px-4 py-2">
+                    <Checkbox
+                      checked={!!row?._tempChecked}
+                      disabled={row?.statut === 'livré'}
+                      onChange={(e) => handleCheck(!!e.checked, i)}
+                    />
+                  </td>
+                </tr>
+              ))}
+              {produitsLivrables.length === 0 && (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
+                    Aucun produit.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
         <div className="flex justify-end mt-4 gap-2">
-          <Button label="Fermer" icon="pi pi-times" className="p-button-text" onClick={() => setVisible(false)} />
+          <Button
+            label="Fermer"
+            icon="pi pi-times"
+            className="p-button-text"
+            onClick={() => setVisible(false)}
+          />
           <Button
             label="Effectuer la livraison"
             icon="pi pi-check"

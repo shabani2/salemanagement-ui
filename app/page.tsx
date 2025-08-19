@@ -8,10 +8,7 @@ import { PointVente } from '@/Models/pointVenteType';
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
-import {
-  fetchMouvementsStock, 
-  selectAllMouvementsStock, 
-} from '@/stores/slices/mvtStock/mvtStock';
+import { fetchMouvementsStock, selectAllMouvementsStock } from '@/stores/slices/mvtStock/mvtStock';
 import PrivilegiesDashboard from '@/components/dashboards/Privilegies/PrivilegiesDashboard';
 import VendeurDashboard from '@/components/dashboards/VendeurDashboard';
 import AdminPointVenteDashboard from '@/components/dashboards/AdminPointVenteDashboard';

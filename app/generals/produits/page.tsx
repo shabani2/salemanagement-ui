@@ -1,7 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @next/next/no-img-element */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable react-hooks/rules-of-hooks */
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -14,23 +14,19 @@ import {
   addProduit,
   deleteProduit as deleteProduitThunk,
   fetchProduits,
-  searchProduits,
-  updateProduit as updateProduitThunk,
   selectAllProduits,
   selectProduitMeta,
   selectProduitStatus,
+  updateProduit as updateProduitThunk,
 } from '@/stores/slices/produits/produitsSlice';
 
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { Button } from 'primereact/button';
-import { Column } from 'primereact/column';
-import { DataTable, DataTablePageEvent, DataTableSortEvent } from 'primereact/datatable';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
 import { InputText } from 'primereact/inputtext';
 import { Menu } from 'primereact/menu';
 import { Toast } from 'primereact/toast';
-import { ProgressSpinner } from 'primereact/progressspinner';
 
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
@@ -39,7 +35,10 @@ import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategorie
 import { Categorie, Produit } from '@/Models/produitsType';
 import { API_URL } from '@/lib/apiConfig';
 
-import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 
 /* ----------------------------- Utils ----------------------------- */
 
@@ -73,15 +72,10 @@ const safeNumber = (v: unknown, fallback = 0) => {
   const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
   return Number.isFinite(n) ? n : fallback;
 };
-const normalize = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .trim();
-
-const isCategorieObject = (c: unknown): c is Categorie => !!c && typeof c === 'object' && '_id' in (c as any);
-const toCategorieId = (c: unknown): string => (typeof c === 'string' ? c : isCategorieObject(c) ? (c._id ?? '') : '');
+const isCategorieObject = (c: unknown): c is Categorie =>
+  !!c && typeof c === 'object' && '_id' in (c as any);
+const toCategorieId = (c: unknown): string =>
+  typeof c === 'string' ? c : isCategorieObject(c) ? (c._id ?? '') : '';
 
 function computePrices(prix: number, marge: number, tva: number) {
   const p = safeNumber(prix);
@@ -114,55 +108,75 @@ function produitToForm(produit: Produit | null | undefined): ProduitForm {
   };
 }
 
+/* ------------------------- Petit composant d’icône tri --------------------- */
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => {
+  return (
+    <span className="inline-block align-middle ml-1">
+      {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+    </span>
+  );
+};
+
 /* --------------------------------- Page ---------------------------------- */
 
 const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-
   const toast = useRef<Toast>(null);
 
-  // ✅ Un seul Menu global pour corriger le bug du “dernier item”
+  // Menu actions (un seul menu global)
   const menuRef = useRef<Menu>(null);
   const selectedRowDataRef = useRef<Produit | null>(null);
   const menuModel = useMemo(
     () => [
-      { label: 'Détails', command: () => selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current) },
-      { label: 'Modifier', command: () => selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current) },
-      { label: 'Supprimer', command: () => selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current) },
+      {
+        label: 'Détails',
+        command: () =>
+          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
+      },
+      {
+        label: 'Modifier',
+        command: () =>
+          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
+      },
+      {
+        label: 'Supprimer',
+        command: () =>
+          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
+      },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
+  // Store
   const produits = useSelector((state: RootState) => asArray<Produit>(selectAllProduits(state)));
-  const meta = useSelector(selectProduitMeta);
+  const meta = useSelector(selectProduitMeta); // attend { total, page, limit, ... }
   const status = useSelector(selectProduitStatus);
-  const categories = useSelector((state: RootState) => asArray<Categorie>(selectAllCategories(state)));
-
+  const categories = useSelector((state: RootState) =>
+    asArray<Categorie>(selectAllCategories(state))
+  );
   const loading = status === 'loading';
 
-  // --- états de requête serveur (page/tri/filtre)
-  const [page, setPage] = useState(1); // 1-based pour le slice
+  // États serveur : page/rows/tri/filtres
+  const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
-  const [sortBy, setSortBy] = useState<string>('createdAt');
+  const [sortBy, setSortBy] = useState<string>('updatedAt'); // 👈 tri par updatedAt demandé
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [searchText, setSearchText] = useState('');
   const [categorieFilter, setCategorieFilter] = useState<Categorie | null>(null);
 
-  // --- états modals
+  // Modals
   const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
   const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
   const [isDeleteProduit, setIsDeleteProduit] = useState<boolean>(false);
 
-  // --- formulaire
+  // Form
   const [form, setForm] = useState<ProduitForm>({ ...INITIAL_FORM });
 
-  // Charger catégories + première page
   useEffect(() => {
     dispatch(fetchCategories());
   }, [dispatch]);
 
-  // Tirer les produits serveur en fonction des paramètres
   const fetchServer = useCallback(() => {
     dispatch(
       fetchProduits({
@@ -181,7 +195,6 @@ const Page: React.FC = () => {
     fetchServer();
   }, [fetchServer]);
 
-  // Actions
   const handleAction = useCallback((action: 'details' | 'edit' | 'delete', rowData: Produit) => {
     setSelectedProduit(rowData ?? null);
     if (action === 'delete') {
@@ -192,25 +205,7 @@ const Page: React.FC = () => {
     }
   }, []);
 
-  const actionBodyTemplate = useCallback(
-    (rowData: Produit) => (
-      <div className="flex items-center">
-        <Button
-          icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-          onClick={(event) => {
-            selectedRowDataRef.current = rowData ?? null;
-            // ouvre le menu global à la position du clic
-            menuRef.current?.toggle(event);
-          }}
-          aria-haspopup
-        />
-      </div>
-    ),
-    []
-  );
-
-  // Remplir form selon modal
+  // Form model
   useEffect(() => {
     if ((dialogType === 'edit' || dialogType === 'details') && selectedProduit) {
       setForm(produitToForm(selectedProduit));
@@ -219,33 +214,29 @@ const Page: React.FC = () => {
     }
   }, [dialogType, selectedProduit]);
 
-  // Handlers formulaire
-  const handleInputChange = useCallback(
-    (field: keyof ProduitForm, value: any) => {
-      setForm((prev) => {
-        const updated = { ...prev };
-        if (field === 'nom' || field === 'unite') {
-          updated[field] = typeof value === 'string' ? value : '';
-        } else if (field === 'categorie') {
-          updated.categorie = typeof value === 'string' ? value : '';
-        } else {
-          const num = safeNumber(value, 0);
-          (updated as any)[field] = num;
-          if (field === 'prix' || field === 'marge' || field === 'tva') {
-            const { netTopay, prixVente } = computePrices(
-              field === 'prix' ? num : updated.prix,
-              field === 'marge' ? num : updated.marge,
-              field === 'tva' ? num : updated.tva
-            );
-            updated.netTopay = netTopay;
-            updated.prixVente = prixVente;
-          }
+  const handleInputChange = useCallback((field: keyof ProduitForm, value: any) => {
+    setForm((prev) => {
+      const updated = { ...prev };
+      if (field === 'nom' || field === 'unite') {
+        updated[field] = typeof value === 'string' ? value : '';
+      } else if (field === 'categorie') {
+        updated.categorie = typeof value === 'string' ? value : '';
+      } else {
+        const num = safeNumber(value, 0);
+        (updated as any)[field] = num;
+        if (field === 'prix' || field === 'marge' || field === 'tva') {
+          const { netTopay, prixVente } = computePrices(
+            field === 'prix' ? num : updated.prix,
+            field === 'marge' ? num : updated.marge,
+            field === 'tva' ? num : updated.tva
+          );
+          updated.netTopay = netTopay;
+          updated.prixVente = prixVente;
         }
-        return updated;
-      });
-    },
-    []
-  );
+      }
+      return updated;
+    });
+  }, []);
 
   const resetForm = useCallback(() => {
     setForm({ ...INITIAL_FORM });
@@ -256,25 +247,22 @@ const Page: React.FC = () => {
   // CRUD
   const handleSubmitProduit = useCallback(async () => {
     if (!isNonEmptyString(form.nom)) {
-      toast.current?.show({ severity: 'warn', summary: 'Champ requis', detail: 'Le nom est obligatoire', life: 3000 });
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Champ requis',
+        detail: 'Le nom est obligatoire',
+        life: 3000,
+      });
       return;
     }
-
     try {
       let r;
       if (selectedProduit?._id) {
-        r = await dispatch(
-          updateProduitThunk({
-            _id: selectedProduit._id,
-            ...form,
-          })
-        );
+        r = await dispatch(updateProduitThunk({ _id: selectedProduit._id, ...form }));
       } else {
         r = await dispatch(addProduit(form));
       }
-
       if (addProduit.fulfilled.match(r) || updateProduitThunk.fulfilled.match(r)) {
-        // recharge la page courante avec les filtres
         fetchServer();
         toast.current?.show({
           severity: 'success',
@@ -284,10 +272,20 @@ const Page: React.FC = () => {
         });
         resetForm();
       } else {
-        toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'opération", life: 3000 });
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Erreur',
+          detail: "Échec de l'opération",
+          life: 3000,
+        });
       }
     } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'opération", life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: "Échec de l'opération",
+        life: 3000,
+      });
     }
   }, [dispatch, form, selectedProduit, fetchServer, resetForm]);
 
@@ -298,16 +296,20 @@ const Page: React.FC = () => {
       setSelectedProduit(null);
       return;
     }
-
     try {
       const r = await dispatch(deleteProduitThunk(id));
       if (deleteProduitThunk.fulfilled.match(r)) {
-        toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Produit supprimé', life: 3000 });
-        // si la page devient vide après suppression, recule d'une page
-        const nextPage =
-          produits.length === 1 && (meta?.page ?? 1) > 1 ? (meta!.page - 1) : (meta?.page ?? page);
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Supprimé',
+          detail: 'Produit supprimé',
+          life: 3000,
+        });
+        const total = meta?.total ?? 0;
+        const countAfter = total - 1;
+        const lastPage = Math.max(1, Math.ceil(countAfter / rows));
+        const nextPage = Math.min(page, lastPage);
         setPage(nextPage);
-        // re-fetch
         dispatch(
           fetchProduits({
             page: nextPage,
@@ -320,15 +322,30 @@ const Page: React.FC = () => {
           })
         );
       } else {
-        toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la suppression', life: 3000 });
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Erreur',
+          detail: 'Échec de la suppression',
+          life: 3000,
+        });
       }
     } finally {
       setIsDeleteProduit(false);
       setSelectedProduit(null);
     }
-  }, [dispatch, selectedProduit, produits.length, meta, page, rows, searchText, categorieFilter, sortBy, order]);
+  }, [
+    dispatch,
+    selectedProduit,
+    meta?.total,
+    rows,
+    page,
+    searchText,
+    categorieFilter,
+    sortBy,
+    order,
+  ]);
 
-  // Import/Export
+  // Export
   const handleFileManagement = useCallback(
     async ({
       type,
@@ -354,20 +371,29 @@ const Page: React.FC = () => {
           const r = await dispatch(
             exportFile({
               url: '/export/produits',
-              // côté serveur, préfère recalculer à partir d'un endpoint d'export avec les mêmes filtres
-              mouvements: produits,
+              mouvements: produits, // exporter ce qui est affiché (ou refais une route d’export serveur)
               fileType: exportFileType,
             })
           );
           if (exportFile.fulfilled.match(r)) {
             const filename = `produits.${exportFileType === 'csv' ? 'csv' : 'xlsx'}`;
             downloadExportedFile(r.payload, filename);
-            toast.current?.show({ severity: 'success', summary: 'Export réussi', detail: filename, life: 3000 });
+            toast.current?.show({
+              severity: 'success',
+              summary: 'Export réussi',
+              detail: filename,
+              life: 3000,
+            });
           } else {
             throw new Error('Export non abouti');
           }
         } catch {
-          toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'export", life: 3000 });
+          toast.current?.show({
+            severity: 'error',
+            summary: 'Erreur',
+            detail: "Échec de l'export",
+            life: 3000,
+          });
         }
       }
     },
@@ -379,18 +405,14 @@ const Page: React.FC = () => {
     (rowData: Produit) => {
       const catId = toCategorieId(rowData?.categorie);
       if (!isNonEmptyString(catId)) return null;
-
       const found = categories.find((c) => c._id === catId);
       const label = found?.nom ?? '';
       const img = found?.image;
-
       const src =
         isNonEmptyString(img) && isNonEmptyString(API_URL())
           ? `${API_URL()}/${img.replace('../', '')}`
           : '';
-
       if (!isNonEmptyString(src)) return null;
-
       return (
         <img
           src={src}
@@ -405,50 +427,52 @@ const Page: React.FC = () => {
     [categories]
   );
 
-  // Handlers DataTable (serveur)
-  const onPage = useCallback(
-    (e: DataTablePageEvent) => {
-      const newPage = (e.page ?? 0) + 1; // PrimeReact est 0-based
-      setPage(newPage);
-      setRows(e.rows);
-      dispatch(
-        fetchProduits({
-          page: newPage,
-          limit: e.rows,
-          q: searchText || undefined,
-          categorie: categorieFilter?._id || undefined,
-          sortBy,
-          order,
-          includeTotal: true,
-        })
-      );
-    },
-    [dispatch, searchText, categorieFilter, sortBy, order]
-  );
-
-  const onSort = useCallback(
-    (e: DataTableSortEvent) => {
-      const newSortBy = (e.sortField as string) || 'createdAt';
-      const newOrder = e.sortOrder === 1 ? 'asc' : 'desc';
-      setSortBy(newSortBy);
-      setOrder(newOrder);
+  /* ----------------------------- Tri au clic ----------------------------- */
+  const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
+  const toggleSort = (field: string) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
       setPage(1);
-      dispatch(
-        fetchProduits({
-          page: 1,
-          limit: rows,
-          q: searchText || undefined,
-          categorie: categorieFilter?._id || undefined,
-          sortBy: newSortBy,
-          order: newOrder,
-          includeTotal: true,
-        })
-      );
-    },
-    [dispatch, rows, searchText, categorieFilter]
-  );
+    } else {
+      const next: 'asc' | 'desc' = order === 'asc' ? 'desc' : 'asc';
+      setOrder(next);
+      setPage(1);
+    }
+  };
 
-  // Appliquer filtres (serveur)
+  /* --------------------------- Pagination custom -------------------------- */
+  const total = meta?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const firstIndex = (page - 1) * rows;
+
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
+  const onChangeRows = (n: number) => {
+    setRows(n);
+    // recalcule la page pour rester aligné avec l’offset
+    const newTotalPages = Math.max(1, Math.ceil(total / n));
+    const fixedPage = Math.min(page, newTotalPages);
+    setPage(fixedPage);
+  };
+
+  // refetch quand page/rows/sort changent via contrôles
+  useEffect(() => {
+    dispatch(
+      fetchProduits({
+        page,
+        limit: rows,
+        q: searchText || undefined,
+        categorie: categorieFilter?._id || undefined,
+        sortBy,
+        order,
+        includeTotal: true,
+      })
+    );
+  }, [dispatch, page, rows, sortBy, order]); // filtres text/cat -> via bouton Filtrer
+
   const applyFilters = useCallback(() => {
     setPage(1);
     dispatch(
@@ -464,16 +488,10 @@ const Page: React.FC = () => {
     );
   }, [dispatch, rows, searchText, categorieFilter, sortBy, order]);
 
-  /* --------------------------------- Loading -------------------------------- */
-  if (status === 'idle' && produits.length === 0) {
-    // premier fetch
-  }
-
   /* ---------------------------------- UI ----------------------------------- */
   return (
     <div className="min-h-screen">
       <Toast ref={toast} position="top-right" />
-      {/* Menu global pour corriger la sélection */}
       <Menu model={menuModel} popup ref={menuRef} />
 
       <div className="flex items-center justify-between mt-3 mb-3">
@@ -517,143 +535,191 @@ const Page: React.FC = () => {
             />
           </div>
 
-          <div>
-            <DataTable
-              value={produits}
-              lazy
-              paginator
-              size="small"
-              rows={rows}
-              totalRecords={meta?.total ?? 0}
-              first={((meta?.page ?? page) - 1) * rows}
-              onPage={onPage}
-              onSort={onSort}
-              sortField={sortBy}
-              sortOrder={order === 'asc' ? 1 : -1}
-              className="rounded-lg text-sm text-gray-900 w-full"
-              tableStyle={{ minWidth: '70rem' }}
-              rowClassName={(_, options) =>
-                // @ts-ignore
-                options.rowIndex % 2 === 0 ? '!bg-gray-100 !text-gray-900' : '!bg-green-50 !text-gray-900'
-              }
-              emptyMessage={loading ? 'Chargement...' : 'Aucun produit trouvé'}
-              loading={loading}
-            >
-              <Column
-                header="#"
-                body={(_, { rowIndex }) => (Number.isFinite(rowIndex) ? ((meta?.page ?? page) - 1) * rows + (rowIndex as number) + 1 : '-')}
-                headerClassName="text-sm !bg-green-800 !text-white"
-                className="text-sm"
-              />
+          {/* ---------- TABLE TAILWIND (remplace DataTable) ----------- */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-[70rem] w-full text-sm">
+              <thead>
+                <tr className="bg-green-800 text-white">
+                  <th className="px-4 py-2 text-left">N°</th>
 
-              <Column
-                header=""
-                body={renderCategoryImage}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
+                  <th className="px-4 py-2 text-left"> </th>
 
-              <Column
-                field="nom"
-                header="Nom"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => r?.nom ?? '-'}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('nom')}
+                    title="Trier"
+                  >
+                    Nom <SortIcon order={sortedOrderFor('nom')} />
+                  </th>
 
-              <Column
-                field="prix"
-                header="Prix/U"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => safeNumber(r?.prix).toFixed(2)}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('prix')}
+                    title="Trier"
+                  >
+                    Prix/U <SortIcon order={sortedOrderFor('prix')} />
+                  </th>
 
-              <Column
-                field="marge"
-                header="Marge (%)"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => safeNumber(r?.marge).toFixed(2)}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('marge')}
+                    title="Trier"
+                  >
+                    Marge (%) <SortIcon order={sortedOrderFor('marge')} />
+                  </th>
 
-              <Column
-                header="Valeur Marge"
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => {
-                  const prix = safeNumber(r?.prix);
-                  const marge = safeNumber(r?.marge);
-                  return ((prix * marge) / 100).toFixed(2);
-                }}
-              />
+                  <th className="px-4 py-2 text-left">Valeur Marge</th>
 
-              <Column
-                field="netTopay"
-                header="Prix de vente/U"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => safeNumber(r?.netTopay).toFixed(2)}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('netTopay')}
+                    title="Trier"
+                  >
+                    Prix de vente/U <SortIcon order={sortedOrderFor('netTopay')} />
+                  </th>
 
-              <Column
-                field="tva"
-                header="TVA (%)"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => safeNumber(r?.tva).toFixed(2)}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('tva')}
+                    title="Trier"
+                  >
+                    TVA (%) <SortIcon order={sortedOrderFor('tva')} />
+                  </th>
 
-              <Column
-                header="Valeur TVA"
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => {
-                  const netTopay = safeNumber(r?.netTopay);
-                  const tva = safeNumber(r?.tva);
-                  return ((netTopay * tva) / 100).toFixed(2);
-                }}
-              />
+                  <th className="px-4 py-2 text-left">Valeur TVA</th>
 
-              <Column
-                field="prixVente"
-                header="TTC/U"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => safeNumber(r?.prixVente).toFixed(2)}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('prixVente')}
+                    title="Trier"
+                  >
+                    TTC/U <SortIcon order={sortedOrderFor('prixVente')} />
+                  </th>
 
-              <Column
-                field="seuil"
-                header="Seuil"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => safeNumber(r?.seuil).toFixed(2)}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('seuil')}
+                    title="Trier"
+                  >
+                    Seuil <SortIcon order={sortedOrderFor('seuil')} />
+                  </th>
 
-              <Column
-                field="unite"
-                header="Unité"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: Produit) => (isNonEmptyString(r?.unite) ? r.unite : '-')}
-              />
+                  <th className="px-4 py-2 text-left">Unité</th>
+                  <th className="px-4 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
 
-              <Column
-                body={actionBodyTemplate}
-                header="Actions"
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
+              <tbody>
+                {loading && produits.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={13}>
+                      Chargement...
+                    </td>
+                  </tr>
+                ) : produits.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={13}>
+                      Aucun produit trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  produits.map((r, idx) => (
+                    <tr
+                      key={r._id}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{firstIndex + idx + 1}</td>
+
+                      <td className="px-4 py-2">{renderCategoryImage(r)}</td>
+
+                      <td className="px-4 py-2">{r?.nom ?? '-'}</td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.prix).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.marge).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">
+                        {((safeNumber(r?.prix) * safeNumber(r?.marge)) / 100).toFixed(2)}
+                      </td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.netTopay).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.tva).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">
+                        {((safeNumber(r?.netTopay) * safeNumber(r?.tva)) / 100).toFixed(2)}
+                      </td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.prixVente).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.seuil).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">{isNonEmptyString(r?.unite) ? r.unite : '-'}</td>
+
+                      <td className="px-4 py-2">
+                        <Button
+                          icon="pi pi-bars"
+                          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                          onClick={(event) => {
+                            selectedRowDataRef.current = r ?? null;
+                            menuRef.current?.toggle(event);
+                          }}
+                          aria-haspopup
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ---------- PAGINATION TAILWIND ----------- */}
+          <div className="flex items-center justify-between mt-3">
+            <div className="text-sm text-gray-700">
+              Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+              <span className="font-semibold">{total}</span> éléments
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={rows}
+                onChange={(e) => onChangeRows(Number(e.target.value))}
+              >
+                {[5, 10, 20, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+
+              <Button
+                label="«"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(1)}
+                disabled={page <= 1}
               />
-            </DataTable>
+              <Button
+                label="‹"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(page - 1)}
+                disabled={page <= 1}
+              />
+              <Button
+                label="›"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(page + 1)}
+                disabled={page >= totalPages}
+              />
+              <Button
+                label="»"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(totalPages)}
+                disabled={page >= totalPages}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -799,18 +865,45 @@ const Page: React.FC = () => {
         modal
       >
         <div className="p-4 space-y-3 text-sm">
-          <div className="flex justify-between"><span className="font-medium">Nom</span><span>{selectedProduit?.nom}</span></div>
+          <div className="flex justify-between">
+            <span className="font-medium">Nom</span>
+            <span>{selectedProduit?.nom}</span>
+          </div>
           <div className="flex justify-between">
             <span className="font-medium">Catégorie</span>
-            <span>{categories.find(c => c._id === toCategorieId(selectedProduit?.categorie))?.nom ?? '—'}</span>
+            <span>
+              {categories.find((c) => c._id === toCategorieId(selectedProduit?.categorie))?.nom ??
+                '—'}
+            </span>
           </div>
-          <div className="flex justify-between"><span className="font-medium">Prix achat</span><span>{safeNumber(selectedProduit?.prix).toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="font-medium">Marge (%)</span><span>{safeNumber(selectedProduit?.marge).toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="font-medium">TVA (%)</span><span>{safeNumber(selectedProduit?.tva).toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="font-medium">Net à payer</span><span>{safeNumber(selectedProduit?.netTopay).toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="font-medium">TTC/U</span><span>{safeNumber(selectedProduit?.prixVente).toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="font-medium">Seuil</span><span>{safeNumber(selectedProduit?.seuil).toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="font-medium">Unité</span><span>{selectedProduit?.unite || '—'}</span></div>
+          <div className="flex justify-between">
+            <span className="font-medium">Prix achat</span>
+            <span>{safeNumber(selectedProduit?.prix).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Marge (%)</span>
+            <span>{safeNumber(selectedProduit?.marge).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">TVA (%)</span>
+            <span>{safeNumber(selectedProduit?.tva).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Net à payer</span>
+            <span>{safeNumber(selectedProduit?.netTopay).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">TTC/U</span>
+            <span>{safeNumber(selectedProduit?.prixVente).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Seuil</span>
+            <span>{safeNumber(selectedProduit?.seuil).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Unité</span>
+            <span>{selectedProduit?.unite || '—'}</span>
+          </div>
         </div>
       </Dialog>
 
@@ -819,7 +912,7 @@ const Page: React.FC = () => {
         visible={isDeleteProduit}
         onHide={() => setIsDeleteProduit(false)}
         onConfirm={handleDeleteProduit}
-        item={selectedProduit || { _id: '', nom: '' } as any}
+        item={selectedProduit || ({ _id: '', nom: '' } as any)}
         objectLabel="le produit"
         displayField="nom"
       />

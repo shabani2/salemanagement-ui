@@ -17,10 +17,12 @@ interface CommandeProduitState {
   error: string | null;
 }
 
-const commandeProduitAdapter: EntityAdapter<CommandeProduit, string> =
-  createEntityAdapter<CommandeProduit, string>({
-    selectId: (cp) => (cp as any)?._id as string,
-  });
+const commandeProduitAdapter: EntityAdapter<CommandeProduit, string> = createEntityAdapter<
+  CommandeProduit,
+  string
+>({
+  selectId: (cp) => (cp as any)?._id as string,
+});
 
 const initialState = commandeProduitAdapter.getInitialState<CommandeProduitState>({
   status: 'idle',
@@ -46,7 +48,7 @@ export const fetchCommandeProduitsByCommande = createAsyncThunk(
       return Array.isArray(res.data?.produits) ? res.data.produits : [];
     } catch (error: any) {
       return rejectWithValue(
-        error?.message || "Erreur lors de la récupération des produits de la commande"
+        error?.message || 'Erreur lors de la récupération des produits de la commande'
       );
     }
   }

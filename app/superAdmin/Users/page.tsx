@@ -9,8 +9,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
 
 import { BreadCrumb } from 'primereact/breadcrumb';
-import { DataTable } from 'primereact/datatable';
-import { Column } from 'primereact/column';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
 import { Menu } from 'primereact/menu';
@@ -25,10 +23,7 @@ import {
 } from '@/stores/slices/users/userSlice';
 
 import { registerUser } from '@/stores/slices/auth/authSlice';
-import {
-  fetchPointVentes,
-  selectAllPointVentes,
-} from '@/stores/slices/pointvente/pointventeSlice';
+import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
@@ -36,7 +31,10 @@ import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointven
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import UserDialog from '@/components/ui/userComponent/UserDialog';
 
-import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 
 import { API_URL } from '@/lib/apiConfig';
 import type { User, UserModel } from '@/Models/UserType';
@@ -58,6 +56,12 @@ const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v
 
 type MenuMap = Record<string, import('primereact/menu').Menu | null>;
 
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
+  <span className="inline-block align-middle ml-1">
+    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+  </span>
+);
+
 const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const toast = useRef<import('primereact/toast').Toast | null>(null);
@@ -77,8 +81,14 @@ const Page: React.FC = () => {
   const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const [first, setFirst] = useState(0);
+  // pagination + tri (client, 1-based)
   const [rows, setRows] = useState(10);
+  const [page, setPage] = useState(1);
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState<
+    'nom' | 'prenom' | 'email' | 'telephone' | 'region' | 'pointVente' | 'role' | 'createdAt'
+  >('createdAt');
+
   const [loading, setLoading] = useState(false);
   const [loadingCreateOrUpdate, setLoadingCreateOrUpdate] = useState(false);
 
@@ -174,12 +184,12 @@ const Page: React.FC = () => {
         role: selectedUser.role ?? '',
         region:
           typeof selectedUser.region === 'object' && selectedUser.region
-            ? selectedUser.region._id ?? ''
-            : (selectedUser.region as any) ?? '',
+            ? (selectedUser.region._id ?? '')
+            : ((selectedUser.region as any) ?? ''),
         pointVente:
           typeof selectedUser.pointVente === 'object' && selectedUser.pointVente
-            ? selectedUser.pointVente._id ?? ''
-            : (selectedUser.pointVente as any) ?? '',
+            ? (selectedUser.pointVente._id ?? '')
+            : ((selectedUser.pointVente as any) ?? ''),
         image: typeof selectedUser.image === 'string' ? selectedUser.image : null,
       });
     }
@@ -201,7 +211,9 @@ const Page: React.FC = () => {
           typeof u?.region === 'object' && u?.region ? u.region.nom : (u?.region as string)
         ),
         normalize(
-          typeof u?.pointVente === 'object' && u?.pointVente ? u.pointVente.nom : (u?.pointVente as string)
+          typeof u?.pointVente === 'object' && u?.pointVente
+            ? u.pointVente.nom
+            : (u?.pointVente as string)
         ),
         normalize(u.role),
       ];
@@ -217,6 +229,151 @@ const Page: React.FC = () => {
         u.pointVente._id === pvFilter._id
     );
   }, [search, users, pvFilter]);
+
+  /* ------------------------------ tri + pagination (client) ------------------------------ */
+  const toggleSort = (field: typeof sortBy) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
+      setPage(1);
+    } else {
+      setOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+      setPage(1);
+    }
+  };
+
+  const sortedUsers = useMemo(() => {
+    const arr = [...filteredUsers];
+    const dir = order === 'asc' ? 1 : -1;
+    arr.sort((a, b) => {
+      const rn = (a: any) => (a ?? '').toString();
+      if (sortBy === 'nom') return rn(a.nom).localeCompare(rn(b.nom)) * dir;
+      if (sortBy === 'prenom') return rn(a.prenom).localeCompare(rn(b.prenom)) * dir;
+      if (sortBy === 'email') return rn(a.email).localeCompare(rn(b.email)) * dir;
+      if (sortBy === 'telephone') return rn(a.telephone).localeCompare(rn(b.telephone)) * dir;
+      if (sortBy === 'role') return rn(a.role).localeCompare(rn(b.role)) * dir;
+      if (sortBy === 'region')
+        return (
+          rn((a as any)?.region?.nom ?? '').localeCompare(rn((b as any)?.region?.nom ?? '')) * dir
+        );
+      if (sortBy === 'pointVente')
+        return (
+          rn((a as any)?.pointVente?.nom ?? '').localeCompare(
+            rn((b as any)?.pointVente?.nom ?? '')
+          ) * dir
+        );
+      // createdAt par défaut
+      const ta = a?.createdAt ? new Date(a.createdAt as any).getTime() : 0;
+      const tb = b?.createdAt ? new Date(b.createdAt as any).getTime() : 0;
+      return (ta - tb) * dir;
+    });
+    return arr;
+  }, [filteredUsers, sortBy, order]);
+
+  const total = sortedUsers.length;
+  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const firstIndex = (page - 1) * rows;
+  const paged = useMemo(
+    () => sortedUsers.slice(firstIndex, firstIndex + rows),
+    [sortedUsers, firstIndex, rows]
+  );
+
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
+
+  /* ------------------------------- import/export ------------------------------ */
+  const handleFileManagement = useCallback(
+    async ({
+      type,
+      format,
+      file,
+    }: {
+      type: 'import' | 'export';
+      format: 'csv' | 'pdf' | 'excel';
+      file?: File;
+    }) => {
+      if (type === 'import' && file) {
+        toast.current?.show({
+          severity: 'info',
+          summary: `Import ${format.toUpperCase()}`,
+          detail: `Fichier importé: ${file.name}`,
+          life: 3000,
+        });
+        return;
+      }
+
+      if (type === 'export') {
+        if (format === 'pdf') {
+          toast.current?.show({
+            severity: 'warn',
+            summary: 'Export PDF non supporté',
+            detail: "L'export PDF n'est pas disponible pour ce module.",
+            life: 3000,
+          });
+          return;
+        }
+        const fileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : 'csv';
+        try {
+          const r = await dispatch(
+            exportFile({
+              url: '/export/users',
+              mouvements: sortedUsers, // exporte la vue triée/filtrée
+              fileType,
+            }) as any
+          );
+          if ((exportFile as any).fulfilled.match(r)) {
+            const filename = `utilisateurs.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
+            downloadExportedFile((r as any).payload, filename);
+            toast.current?.show({
+              severity: 'success',
+              summary: `Export ${format.toUpperCase()}`,
+              detail: `Fichier téléchargé: ${filename}`,
+              life: 3000,
+            });
+          } else {
+            throw new Error();
+          }
+        } catch {
+          toast.current?.show({
+            severity: 'error',
+            summary: `Export ${format.toUpperCase()} échoué`,
+            detail: 'Une erreur est survenue.',
+            life: 3000,
+          });
+        }
+      }
+    },
+    [dispatch, sortedUsers]
+  );
+
+  /* ------------------------------- rendu image ------------------------------- */
+  const avatarTemplate = (data: User) => {
+    const srcRaw = typeof data?.image === 'string' ? data.image : '';
+    const src = isNonEmptyString(srcRaw) ? `${API_URL()}/${srcRaw.replace('../', '')}` : '';
+    if (!src) {
+      return (
+        <div
+          className="w-10 h-10 rounded-full border border-gray-300 bg-gray-200 flex items-center justify-center text-gray-600 text-xs"
+          title="Aucune image"
+        >
+          —
+        </div>
+      );
+    }
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={src}
+        alt={`${data?.prenom ?? ''} ${data?.nom ?? ''}`}
+        className="w-10 h-10 rounded-full object-cover border border-gray-300"
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = 'none';
+        }}
+      />
+    );
+  };
 
   /* ------------------------------ actions menu ------------------------------ */
   const handleAction = (action: 'details' | 'edit' | 'delete', row: User) => {
@@ -241,7 +398,7 @@ const Page: React.FC = () => {
       }
       setUsers(asArray<User>(resp));
     } catch {
-      /* noop, géré ailleurs */
+      /* noop */
     }
   }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
 
@@ -355,103 +512,7 @@ const Page: React.FC = () => {
     }
   }, [dispatch, newUser, refetchUsers]);
 
-  /* ------------------------------- import/export ------------------------------ */
-  const handleFileManagement = useCallback(
-    async ({
-      type,
-      format,
-      file,
-    }: {
-      type: 'import' | 'export';
-      format: 'csv' | 'pdf' | 'excel';
-      file?: File;
-    }) => {
-      if (type === 'import' && file) {
-        toast.current?.show({
-          severity: 'info',
-          summary: `Import ${format.toUpperCase()}`,
-          detail: `Fichier importé: ${file.name}`,
-          life: 3000,
-        });
-        return;
-      }
-
-      if (type === 'export') {
-        if (format === 'pdf') {
-          toast.current?.show({
-            severity: 'warn',
-            summary: 'Export PDF non supporté',
-            detail: "L'export PDF n'est pas disponible pour ce module.",
-            life: 3000,
-          });
-          return;
-        }
-        const fileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : 'csv';
-        try {
-          const r = await dispatch(
-            exportFile({
-              url: '/export/users',
-              mouvements: filteredUsers,
-              fileType,
-            }) as any
-          );
-          if ((exportFile as any).fulfilled.match(r)) {
-            const filename = `utilisateurs.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
-            downloadExportedFile((r as any).payload, filename);
-            toast.current?.show({
-              severity: 'success',
-              summary: `Export ${format.toUpperCase()}`,
-              detail: `Fichier téléchargé: ${filename}`,
-              life: 3000,
-            });
-          } else {
-            throw new Error();
-          }
-        } catch {
-          toast.current?.show({
-            severity: 'error',
-            summary: `Export ${format.toUpperCase()} échoué`,
-            detail: 'Une erreur est survenue.',
-            life: 3000,
-          });
-        }
-      }
-    },
-    [dispatch, filteredUsers]
-  );
-
-  /* ------------------------------- rendu image ------------------------------- */
-  const avatarTemplate = (data: User) => {
-    const srcRaw = typeof data?.image === 'string' ? data.image : '';
-    const src = isNonEmptyString(srcRaw) ? `${API_URL()}/${srcRaw.replace('../', '')}` : '';
-    if (!src) {
-      return (
-        <div
-          className="w-10 h-10 rounded-full border border-gray-300 bg-gray-200 flex items-center justify-center text-gray-600 text-xs"
-          title="Aucune image"
-        >
-          —
-        </div>
-      );
-    }
-    // eslint-disable-next-line @next/next/no-img-element
-    return (
-      <img
-        src={src}
-        alt={`${data?.prenom ?? ''} ${data?.nom ?? ''}`}
-        className="w-10 h-10 rounded-full object-cover border border-gray-300"
-        onError={(e) => {
-          (e.currentTarget as HTMLImageElement).style.display = 'none';
-        }}
-      />
-    );
-  };
-
   /* ------------------------------- handlers UI ------------------------------- */
-  const onPageChange = (event: { first?: number; rows?: number }) => {
-    setFirst(event.first ?? 0);
-    setRows(event.rows ?? 10);
-  };
   const handlePointVenteSelect = (pointVente: PointVente | null) => setPvFilter(pointVente);
 
   /* ---------------------------------- UI ---------------------------------- */
@@ -472,11 +533,16 @@ const Page: React.FC = () => {
               placeholder="Rechercher..."
               value={search}
               onChange={(e) => {
-                setFirst(0);
+                setPage(1);
                 setSearch(e.target.value ?? '');
               }}
             />
-            <DropdownPointVenteFilter onSelect={(pv) => { setFirst(0); handlePointVenteSelect(pv); }} />
+            <DropdownPointVenteFilter
+              onSelect={(pv) => {
+                setPage(1);
+                handlePointVenteSelect(pv);
+              }}
+            />
           </div>
 
           <div className="w-full md:w-1/5 flex justify-end items-center gap-2">
@@ -495,93 +561,213 @@ const Page: React.FC = () => {
           </div>
         </div>
 
-        <DataTable
-          value={filteredUsers}
-          dataKey="_id"
-          paginator
-          loading={loading}
-          rows={rows}
-          first={first}
-          onPage={onPageChange}
-          size="small"
-          scrollable
-          responsiveLayout="scroll"
-          stripedRows
-          showGridlines
-          className="rounded-lg text-sm"
-          tableStyle={{ minWidth: '70rem' }}
-          //@ts-ignore
-          rowClassName={(_, opt) => (opt?.rowIndex % 2 === 0 ? '!bg-gray-100 !text-gray-900' : '!bg-green-50 !text-gray-900')}
-          emptyMessage="Aucun utilisateur trouvé."
-        >
-          <Column
-            header="#"
-            body={(_, options) => (Number.isFinite(options?.rowIndex) ? first + (options!.rowIndex as number) + 1 : '-')}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header=""
-            body={avatarTemplate}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column field="nom" header="Nom" sortable className="px-4 py-1 text-sm" headerClassName="text-sm !bg-green-800 !text-white" />
-          <Column field="prenom" header="Prénom" sortable className="px-4 py-1 text-sm" headerClassName="text-sm !bg-green-800 !text-white" />
-          <Column field="email" header="Email" sortable className="px-4 py-1 text-sm" headerClassName="text-sm !bg-green-800 !text-white" />
-          <Column field="telephone" header="Téléphone" className="px-4 py-1 text-sm" headerClassName="text-sm !bg-green-800 !text-white" />
-          <Column
-            header="Région"
-            body={(rowData: User) => {
-              const r =
-                typeof rowData?.region === 'object' && rowData?.region
-                  ? rowData.region.nom
-                  : (rowData as any)?.pointVente?.region?.nom || 'Depot Central';
-              return <span>{r}</span>;
-            }}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column
-            header="Point de vente"
-            body={(rowData: User) => {
-              const pv =
-                typeof rowData?.pointVente === 'object' && rowData?.pointVente
-                  ? rowData.pointVente.nom
-                  : 'Depot Central';
-              return <span>{pv}</span>;
-            }}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-          <Column field="role" header="Rôle" className="px-4 py-1 text-sm" headerClassName="text-sm !bg-green-800 !text-white" />
+        {/* ----------- TABLE TAILWIND (style DataTable) ----------- */}
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-[70rem] w-full text-sm">
+            <thead>
+              <tr className="bg-green-800 text-white">
+                <th className="px-4 py-2 text-left">#</th>
+                <th className="px-4 py-2 text-left"> </th>
 
-          <Column
-            header="Actions"
-            body={(row: User) => (
-              <>
-                <Button
-                  icon="pi pi-bars"
-                  className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-                  onClick={(e) => showMenu(e, row?._id ?? '', row)}
-                  disabled={!isNonEmptyString(row?._id)}
-                  aria-haspopup
-                />
-                <Menu
-                  popup
-                  ref={(el) => setMenuRef(row?._id ?? '', el)}
-                  model={[
-                    { label: 'Détails', icon: 'pi pi-eye', command: () => handleAction('details', row) },
-                    { label: 'Modifier', icon: 'pi pi-pencil', command: () => handleAction('edit', row) },
-                    { label: 'Supprimer', icon: 'pi pi-trash', command: () => handleAction('delete', row) },
-                  ]}
-                />
-              </>
-            )}
-            className="px-4 py-1 text-sm"
-            headerClassName="text-sm !bg-green-800 !text-white"
-          />
-        </DataTable>
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('nom')}
+                >
+                  Nom <SortIcon order={sortBy === 'nom' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('prenom')}
+                >
+                  Prénom <SortIcon order={sortBy === 'prenom' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('email')}
+                >
+                  Email <SortIcon order={sortBy === 'email' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('telephone')}
+                >
+                  Téléphone <SortIcon order={sortBy === 'telephone' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('region')}
+                >
+                  Région <SortIcon order={sortBy === 'region' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('pointVente')}
+                >
+                  Point de vente <SortIcon order={sortBy === 'pointVente' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('role')}
+                >
+                  Rôle <SortIcon order={sortBy === 'role' ? order : null} />
+                </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('createdAt')}
+                >
+                  Créé le <SortIcon order={sortBy === 'createdAt' ? order : null} />
+                </th>
+
+                <th className="px-4 py-2 text-left">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading && users.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={11}>
+                    Chargement...
+                  </td>
+                </tr>
+              ) : paged.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={11}>
+                    Aucun utilisateur trouvé.
+                  </td>
+                </tr>
+              ) : (
+                paged.map((row, idx) => {
+                  const idxGlobal = firstIndex + idx + 1;
+                  const regionNom =
+                    typeof row?.region === 'object' && row?.region
+                      ? ((row.region as any)?.nom ?? '—')
+                      : (row as any)?.pointVente?.region?.nom || 'Depot Central';
+                  const pvNom =
+                    typeof row?.pointVente === 'object' && row?.pointVente
+                      ? ((row.pointVente as any)?.nom ?? '—')
+                      : 'Depot Central';
+                  const created = (row as any)?.createdAt
+                    ? new Date((row as any).createdAt).toLocaleDateString()
+                    : '—';
+
+                  return (
+                    <tr
+                      key={row?._id ?? idx}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{idxGlobal}</td>
+                      <td className="px-4 py-2">{avatarTemplate(row)}</td>
+                      <td className="px-4 py-2">{row?.nom ?? '—'}</td>
+                      <td className="px-4 py-2">{row?.prenom ?? '—'}</td>
+                      <td className="px-4 py-2">{row?.email ?? '—'}</td>
+                      <td className="px-4 py-2">{row?.telephone ?? '—'}</td>
+                      <td className="px-4 py-2">{regionNom}</td>
+                      <td className="px-4 py-2">{pvNom}</td>
+                      <td className="px-4 py-2">{row?.role ?? '—'}</td>
+                      <td className="px-4 py-2">{created}</td>
+                      <td className="px-4 py-2">
+                        <>
+                          <Button
+                            icon="pi pi-bars"
+                            className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                            onClick={(e) => showMenu(e, row?._id ?? '', row)}
+                            disabled={!isNonEmptyString(row?._id)}
+                            aria-haspopup
+                          />
+                          <Menu
+                            popup
+                            ref={(el) => setMenuRef(row?._id ?? '', el)}
+                            model={[
+                              {
+                                label: 'Détails',
+                                icon: 'pi pi-eye',
+                                command: () => handleAction('details', row),
+                              },
+                              {
+                                label: 'Modifier',
+                                icon: 'pi pi-pencil',
+                                command: () => handleAction('edit', row),
+                              },
+                              {
+                                label: 'Supprimer',
+                                icon: 'pi pi-trash',
+                                command: () => handleAction('delete', row),
+                              },
+                            ]}
+                          />
+                        </>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* -------- PAGINATION -------- */}
+        <div className="flex items-center justify-between mt-3">
+          <div className="text-sm text-gray-700">
+            Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+            <span className="font-semibold">{total}</span> éléments
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+            <select
+              className="border rounded px-2 py-1 text-sm"
+              value={rows}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setRows(n);
+                const newTotalPages = Math.max(1, Math.ceil(total / n));
+                setPage((p) => Math.min(p, newTotalPages));
+              }}
+            >
+              {[10, 20, 30, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(1)}
+              disabled={page <= 1}
+            >
+              «
+            </button>
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(page - 1)}
+              disabled={page <= 1}
+            >
+              ‹
+            </button>
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(page + 1)}
+              disabled={page >= totalPages}
+            >
+              ›
+            </button>
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(totalPages)}
+              disabled={page >= totalPages}
+            >
+              »
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Dialog de création/édition */}

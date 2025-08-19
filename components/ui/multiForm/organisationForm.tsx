@@ -95,13 +95,13 @@ const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void; user: Us
           {[
             { name: 'nom', label: 'Nom' },
             { name: 'rccm', label: 'RCCM' },
+            { name: 'idNat', label: 'ID National' },
+            { name: 'numeroImpot', label: "Numéro d'impôt" },
             { name: 'contact', label: 'Contact' },
             { name: 'siegeSocial', label: 'Siège social' },
             { name: 'devise', label: 'Devise' },
             { name: 'pays', label: 'Pays' },
             { name: 'emailEntreprise', label: 'Email de l’entreprise' },
-            { name: 'idNat', label: 'ID National' },
-            { name: 'numeroImpot', label: "Numéro d'impôt" },
           ].map(({ name, label }) => (
             <div key={name}>
               <input

@@ -29,11 +29,11 @@ export interface FetchParams {
   page?: number;
   limit?: number;
   q?: string;
-  region?: string;          // ObjectId de la région
-  sortBy?: string;          // ex: 'createdAt' | 'nom'
-  order?: Order;            // 'asc' | 'desc'
-  includeTotal?: boolean;   // par défaut true
-  includeStock?: boolean;   // pour peupler stock.produit au besoin
+  region?: string; // ObjectId de la région
+  sortBy?: string; // ex: 'createdAt' | 'nom'
+  order?: Order; // 'asc' | 'desc'
+  includeTotal?: boolean; // par défaut true
+  includeStock?: boolean; // pour peupler stock.produit au besoin
 }
 
 interface PointVenteListResponse<T = PointVente> {
@@ -51,11 +51,13 @@ interface PointVenteStateExtra {
   meta: PaginationMeta | null;
 }
 
-const pointVenteAdapter: EntityAdapter<PointVenteWithExtras, string> =
-  createEntityAdapter<PointVenteWithExtras, string>({
-    selectId: (pv) => pv._id,
-    sortComparer: false, // tri géré par le backend
-  });
+const pointVenteAdapter: EntityAdapter<PointVenteWithExtras, string> = createEntityAdapter<
+  PointVenteWithExtras,
+  string
+>({
+  selectId: (pv) => pv._id,
+  sortComparer: false, // tri géré par le backend
+});
 
 const initialState = pointVenteAdapter.getInitialState<PointVenteStateExtra>({
   status: 'idle',
@@ -165,37 +167,40 @@ export const fetchPointVentesByRegionId = createAsyncThunk<
   PointVenteListResponse<PointVenteWithExtras>,
   { regionId: string } & Omit<FetchParams, 'region'>,
   { rejectValue: string }
->('pointVentes/fetchPointVentesByRegionId', async ({ regionId, ...params }, { rejectWithValue }) => {
-  try {
-    const {
-      page = 1,
-      limit = 10,
-      q,
-      sortBy = 'createdAt',
-      order = 'desc',
-      includeTotal = true,
-      includeStock = false,
-    } = params;
+>(
+  'pointVentes/fetchPointVentesByRegionId',
+  async ({ regionId, ...params }, { rejectWithValue }) => {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        q,
+        sortBy = 'createdAt',
+        order = 'desc',
+        includeTotal = true,
+        includeStock = false,
+      } = params;
 
-    const query = toQueryString({
-      page,
-      limit,
-      q,
-      sortBy,
-      order,
-      includeTotal,
-      includeStock,
-    });
+      const query = toQueryString({
+        page,
+        limit,
+        q,
+        sortBy,
+        order,
+        includeTotal,
+        includeStock,
+      });
 
-    const res = await apiClient.get(`/pointventes/by-region/${regionId}${query}`, {
-      headers: getAuthHeaders(),
-    });
-    return res.data as PointVenteListResponse<PointVenteWithExtras>;
-  } catch (err: unknown) {
-    if (err instanceof Error) return rejectWithValue(err.message);
-    return rejectWithValue('Erreur lors du chargement par région');
+      const res = await apiClient.get(`/pointventes/by-region/${regionId}${query}`, {
+        headers: getAuthHeaders(),
+      });
+      return res.data as PointVenteListResponse<PointVenteWithExtras>;
+    } catch (err: unknown) {
+      if (err instanceof Error) return rejectWithValue(err.message);
+      return rejectWithValue('Erreur lors du chargement par région');
+    }
   }
-});
+);
 
 // Détail (includeStock optionnel)
 export const fetchPointVenteById = createAsyncThunk<
@@ -228,7 +233,7 @@ export const addPointVente = createAsyncThunk<
     return res.data as PointVenteWithExtras;
   } catch (err: unknown) {
     if (err instanceof Error) return rejectWithValue(err.message);
-    return rejectWithValue("Erreur lors de l’ajout du point de vente");
+    return rejectWithValue('Erreur lors de l’ajout du point de vente');
   }
 });
 
@@ -250,21 +255,20 @@ export const updatePointVente = createAsyncThunk<
 });
 
 // Suppression
-export const deletePointVente = createAsyncThunk<
-  string,
-  string,
-  { rejectValue: string }
->('pointVentes/deletePointVente', async (pointVenteId, { rejectWithValue }) => {
-  try {
-    await apiClient.delete(`/pointventes/${pointVenteId}`, {
-      headers: getAuthHeaders(),
-    });
-    return pointVenteId;
-  } catch (err: unknown) {
-    if (err instanceof Error) return rejectWithValue(err.message);
-    return rejectWithValue('Erreur lors de la suppression du point de vente');
+export const deletePointVente = createAsyncThunk<string, string, { rejectValue: string }>(
+  'pointVentes/deletePointVente',
+  async (pointVenteId, { rejectWithValue }) => {
+    try {
+      await apiClient.delete(`/pointventes/${pointVenteId}`, {
+        headers: getAuthHeaders(),
+      });
+      return pointVenteId;
+    } catch (err: unknown) {
+      if (err instanceof Error) return rejectWithValue(err.message);
+      return rejectWithValue('Erreur lors de la suppression du point de vente');
+    }
   }
-});
+);
 
 /* ---------------- Slice ---------------- */
 const pointVenteSlice = createSlice({
@@ -342,7 +346,7 @@ const pointVenteSlice = createSlice({
         }
       })
       .addCase(addPointVente.rejected, (state, action) => {
-        state.error = (action.payload as string) ?? "Erreur lors de l’ajout";
+        state.error = (action.payload as string) ?? 'Erreur lors de l’ajout';
       })
 
       /* updatePointVente */

@@ -31,13 +31,13 @@ export interface FetchParams {
   limit?: number;
   q?: string;
   ville?: string;
-  sortBy?: string;     // ex: 'createdAt' | 'nom' | 'ville' | 'pointVenteCount'
-  order?: Order;       // 'asc' | 'desc'
+  sortBy?: string; // ex: 'createdAt' | 'nom' | 'ville' | 'pointVenteCount'
+  order?: Order; // 'asc' | 'desc'
   includeTotal?: boolean; // par défaut true
 }
 
 interface RegionListResponse {
-  data: Region[];       // le contrôleur renvoie { nom, ville, pointVenteCount?, _id }
+  data: Region[]; // le contrôleur renvoie { nom, ville, pointVenteCount?, _id }
   meta?: PaginationMeta;
 }
 
@@ -51,12 +51,14 @@ interface RegionStateExtra {
 }
 
 /** ---------------- Adapter ---------------- */
-const regionAdapter: EntityAdapter<RegionWithCount, string> =
-  createEntityAdapter<RegionWithCount, string>({
-    // @ts-ignore
-    selectId: (region) => region._id,
-    sortComparer: false, // tri géré côté serveur
-  });
+const regionAdapter: EntityAdapter<RegionWithCount, string> = createEntityAdapter<
+  RegionWithCount,
+  string
+>({
+  // @ts-ignore
+  selectId: (region) => region._id,
+  sortComparer: false, // tri géré côté serveur
+});
 
 const initialState = regionAdapter.getInitialState<RegionStateExtra>({
   status: 'idle',
@@ -173,7 +175,7 @@ export const addRegion = createAsyncThunk<
     return response.data as RegionWithCount;
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
-    return rejectWithValue("Erreur lors de l’ajout de la région");
+    return rejectWithValue('Erreur lors de l’ajout de la région');
   }
 });
 
@@ -195,21 +197,20 @@ export const updateRegion = createAsyncThunk<
 });
 
 // Suppression
-export const deleteRegion = createAsyncThunk<
-  string,
-  string,
-  { rejectValue: string }
->('regions/deleteRegion', async (regionId, { rejectWithValue }) => {
-  try {
-    await apiClient.delete(`/regions/${regionId}`, {
-      headers: getAuthHeaders(),
-    });
-    return regionId;
-  } catch (error: unknown) {
-    if (error instanceof Error) return rejectWithValue(error.message);
-    return rejectWithValue('Erreur lors de la suppression de la région');
+export const deleteRegion = createAsyncThunk<string, string, { rejectValue: string }>(
+  'regions/deleteRegion',
+  async (regionId, { rejectWithValue }) => {
+    try {
+      await apiClient.delete(`/regions/${regionId}`, {
+        headers: getAuthHeaders(),
+      });
+      return regionId;
+    } catch (error: unknown) {
+      if (error instanceof Error) return rejectWithValue(error.message);
+      return rejectWithValue('Erreur lors de la suppression de la région');
+    }
   }
-});
+);
 
 /** ---------------- Slice ---------------- */
 const regionSlice = createSlice({

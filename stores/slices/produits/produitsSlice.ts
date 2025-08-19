@@ -27,7 +27,8 @@ interface PaginationMeta {
 
 interface ProduitListResponse {
   data: Produit[];
-  meta?: PaginationMeta;
+  // côté API, meta peut être { page, limit, total, pages } ou déjà notre shape normalisée
+  meta?: Partial<PaginationMeta> & { pages?: number };
 }
 
 export type Order = 'asc' | 'desc';
@@ -39,8 +40,8 @@ export interface FetchParams {
   categorie?: string;
   minPrice?: number;
   maxPrice?: number;
-  sortBy?: string;    // ex: 'createdAt' | 'nom' | 'prixVente'
-  order?: Order;      // 'asc' | 'desc'
+  sortBy?: string; // ex: 'createdAt' | 'nom' | 'prixVente'
+  order?: Order; // 'asc' | 'desc'
   includeTotal?: boolean; // par défaut true
 }
 
@@ -48,28 +49,42 @@ interface ProduitStateExtra {
   status: Status;
   error: string | null;
   meta: PaginationMeta | null;
-  lastQuery: Omit<FetchParams, 'page' | 'limit'> | null; // on mémorise les filtres/tri
+
+  // statut dédié à la recherche pour ne pas "polluer" l'état global d'affichage
+  searchStatus: Status;
+  searchError: string | null;
+  searchMeta: PaginationMeta | null;
+
+  lastQuery: Omit<FetchParams, 'page' | 'limit'> | null;
 }
 
-const produitAdapter: EntityAdapter<Produit, string> =
-  createEntityAdapter<Produit, string>({
-    // @ts-ignore
-    selectId: (produit) => produit?._id,
-    sortComparer: false, // on laisse le tri au backend
-  });
+const produitAdapter: EntityAdapter<Produit, string> = createEntityAdapter<Produit, string>({
+  // @ts-ignore
+  selectId: (produit) => produit?._id,
+  sortComparer: false, // on laisse le tri au backend
+});
 
 const initialState = produitAdapter.getInitialState<ProduitStateExtra>({
   status: 'idle',
   error: null,
   meta: null,
+
+  searchStatus: 'idle',
+  searchError: null,
+  searchMeta: null,
+
   lastQuery: null,
 });
 
 /** ---------- Utils ---------- */
 const getAuthHeaders = () => {
-  if (typeof window === 'undefined') return {};
-  const token = localStorage.getItem('token-agricap');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  try {
+    if (typeof window === 'undefined') return {};
+    const token = localStorage.getItem('token-agricap');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
 };
 
 const toQueryString = (params: Record<string, any>) => {
@@ -80,6 +95,27 @@ const toQueryString = (params: Record<string, any>) => {
   });
   const s = sp.toString();
   return s ? `?${s}` : '';
+};
+
+/** Normalise la meta quelle que soit la forme renvoyée par l’API */
+const normalizeMeta = (raw?: ProduitListResponse['meta']): PaginationMeta | null => {
+  if (!raw) return null;
+  const page = Math.max(1, Number(raw.page ?? 1));
+  const limit = Math.max(1, Number(raw.limit ?? 10));
+  const total = Math.max(0, Number(raw.total ?? 0));
+  const totalPages = Number.isFinite(Number(raw.totalPages))
+    ? Math.max(1, Number(raw.totalPages))
+    : Math.max(1, Math.ceil(total / limit || 1));
+  // compat: API peut envoyer "pages" au lieu de "totalPages"
+  const pagesFromRaw = Number.isFinite(Number((raw as any).pages))
+    ? Math.max(1, Number((raw as any).pages))
+    : null;
+  const finalTotalPages = pagesFromRaw ?? totalPages;
+
+  const hasPrev = page > 1;
+  const hasNext = page < finalTotalPages;
+
+  return { page, limit, total, totalPages: finalTotalPages, hasPrev, hasNext };
 };
 
 /** ---------- Thunks ---------- */
@@ -119,7 +155,6 @@ export const fetchProduits = createAsyncThunk<
       headers: getAuthHeaders(),
     });
 
-    // Le contrôleur renvoie { data, meta }
     return response.data as ProduitListResponse;
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
@@ -144,39 +179,37 @@ export const addProduit = createAsyncThunk<
   }
 });
 
-// Suppression (cascade côté backend)
-export const deleteProduit = createAsyncThunk<
-  string,
-  string,
-  { rejectValue: string }
->('produits/deleteProduit', async (produitId, { rejectWithValue }) => {
-  try {
-    await apiClient.delete(`/produits/${produitId}`, {
-      headers: getAuthHeaders(),
-    });
-    return produitId;
-  } catch (error: unknown) {
-    if (error instanceof Error) return rejectWithValue(error.message);
-    return rejectWithValue('Erreur lors de la suppression du produit');
+// Suppression
+export const deleteProduit = createAsyncThunk<string, string, { rejectValue: string }>(
+  'produits/deleteProduit',
+  async (produitId, { rejectWithValue }) => {
+    try {
+      await apiClient.delete(`/produits/${produitId}`, {
+        headers: getAuthHeaders(),
+      });
+      return produitId;
+    } catch (error: unknown) {
+      if (error instanceof Error) return rejectWithValue(error.message);
+      return rejectWithValue('Erreur lors de la suppression du produit');
+    }
   }
-});
+);
 
 // Détail
-export const fetchProduitById = createAsyncThunk<
-  Produit,
-  string,
-  { rejectValue: string }
->('produits/fetchProduitById', async (id, { rejectWithValue }) => {
-  try {
-    const response = await apiClient.get(`/produits/${id}`, {
-      headers: getAuthHeaders(),
-    });
-    return response.data as Produit;
-  } catch (error: unknown) {
-    if (error instanceof Error) return rejectWithValue(error.message);
-    return rejectWithValue('Erreur lors de la récupération du produit');
+export const fetchProduitById = createAsyncThunk<Produit, string, { rejectValue: string }>(
+  'produits/fetchProduitById',
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/produits/${id}`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data as Produit;
+    } catch (error: unknown) {
+      if (error instanceof Error) return rejectWithValue(error.message);
+      return rejectWithValue('Erreur lors de la récupération du produit');
+    }
   }
-});
+);
 
 // Mise à jour
 export const updateProduit = createAsyncThunk<
@@ -238,7 +271,6 @@ export const searchProduits = createAsyncThunk<
       includeTotal,
     });
 
-    // Le contrôleur accepte /produits/search avec les mêmes query params
     const response = await apiClient.get(`/produits/search${query}`, {
       headers: getAuthHeaders(),
     });
@@ -255,7 +287,6 @@ const produitSlice = createSlice({
   name: 'produits',
   initialState,
   reducers: {
-    // Utile si tu veux changer localement la page/limit sans relancer le fetch instantanément
     setMeta(state, action: PayloadAction<PaginationMeta | null>) {
       state.meta = action.payload;
     },
@@ -271,12 +302,7 @@ const produitSlice = createSlice({
         state.status = 'succeeded';
         const { data, meta } = action.payload;
         produitAdapter.setAll(state, data ?? []);
-        state.meta = meta ?? null;
-
-        // on mémorise les filtres/tri utilisés (hors page/limit)
-        if (meta) {
-          const { page, limit, total, totalPages, hasPrev, hasNext, ...rest } = meta as any;
-        }
+        state.meta = normalizeMeta(meta);
       })
       .addCase(fetchProduits.rejected, (state, action) => {
         state.status = 'failed';
@@ -286,7 +312,6 @@ const produitSlice = createSlice({
       /** addProduit */
       .addCase(addProduit.fulfilled, (state, action) => {
         produitAdapter.addOne(state, action.payload);
-        // Optionnel : maj du total
         if (state.meta) {
           state.meta.total += 1;
           state.meta.totalPages = Math.max(1, Math.ceil(state.meta.total / state.meta.limit));
@@ -324,20 +349,24 @@ const produitSlice = createSlice({
         state.error = (action.payload as string) ?? 'Erreur sur updateProduit';
       })
 
-      /** searchProduits (paginée) */
+      /**
+       * searchProduits
+       * ⚠️ On n'écrase PLUS la liste : on merge (upsertMany) pour que l'autocomplete
+       * n’efface pas la page actuelle et que le panier continue d’avoir ses références.
+       */
       .addCase(searchProduits.pending, (state) => {
-        state.status = 'loading';
-        state.error = null;
+        state.searchStatus = 'loading';
+        state.searchError = null;
       })
       .addCase(searchProduits.fulfilled, (state, action) => {
-        state.status = 'succeeded';
+        state.searchStatus = 'succeeded';
         const { data, meta } = action.payload;
-        produitAdapter.setAll(state, data ?? []);
-        state.meta = meta ?? null;
+        produitAdapter.upsertMany(state, data ?? []);
+        state.searchMeta = normalizeMeta(meta);
       })
       .addCase(searchProduits.rejected, (state, action) => {
-        state.status = 'failed';
-        state.error = (action.payload as string) ?? 'Erreur sur searchProduits';
+        state.searchStatus = 'failed';
+        state.searchError = (action.payload as string) ?? 'Erreur sur searchProduits';
       });
   },
 });
@@ -357,3 +386,8 @@ export const {
 export const selectProduitStatus = (state: RootState) => state.produits.status;
 export const selectProduitError = (state: RootState) => state.produits.error;
 export const selectProduitMeta = (state: RootState) => state.produits.meta;
+
+// bonus: sélecteurs dédiés à la recherche (si tu en as besoin un jour)
+export const selectProduitSearchStatus = (state: RootState) => state.produits.searchStatus;
+export const selectProduitSearchError = (state: RootState) => state.produits.searchError;
+export const selectProduitSearchMeta = (state: RootState) => state.produits.searchMeta;

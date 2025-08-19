@@ -7,8 +7,6 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
-import { DataTable, DataTablePageEvent, DataTableSortEvent } from 'primereact/datatable';
-import { Column } from 'primereact/column';
 import { Dialog } from 'primereact/dialog';
 import { Menu } from 'primereact/menu';
 import { Dropdown } from 'primereact/dropdown';
@@ -27,14 +25,14 @@ import {
   updatePointVente as updatePointVenteThunk,
 } from '@/stores/slices/pointvente/pointventeSlice';
 
-import {
-  fetchRegions,
-  selectAllRegions,
-} from '@/stores/slices/regions/regionSlice';
+import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 
 import { PointVente } from '@/Models/pointVenteType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
 /* ----------------------------- Helpers ----------------------------- */
@@ -45,6 +43,13 @@ const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v
 type RegionLite = { _id: string; nom: string };
 type PVForm = { nom: string; adresse: string; region: string };
 
+/* --------- Petit composant d’icône de tri --------- */
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
+  <span className="inline-block align-middle ml-1">
+    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+  </span>
+);
+
 /* -------------------------------- Component -------------------------------- */
 
 export default function PointVenteManagement() {
@@ -52,16 +57,18 @@ export default function PointVenteManagement() {
   const toast = useRef<Toast>(null);
 
   // Store
-  const pointsVente = useSelector((state: RootState) => asArray<PointVente>(selectAllPointVentes(state)));
+  const pointsVente = useSelector((state: RootState) =>
+    asArray<PointVente>(selectAllPointVentes(state))
+  );
   const regions = useSelector((state: RootState) => asArray<RegionLite>(selectAllRegions(state)));
-  const meta = useSelector(selectPointVenteMeta);
+  const meta = useSelector(selectPointVenteMeta); // doit contenir { total, page, limit, ... }
   const status = useSelector(selectPointVenteStatus);
   const loading = status === 'loading';
 
   // Requête serveur (params)
   const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
-  const [sortBy, setSortBy] = useState<string>('createdAt');
+  const [sortBy, setSortBy] = useState<string>('updatedAt'); // 👈 tri par updatedAt par défaut
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [searchText, setSearchText] = useState('');
   const [regionFilter, setRegionFilter] = useState<string>('');
@@ -88,9 +95,21 @@ export default function PointVenteManagement() {
   }, []);
   const menuModel = useMemo(
     () => [
-      { label: 'Détails', command: () => selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current) },
-      { label: 'Modifier', command: () => selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current) },
-      { label: 'Supprimer', command: () => selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current) },
+      {
+        label: 'Détails',
+        command: () =>
+          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
+      },
+      {
+        label: 'Modifier',
+        command: () =>
+          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
+      },
+      {
+        label: 'Supprimer',
+        command: () =>
+          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
+      },
     ],
     [handleAction]
   );
@@ -103,16 +122,14 @@ export default function PointVenteManagement() {
   // Si l'utilisateur AdminRegion est stocké côté client, on préfiltre par sa région:
   useEffect(() => {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('user-agricap') : null;
-    if (!raw) {
-      return;
-    }
+    if (!raw) return;
     try {
       const u = JSON.parse(raw);
       if (u?.role === 'AdminRegion' && isNonEmptyString(u?.region?._id)) {
         setRegionFilter(u.region._id);
       }
     } catch {
-      /* ignore */
+      /* noop */
     }
   }, []);
 
@@ -131,53 +148,57 @@ export default function PointVenteManagement() {
     );
   }, [dispatch, page, rows, searchText, regionFilter, sortBy, order]);
 
+  // 1) premier fetch & quand filtres manuels appliqués
   useEffect(() => {
     fetchServer();
   }, [fetchServer]);
 
-  /* ------------------------------- Handlers UI ------------------------------ */
-  const onPage = useCallback(
-    (e: DataTablePageEvent) => {
-      const newPage = (e.page ?? 0) + 1; // PrimeReact 0-based
-      setPage(newPage);
-      setRows(e.rows);
-      dispatch(
-        fetchPointVentes({
-          page: newPage,
-          limit: e.rows,
-          q: searchText || undefined,
-          region: regionFilter || undefined,
-          sortBy,
-          order,
-          includeTotal: true,
-        })
-      );
-    },
-    [dispatch, searchText, regionFilter, sortBy, order]
-  );
+  // 2) refetch quand page/rows/sort changent via contrôles (pagination/tri custom)
+  useEffect(() => {
+    dispatch(
+      fetchPointVentes({
+        page,
+        limit: rows,
+        q: searchText || undefined,
+        region: regionFilter || undefined,
+        sortBy,
+        order,
+        includeTotal: true,
+      })
+    );
+  }, [dispatch, page, rows, sortBy, order]); // search/region via bouton "Filtrer"
 
-  const onSort = useCallback(
-    (e: DataTableSortEvent) => {
-      const newSortBy = (e.sortField as string) || 'createdAt';
-      const newOrder = e.sortOrder === 1 ? 'asc' : 'desc';
-      setSortBy(newSortBy);
-      setOrder(newOrder);
+  /* ------------------------------- Tri custom ------------------------------- */
+  const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
+  const toggleSort = (field: string) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
       setPage(1);
-      dispatch(
-        fetchPointVentes({
-          page: 1,
-          limit: rows,
-          q: searchText || undefined,
-          region: regionFilter || undefined,
-          sortBy: newSortBy,
-          order: newOrder,
-          includeTotal: true,
-        })
-      );
-    },
-    [dispatch, rows, searchText, regionFilter]
-  );
+    } else {
+      setOrder(order === 'asc' ? 'desc' : 'asc');
+      setPage(1);
+    }
+  };
 
+  /* --------------------------- Pagination custom ---------------------------- */
+  const total = meta?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const firstIndex = (page - 1) * rows;
+
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
+
+  const onChangeRows = (n: number) => {
+    setRows(n);
+    const newTotalPages = Math.max(1, Math.ceil(total / n));
+    const fixedPage = Math.min(page, newTotalPages);
+    setPage(fixedPage);
+  };
+
+  /* ------------------------------- Handlers UI ------------------------------ */
   const applyFilters = useCallback(() => {
     setPage(1);
     dispatch(
@@ -199,7 +220,7 @@ export default function PointVenteManagement() {
       const regionId =
         typeof selectedPV?.region === 'string'
           ? selectedPV?.region
-          : (selectedPV?.region as any)?._id ?? '';
+          : ((selectedPV?.region as any)?._id ?? '');
       setForm({
         nom: selectedPV?.nom ?? '',
         adresse: selectedPV?.adresse ?? '',
@@ -218,7 +239,11 @@ export default function PointVenteManagement() {
 
   /* ------------------------------ CRUD Handlers ----------------------------- */
   const handleCreate = useCallback(async () => {
-    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.adresse) || !isNonEmptyString(form.region)) {
+    if (
+      !isNonEmptyString(form.nom) ||
+      !isNonEmptyString(form.adresse) ||
+      !isNonEmptyString(form.region)
+    ) {
       toast.current?.show({
         severity: 'warn',
         summary: 'Champs requis',
@@ -229,17 +254,31 @@ export default function PointVenteManagement() {
     }
     const r = await dispatch(addPointVente(form as any) as any);
     if ((addPointVente as any).fulfilled.match(r)) {
-      toast.current?.show({ severity: 'success', summary: 'Ajouté', detail: 'Point de vente créé', life: 2000 });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Ajouté',
+        detail: 'Point de vente créé',
+        life: 2000,
+      });
       resetForm();
       fetchServer();
     } else {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'ajout", life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: "Échec de l'ajout",
+        life: 3000,
+      });
     }
   }, [dispatch, form, fetchServer, resetForm]);
 
   const handleUpdate = useCallback(async () => {
     if (!selectedPV?._id) return;
-    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.adresse) || !isNonEmptyString(form.region)) {
+    if (
+      !isNonEmptyString(form.nom) ||
+      !isNonEmptyString(form.adresse) ||
+      !isNonEmptyString(form.region)
+    ) {
       toast.current?.show({
         severity: 'warn',
         summary: 'Champs requis',
@@ -259,11 +298,21 @@ export default function PointVenteManagement() {
       }) as any
     );
     if ((updatePointVenteThunk as any).fulfilled.match(r)) {
-      toast.current?.show({ severity: 'success', summary: 'Modifié', detail: 'Point de vente mis à jour', life: 2000 });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Modifié',
+        detail: 'Point de vente mis à jour',
+        life: 2000,
+      });
       resetForm();
       fetchServer();
     } else {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la modification', life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la modification',
+        life: 3000,
+      });
     }
   }, [dispatch, selectedPV, form, fetchServer, resetForm]);
 
@@ -271,9 +320,15 @@ export default function PointVenteManagement() {
     if (!selectedPV?._id) return;
     const r = await dispatch(deletePointVenteThunk(selectedPV._id) as any);
     if ((deletePointVenteThunk as any).fulfilled.match(r)) {
-      toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Point de vente supprimé', life: 2000 });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Supprimé',
+        detail: 'Point de vente supprimé',
+        life: 2000,
+      });
       // reculer si la page devient vide
-      const nextPage = pointsVente.length === 1 && (meta?.page ?? 1) > 1 ? (meta!.page - 1) : (meta?.page ?? page);
+      const nextPage =
+        pointsVente.length === 1 && (meta?.page ?? 1) > 1 ? meta!.page - 1 : (meta?.page ?? page);
       setPage(nextPage);
       dispatch(
         fetchPointVentes({
@@ -287,9 +342,25 @@ export default function PointVenteManagement() {
         })
       );
     } else {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la suppression', life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la suppression',
+        life: 3000,
+      });
     }
-  }, [dispatch, selectedPV, pointsVente.length, meta, page, rows, searchText, regionFilter, sortBy, order]);
+  }, [
+    dispatch,
+    selectedPV,
+    pointsVente.length,
+    meta,
+    page,
+    rows,
+    searchText,
+    regionFilter,
+    sortBy,
+    order,
+  ]);
 
   /* ----------------------------- Import / Export ---------------------------- */
   const handleFileManagement = useCallback(
@@ -347,25 +418,11 @@ export default function PointVenteManagement() {
   );
 
   const regionOptions = useMemo(
-    () => [{ label: 'Toutes les régions', value: '' }, ...regions.map((r) => ({ label: r.nom, value: r._id }))],
+    () => [
+      { label: 'Toutes les régions', value: '' },
+      ...regions.map((r) => ({ label: r.nom, value: r._id })),
+    ],
     [regions]
-  );
-
-  const actionBodyTemplate = useCallback(
-    (rowData: PointVente) => (
-      <div className="flex items-center">
-        <Button
-          icon="pi pi-bars"
-          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-          onClick={(event) => {
-            selectedRowDataRef.current = rowData ?? null;
-            menuRef.current?.toggle(event);
-          }}
-          aria-haspopup
-        />
-      </div>
-    ),
-    []
   );
 
   /* ---------------------------------- UI ----------------------------------- */
@@ -404,7 +461,12 @@ export default function PointVenteManagement() {
                 placeholder="Filtrer par région"
               />
 
-              <Button label="Filtrer" icon="pi pi-search" className="!bg-green-700 text-white" onClick={applyFilters} />
+              <Button
+                label="Filtrer"
+                icon="pi pi-search"
+                className="!bg-green-700 text-white"
+                onClick={applyFilters}
+              />
 
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
@@ -417,74 +479,138 @@ export default function PointVenteManagement() {
             />
           </div>
 
-          <div>
-            <DataTable
-              value={pointsVente}
-              lazy
-              paginator
-              size="small"
-              rows={rows}
-              totalRecords={meta?.total ?? 0}
-              first={((meta?.page ?? page) - 1) * rows}
-              onPage={onPage}
-              onSort={onSort}
-              sortField={sortBy}
-              sortOrder={order === 'asc' ? 1 : -1}
-              className="rounded-lg text-sm text-gray-900 w-full"
-              tableStyle={{ minWidth: '60rem' }}
-              rowClassName={(_, options) =>
-                // @ts-ignore
-                options.rowIndex % 2 === 0 ? '!bg-gray-100 !text-gray-900' : '!bg-green-50 !text-gray-900'
-              }
-              emptyMessage={loading ? 'Chargement...' : 'Aucun point de vente trouvé'}
-              loading={loading}
-            >
-              <Column
-                header="#"
-                body={(_, { rowIndex }) =>
-                  Number.isFinite(rowIndex) ? ((meta?.page ?? page) - 1) * rows + (rowIndex as number) + 1 : '-'
-                }
-                headerClassName="text-sm !bg-green-800 !text-white"
-                className="text-sm"
-              />
+          {/* ---------- TABLE TAILWIND (sans DataTable) ----------- */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-[60rem] w-full text-sm">
+              <thead>
+                <tr className="bg-green-800 text-white">
+                  <th className="px-4 py-2 text-left">N°</th>
 
-              <Column
-                field="region"
-                header="Région"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(row: PointVente) => {
-                  const reg = row?.region as any;
-                  return reg && typeof reg === 'object' ? reg?.nom ?? '—' : (regions.find((r) => r._id === reg)?.nom ?? '—');
-                }}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('region.nom')}
+                    title="Trier"
+                  >
+                    Région <SortIcon order={sortedOrderFor('region.nom')} />
+                  </th>
 
-              <Column
-                field="nom"
-                header="Nom"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: PointVente) => r?.nom ?? '—'}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('nom')}
+                    title="Trier"
+                  >
+                    Nom <SortIcon order={sortedOrderFor('nom')} />
+                  </th>
 
-              <Column
-                field="adresse"
-                header="Adresse"
-                sortable
-                className="text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                body={(r: PointVente) => r?.adresse ?? '—'}
-              />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('adresse')}
+                    title="Trier"
+                  >
+                    Adresse <SortIcon order={sortedOrderFor('adresse')} />
+                  </th>
 
-              <Column
-                body={actionBodyTemplate}
-                header="Actions"
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
+                  <th className="px-4 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading && pointsVente.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
+                      Chargement...
+                    </td>
+                  </tr>
+                ) : pointsVente.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
+                      Aucun point de vente trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  pointsVente.map((row, idx) => (
+                    <tr
+                      key={row._id}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{firstIndex + idx + 1}</td>
+
+                      <td className="px-4 py-2">
+                        {(() => {
+                          const reg = row?.region as any;
+                          return reg && typeof reg === 'object'
+                            ? (reg?.nom ?? '—')
+                            : (regions.find((r) => r._id === reg)?.nom ?? '—');
+                        })()}
+                      </td>
+
+                      <td className="px-4 py-2">{row?.nom ?? '—'}</td>
+                      <td className="px-4 py-2">{row?.adresse ?? '—'}</td>
+
+                      <td className="px-4 py-2">
+                        <Button
+                          icon="pi pi-bars"
+                          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                          onClick={(event) => {
+                            selectedRowDataRef.current = row ?? null;
+                            menuRef.current?.toggle(event);
+                          }}
+                          aria-haspopup
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ---------- PAGINATION TAILWIND ----------- */}
+          <div className="flex items-center justify-between mt-3">
+            <div className="text-sm text-gray-700">
+              Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+              <span className="font-semibold">{total}</span> éléments
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={rows}
+                onChange={(e) => onChangeRows(Number(e.target.value))}
+              >
+                {[5, 10, 20, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+
+              <Button
+                label="«"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(1)}
+                disabled={page <= 1}
               />
-            </DataTable>
+              <Button
+                label="‹"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(page - 1)}
+                disabled={page <= 1}
+              />
+              <Button
+                label="›"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(page + 1)}
+                disabled={page >= totalPages}
+              />
+              <Button
+                label="»"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(totalPages)}
+                disabled={page >= totalPages}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -554,15 +680,21 @@ export default function PointVenteManagement() {
         modal
       >
         <div className="p-4 space-y-3 text-sm">
-          <div className="flex justify-between"><span className="font-medium">Nom</span><span>{selectedPV?.nom ?? '—'}</span></div>
-          <div className="flex justify-between"><span className="font-medium">Adresse</span><span>{selectedPV?.adresse ?? '—'}</span></div>
+          <div className="flex justify-between">
+            <span className="font-medium">Nom</span>
+            <span>{selectedPV?.nom ?? '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Adresse</span>
+            <span>{selectedPV?.adresse ?? '—'}</span>
+          </div>
           <div className="flex justify-between">
             <span className="font-medium">Région</span>
             <span>
               {(() => {
                 const reg = selectedPV?.region as any;
                 return reg && typeof reg === 'object'
-                  ? reg?.nom ?? '—'
+                  ? (reg?.nom ?? '—')
                   : (regions.find((r) => r._id === reg)?.nom ?? '—');
               })()}
             </span>
@@ -578,7 +710,7 @@ export default function PointVenteManagement() {
           setIsDeleteOpen(false);
           handleDelete();
         }}
-        item={selectedPV ?? { _id: '', nom: '' } as any}
+        item={selectedPV ?? ({ _id: '', nom: '' } as any)}
         objectLabel="le point de vente"
         displayField="nom"
       />

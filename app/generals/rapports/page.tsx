@@ -7,9 +7,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { Button } from 'primereact/button';
-import { Column } from 'primereact/column';
-import { DataTable } from 'primereact/datatable';
-import type { DataTablePageEvent, DataTableSortEvent } from 'primereact/datatable';
 import { Menu } from 'primereact/menu';
 import type { MenuItem } from 'primereact/menuitem';
 import { InputText } from 'primereact/inputtext';
@@ -17,7 +14,7 @@ import { Badge } from 'primereact/badge';
 import { Toast } from 'primereact/toast';
 
 import { useDispatch, useSelector } from 'react-redux';
-import { AppDispatch, RootState } from '@/stores/store';
+import type { AppDispatch, RootState } from '@/stores/store';
 
 import {
   fetchMouvementsStock,
@@ -27,16 +24,10 @@ import {
   selectMouvementStockStatus,
 } from '@/stores/slices/mvtStock/mvtStock';
 
-import { getOptionsByRole } from '@/lib/utils';
 import { ValidationDialog } from '@/components/ui/ValidationDialog';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
-import DropdownTypeFilter from '@/components/ui/dropdowns/dropDownFile-filter';
-import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
 
 import type { MouvementStock } from '@/Models/mouvementStockType';
-import type { Categorie } from '@/Models/produitsType';
-import type { PointVente } from '@/Models/pointVenteType';
 
 import { useUserRole } from '@/hooks/useUserRole';
 import { API_URL } from '@/lib/apiConfig';
@@ -51,17 +42,23 @@ const safeNumber = (v: unknown, fallback = 0) => {
 const safeApiImage = (rel?: string) =>
   isNonEmptyString(rel) ? `${API_URL()}/${rel.replace('../', '').replace(/^\/+/, '')}` : '';
 
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
+  <span className="inline-block align-middle ml-1">
+    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+  </span>
+);
+
 /* -------------------------------- Page -------------------------------- */
 const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
 
-  // Hooks toujours déclarés avant tout return
-  const [mounted, setMounted] = useState(false);
   const toast = useRef<Toast | null>(null);
 
-  const { user, isSuperAdmin, isAdminPointVente, isAdminRegion } = useUserRole();
+  const { user, isAdminPointVente, isAdminRegion } = useUserRole();
 
-  const mvtList = useSelector((s: RootState) => asArray<MouvementStock>(selectAllMouvementsStock(s)));
+  const mvtList = useSelector((s: RootState) =>
+    asArray<MouvementStock>(selectAllMouvementsStock(s))
+  );
   const meta = useSelector(selectMouvementStockMeta);
   const status = useSelector(selectMouvementStockStatus);
   const loading = status === 'loading';
@@ -69,27 +66,22 @@ const Page: React.FC = () => {
   const [selectedMvt, setSelectedMvt] = useState<MouvementStock | null>(null);
   const [isValidateMvt, setIsValidateMvt] = useState(false);
 
-  // pagination & tri serveur
+  // pagination & tri (custom 1-based)
+  const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
-  const [first, setFirst] = useState(0);
-  const [sortField, setSortField] = useState<string>('createdAt');
-  const [sortOrder, setSortOrder] = useState<1 | -1>(-1);
+  const [sortBy, setSortBy] = useState<string>('createdAt');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
 
-  // filtres
+  // recherche (texte uniquement)
   const [search, setSearch] = useState('');
-  const [selectedType, setSelectedType] = useState<string | null>(null);
-  const [categorie, setCategorie] = useState<Categorie | null>(null);
-  const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(null);
 
-  // Un SEUL menu popup global
+  // Menu actions (un seul menu global)
   const actionsMenuRef = useRef<Menu | null>(null);
-  const actionsAnchorRef = useRef<HTMLButtonElement | null>(null);
   const currentRowRef = useRef<MouvementStock | null>(null);
 
   const openActionsMenu = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>, row: MouvementStock) => {
       currentRowRef.current = row;
-      actionsAnchorRef.current = e.currentTarget;
       actionsMenuRef.current?.toggle(e);
     },
     []
@@ -106,437 +98,447 @@ const Page: React.FC = () => {
           }
         },
       },
-      // { label: 'Modifier', command: () => {} },
-      // { label: 'Supprimer', command: () => {} },
     ],
     []
   );
 
-  useEffect(() => setMounted(true), []);
-
-  /* ---------------------- Types autorisés (rôle) ---------------------- */
-  const allowedTypes = useMemo(() => {
-    const opts = asArray<{ label: string; value: string }>(getOptionsByRole(user?.role));
-    const base = opts.map((o) => o.value);
-    return user?.role === 'AdminPointVente' ? [...base, 'Livraison'] : base;
-  }, [user?.role]);
-
-  useEffect(() => {
-    if (allowedTypes?.length && !selectedType) setSelectedType(allowedTypes[0] ?? null);
-  }, [allowedTypes, selectedType]);
-
-  /* ------------------- Filtres côté serveur (query) ------------------ */
-  const serverFilters = useMemo(() => {
-    const page = Math.floor(first / rows) + 0;
+  /* ------------------- Paramètres serveur (query) ------------------ */
+  const serverParams = useMemo(() => {
     const roleFilters: Record<string, any> = {};
-
     if (isAdminPointVente && isNonEmptyString((user as any)?.pointVente?._id)) {
       roleFilters.pointVente = (user as any).pointVente._id;
     } else if (isAdminRegion && isNonEmptyString((user as any)?.region?._id)) {
       roleFilters.region = (user as any).region._id;
     }
-
-    if (selectedPointVente?._id) {
-      roleFilters.pointVente = selectedPointVente._id;
-      delete roleFilters.region;
-    }
-
     return {
-      page,
+      page, // ✅ 1-based (évite les “sauts” d’offset)
       limit: rows,
       q: search || undefined,
-      sortBy: sortField,
-      order: sortOrder === 1 ? 'asc' : 'desc',
+      sortBy,
+      order,
       includeTotal: true,
       includeRefs: true,
-      type: selectedType && selectedType !== 'Tout' ? selectedType : undefined,
       ...roleFilters,
     };
-  }, [first, rows, search, sortField, sortOrder, selectedType, isAdminPointVente, isAdminRegion, user?.region?._id, user?.pointVente?._id, selectedPointVente?._id]);
+  }, [
+    page,
+    rows,
+    search,
+    sortBy,
+    order,
+    isAdminPointVente,
+    isAdminRegion,
+    user?.region?._id,
+    user?.pointVente?._id,
+  ]);
 
   /* --------------------------- Chargement data --------------------------- */
   useEffect(() => {
-    const t = setTimeout(() => {
-      if (mounted) dispatch(fetchMouvementsStock(serverFilters as any));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [dispatch, serverFilters, mounted]);
+    dispatch(fetchMouvementsStock(serverParams));
+  }, [dispatch, serverParams]);
 
-  // fallback si pas de rôle
-  useEffect(() => {
-    if (!user?.role && mounted) dispatch(fetchMouvementsStock(serverFilters as any));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, user?.role, mounted]);
+  /* ----------------------- Tri / Pagination custom ---------------------- */
+  const total = meta?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const firstIndex = (page - 1) * rows;
 
-  /* ----------- Filtrage client additionnel (catégorie) ----------- */
-  const filteredMvtStocks = useMemo(() => {
-    if (!categorie) return mvtList;
-    return mvtList.filter((row) => {
-      const catObj = (row?.produit as any)?.categorie;
-      return typeof catObj === 'object' && catObj !== null && catObj?._id === categorie._id;
-    });
-  }, [mvtList, categorie]);
+  const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
+  const toggleSort = (field: string) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
+      setPage(1);
+    } else {
+      setOrder(order === 'asc' ? 'desc' : 'asc');
+      setPage(1);
+    }
+  };
 
-  /* ----------------------- Handlers DataTable ----------------------- */
-  const onPageChange = useCallback((e: DataTablePageEvent) => {
-    setFirst(e.first ?? 0);
-    setRows(e.rows ?? 10);
-  }, []);
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
 
-  const onSort = useCallback((e: DataTableSortEvent) => {
-    const field = (e.sortField as string) || 'createdAt';
-    const order = (e.sortOrder as 1 | -1 | 0) ?? -1;
-    setSortField(field);
-    setSortOrder(order === 0 ? -1 : order);
-  }, []);
-
-  /* --------------------------- Actions --------------------------- */
-  const refreshCurrentPage = useCallback(async () => {
-    await dispatch(fetchMouvementsStock(serverFilters as any));
-  }, [dispatch, serverFilters]);
-
-
-  console.log('filteredMvtStocks: ', filteredMvtStocks);
+  const onChangeRows = (n: number) => {
+    setRows(n);
+    const newTotalPages = Math.max(1, Math.ceil(total / n));
+    const fixed = Math.min(page, newTotalPages);
+    setPage(fixed);
+  };
 
   /* ---------------------------------- UI ---------------------------------- */
   return (
     <div className="min-h-screen">
-      {!mounted ? (
-        <div className="p-6">
-          <div className="h-6 w-48 bg-gray-200 rounded mb-4" />
-          <div className="h-10 w-full bg-gray-100 rounded" />
-        </div>
-      ) : (
-        <>
-          <Toast ref={toast} />
+      <Toast ref={toast} />
 
-          <div className="flex items-center justify-between mt-5 mb-5">
-            <BreadCrumb
-              model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des Rapports' }]}
-              home={{ icon: 'pi pi-home', url: '/' }}
-              className="bg-none"
+      <div className="flex items-center justify-between mt-5 mb-5">
+        <BreadCrumb
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des Rapports' }]}
+          home={{ icon: 'pi pi-home', url: '/' }}
+          className="bg-none"
+        />
+        <h2 className="text-2xl font-bold text-gray-700">Gestion des Rapports</h2>
+      </div>
+
+      <div className="bg-white p-4 rounded-lg shadow-md">
+        <div className="gap-4 mb-4 flex justify-between flex-wrap md:flex-nowrap">
+          <div className="relative w-full md:w-4/5 flex flex-row gap-2 flex-wrap">
+            <InputText
+              className="p-2 pl-10 border rounded w-full md:w-1/3"
+              placeholder="Rechercher..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value ?? '')}
+              onKeyDown={(e) => e.key === 'Enter' && setPage(1)}
             />
-            <h2 className="text-2xl font-bold text-gray-700">Gestion des Rapports</h2>
           </div>
 
-          <div className="bg-white p-4 rounded-lg shadow-md">
-            <div className="gap-4 mb-4 flex justify-between flex-wrap md:flex-nowrap">
-              <div className="relative w-full md:w-4/5 flex flex-row gap-2 flex-wrap">
-                <InputText
-                  className="p-2 pl-10 border rounded w-full md:w-1/3"
-                  placeholder="Rechercher..."
-                  value={search}
-                  onChange={(e) => {
-                    setFirst(0);
-                    setSearch(e.target.value ?? '');
-                  }}
-                />
-
-                <DropdownTypeFilter
-                  mvtStocks={mvtList}
-                  //@ts-ignore
-                  onChange={(_, type) => {
-                    setFirst(0);
-                    setSelectedType(type);
-                  }}
-                />
-
-                <DropdownCategorieFilter onSelect={(cat) => setCategorie(cat)} />
-
-                <DropdownPointVenteFilter
-                  onSelect={(pv) => {
-                    setFirst(0);
-                    setSelectedPointVente(pv);
-                  }}
-                />
-              </div>
-
-              <div className="w-full md:w-1/5 flex justify-end items-center gap-2">
-                <DropdownImportExport
-                  onAction={async ({ type, format, file }) => {
-                    if (type === 'import' && file) {
+          <div className="w-full md:w-1/5 flex justify-end items-center gap-2">
+            <DropdownImportExport
+              onAction={async ({ type, format, file }) => {
+                if (type === 'import' && file) {
+                  toast.current?.show({
+                    severity: 'info',
+                    summary: `Import ${format.toUpperCase()}`,
+                    detail: `Fichier importé: ${file.name}`,
+                    life: 3000,
+                  });
+                  return;
+                }
+                if (type === 'export') {
+                  const { exportFile, downloadExportedFile } = await import(
+                    '@/stores/slices/document/importDocuments/exportDoc'
+                  );
+                  const fileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : 'csv';
+                  try {
+                    const r: any = await (dispatch as any)(
+                      exportFile({
+                        url: '/export/rapport-mouvement-stock',
+                        mouvements: mvtList, // exporte ce qui est dans la liste actuelle
+                        fileType,
+                      })
+                    );
+                    if ((exportFile as any).fulfilled.match(r)) {
+                      const filename = `rapport.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
+                      downloadExportedFile(r.payload, filename);
                       toast.current?.show({
-                        severity: 'info',
-                        summary: `Import ${format.toUpperCase()}`,
-                        detail: `Fichier importé: ${file.name}`,
+                        severity: 'success',
+                        summary: `Export ${format.toUpperCase()}`,
+                        detail: `Fichier téléchargé: ${filename}`,
                         life: 3000,
                       });
-                      return;
+                    } else {
+                      throw new Error('Export non abouti');
                     }
-                    if (type === 'export') {
-                      const { exportFile, downloadExportedFile } = await import('@/stores/slices/document/importDocuments/exportDoc');
-                      const fileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : 'csv';
-                      try {
-                        const r: any = await (dispatch as any)(
-                          exportFile({
-                            url: '/export/rapport-mouvement-stock',
-                            mouvements: filteredMvtStocks,
-                            fileType,
-                          })
-                        );
-                        if ((exportFile as any).fulfilled.match(r)) {
-                          const filename = `rapport.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
-                          downloadExportedFile(r.payload, filename);
-                          toast.current?.show({
-                            severity: 'success',
-                            summary: `Export ${format.toUpperCase()}`,
-                            detail: `Fichier téléchargé: ${filename}`,
-                            life: 3000,
-                          });
-                        } else {
-                          throw new Error('Export non abouti');
-                        }
-                      } catch {
-                        toast.current?.show({
-                          severity: 'error',
-                          summary: `Export ${format.toUpperCase()} échoué`,
-                          detail: 'Une erreur est survenue.',
-                          life: 3000,
-                        });
-                      }
-                    }
-                  }}
-                />
-              </div>
-            </div>
-
-            <DataTable
-              value={filteredMvtStocks}
-              dataKey="_id"
-              lazy
-              paginator
-              totalRecords={meta?.total ?? 0}
-              rows={rows}
-              first={first}
-              onPage={onPageChange}
-              sortField={sortField}
-              sortOrder={sortOrder}
-              onSort={onSort}
-              loading={loading}
-              size="small"
-              className="rounded-lg text-sm"
-              tableStyle={{ minWidth: '70rem' }}
-              //@ts-ignore
-              rowClassName={(_, opt) => (opt?.rowIndex % 2 === 0 ? '!bg-gray-100 !text-gray-900' : '!bg-green-50 !text-gray-900')}
-              emptyMessage="Aucun mouvement de stock trouvé."
-            >
-              <Column
-                header="#"
-                body={(_, options) => (Number.isFinite(options?.rowIndex) ? first + (options!.rowIndex as number) + 1 : '-')}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header=""
-                body={(row: MouvementStock) => {
-                  const cat = (row?.produit as any)?.categorie;
-                  const imageUrl = typeof cat === 'object' && cat?.image ? safeApiImage(cat.image) : '';
-                  return imageUrl ? (
-                    <div className="w-8 h-8">
-                      <img
-                        src={imageUrl}
-                        alt={cat?.nom ?? ''}
-                        className="rounded-full w-full h-full object-cover border border-gray-100"
-                        onError={(e) => (e.currentTarget.style.display = 'none')}
-                      />
-                    </div>
-                  ) : (
-                    <span>—</span>
-                  );
-                }}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Produit"
-                sortable
-                sortField="produit.nom"
-                body={(row: MouvementStock) => row?.produit?.nom ?? '—'}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Catégorie"
-                body={(row: MouvementStock) => {
-                  const cat = (row?.produit as any)?.categorie;
-                  return typeof cat === 'object' && cat !== null ? cat?.nom ?? '—' : (row?.produit as any)?.categorie ?? '—';
-                }}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-                  />
-                   <Column
-                header="operations"
-                body={(row: MouvementStock) => {
-                 
-                  return row.type ? row.type : '—';
-                }}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Stock"
-                body={(row: MouvementStock) => row?.region?.nom ?? row?.pointVente?.nom ?? 'Depot Central'}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                field="quantite"
-                header="Quantité"
-                sortable
-                body={(row: MouvementStock) => safeNumber(row?.quantite).toString()}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Prix/U"
-                body={(row: MouvementStock) => {
-                  const prix =
-                    ['Entrée', 'Livraison', 'Commande'].includes(row?.type ?? '')
-                      ? row?.produit?.prix
-                      : row?.produit?.prixVente;
-                  const val = safeNumber(prix, NaN);
-                  return Number.isFinite(val)
-                    ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : 'N/A';
-                }}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Prix de vente Total"
-                body={(row: MouvementStock) => {
-                  const net = safeNumber((row?.produit as any)?.netTopay, 0);
-                  const q = safeNumber(row?.quantite, 0);
-                  return (net * q).toFixed(2);
-                }}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Valeur TVA Total"
-                body={(row: MouvementStock) => {
-                  const net = safeNumber((row?.produit as any)?.netTopay, 0);
-                  const tva = safeNumber((row?.produit as any)?.tva, 0);
-                  const q = safeNumber(row?.quantite, 0);
-                  return (((net * tva) / 100) * q).toFixed(2);
-                }}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="TTC"
-                body={(row: MouvementStock) => {
-                  const prixBase =
-                    ['Entrée', 'Livraison', 'Commande'].includes(row?.type ?? '')
-                      ? row?.produit?.prix
-                      : row?.produit?.prixVente;
-                  const prixVente = safeNumber(row?.produit?.prixVente, 0);
-                  const q = safeNumber(row?.quantite, 0);
-                  const total = prixVente * q;
-                  let cls = 'text-blue-600';
-                  const base = safeNumber(prixBase, 0);
-                  if (prixVente > base) cls = 'text-green-600 font-bold';
-                  else if (prixVente < base) cls = 'text-red-600 font-bold';
-                  return <span className={cls}>{total.toFixed(2)}</span>;
-                }}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Statut"
-                body={(row: MouvementStock) => {
-                  const ok = !!row?.statut;
-                  return <Badge value={ok ? 'Validé' : 'En attente'} severity={ok ? 'success' : 'warning'} className="text-xs px-2 py-1" />;
-                }}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Utilisateur"
-                body={(row: MouvementStock) =>
-                  typeof row?.user === 'object' ? (row.user as any)?.nom ?? '—' : (row as any)?.user ?? '—'
-                }
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Créé le"
-                sortable
-                sortField="createdAt"
-                body={(row: MouvementStock) => {
-                  try {
-                    return new Date(row?.createdAt || '').toLocaleDateString();
                   } catch {
-                    return '—';
+                    toast.current?.show({
+                      severity: 'error',
+                      summary: `Export ${format.toUpperCase()} échoué`,
+                      detail: 'Une erreur est survenue.',
+                      life: 3000,
+                    });
                   }
-                }}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-
-              <Column
-                header="Actions"
-                body={(row: MouvementStock) => (
-                  <Button
-                    icon="pi pi-bars"
-                    className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-                    onClick={(e) => openActionsMenu(e, row)}
-                    disabled={!isNonEmptyString((row as any)?._id)}
-                    aria-haspopup
-                  />
-                )}
-                className="px-4 py-1 text-sm"
-                headerClassName="text-sm !bg-green-800 !text-white"
-              />
-            </DataTable>
-
-            {/* Menu global (appendTo body pour éviter les overlays qui bloquent les clics) */}
-            <Menu
-              model={actionsModel}
-              popup
-              ref={actionsMenuRef}
-              appendTo={mounted ? document.body : undefined}
-              baseZIndex={1000}
+                }
+              }}
             />
           </div>
+        </div>
 
-          <ValidationDialog
-            visible={isValidateMvt}
-            onHide={() => setIsValidateMvt(false)}
-            onConfirm={async (item) => {
-              try {
-                if (!item?._id) return;
-                const r = await dispatch(validateMouvementStock(item._id as any));
-                // @ts-ignore
-                if (validateMouvementStock.fulfilled?.match?.(r) || r?.meta?.requestStatus === 'fulfilled') {
-                  toast.current?.show({ severity: 'success', summary: 'Validé', detail: "L'opération a été validée.", life: 2500 });
-                  await refreshCurrentPage();
-                  setIsValidateMvt(false);
-                } else {
-                  throw new Error();
-                }
-              } catch {
-                toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la validation.', life: 3000 });
-              }
-            }}
-            item={selectedMvt}
-            objectLabel="l'opération"
-            displayField="nom"
-          />
-        </>
-      )}
+        {/* ---------- TABLE TAILWIND ----------- */}
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-[70rem] w-full text-sm">
+            <thead>
+              <tr className="bg-green-800 text-white">
+                <th className="px-4 py-2 text-left">N°</th>
+
+                <th className="px-4 py-2 text-left"> </th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('produit.nom')} // tri côté back si supporté
+                  title="Trier par produit"
+                >
+                  Produit <SortIcon order={sortedOrderFor('produit.nom')} />
+                </th>
+
+                <th className="px-4 py-2 text-left">Catégorie</th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('type')}
+                  title="Trier par type"
+                >
+                  Type <SortIcon order={sortedOrderFor('type')} />
+                </th>
+
+                <th className="px-4 py-2 text-left">Stock</th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('quantite')}
+                  title="Trier par quantité"
+                >
+                  Quantité <SortIcon order={sortedOrderFor('quantite')} />
+                </th>
+
+                <th className="px-4 py-2 text-left">Prix/U</th>
+                <th className="px-4 py-2 text-left">Prix de vente Total</th>
+                <th className="px-4 py-2 text-left">Valeur TVA Total</th>
+                <th className="px-4 py-2 text-left">TTC</th>
+                <th className="px-4 py-2 text-left">Statut</th>
+                <th className="px-4 py-2 text-left">Utilisateur</th>
+
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('createdAt')}
+                  title="Trier par date de création"
+                >
+                  Créé le <SortIcon order={sortedOrderFor('createdAt')} />
+                </th>
+
+                <th className="px-4 py-2 text-left">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading && mvtList.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={14}>
+                    Chargement...
+                  </td>
+                </tr>
+              ) : mvtList.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={14}>
+                    Aucun mouvement de stock trouvé.
+                  </td>
+                </tr>
+              ) : (
+                mvtList.map((row, idx) => {
+                  const cat = (row?.produit as any)?.categorie;
+                  const imageUrl =
+                    typeof cat === 'object' && cat?.image ? safeApiImage(cat.image) : '';
+                  const q = safeNumber(row?.quantite, 0);
+
+                  const prixBase = ['Entrée', 'Livraison', 'Commande'].includes(row?.type ?? '')
+                    ? row?.produit?.prix
+                    : row?.produit?.prixVente;
+
+                  const prixVente = safeNumber(row?.produit?.prixVente, 0);
+                  const total = prixVente * q;
+                  let ttcCls = 'text-blue-600';
+                  const base = safeNumber(prixBase, 0);
+                  if (prixVente > base) ttcCls = 'text-green-600 font-bold';
+                  else if (prixVente < base) ttcCls = 'text-red-600 font-bold';
+
+                  return (
+                    <tr
+                      key={row._id}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{firstIndex + idx + 1}</td>
+
+                      <td className="px-4 py-2">
+                        {imageUrl ? (
+                          <div className="w-8 h-8">
+                            <img
+                              src={imageUrl}
+                              alt={cat?.nom ?? ''}
+                              className="rounded-full w-full h-full object-cover border border-gray-100"
+                              onError={(e) => (e.currentTarget.style.display = 'none')}
+                            />
+                          </div>
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-2">{row?.produit?.nom ?? '—'}</td>
+
+                      <td className="px-4 py-2">
+                        {typeof cat === 'object' && cat !== null
+                          ? (cat?.nom ?? '—')
+                          : ((row?.produit as any)?.categorie ?? '—')}
+                      </td>
+
+                      <td className="px-4 py-2">{row?.type || '—'}</td>
+
+                      <td className="px-4 py-2">
+                        {row?.region?.nom ?? row?.pointVente?.nom ?? 'Depot Central'}
+                      </td>
+
+                      <td className="px-4 py-2">{q.toString()}</td>
+
+                      <td className="px-4 py-2">
+                        {(() => {
+                          const prix = ['Entrée', 'Livraison', 'Commande'].includes(row?.type ?? '')
+                            ? row?.produit?.prix
+                            : row?.produit?.prixVente;
+                          const val = safeNumber(prix, NaN);
+                          return Number.isFinite(val)
+                            ? val.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            : 'N/A';
+                        })()}
+                      </td>
+
+                      <td className="px-4 py-2">
+                        {(() => {
+                          const net = safeNumber((row?.produit as any)?.netTopay, 0);
+                          return (net * q).toFixed(2);
+                        })()}
+                      </td>
+
+                      <td className="px-4 py-2">
+                        {(() => {
+                          const net = safeNumber((row?.produit as any)?.netTopay, 0);
+                          const tva = safeNumber((row?.produit as any)?.tva, 0);
+                          return (((net * tva) / 100) * q).toFixed(2);
+                        })()}
+                      </td>
+
+                      <td className="px-4 py-2">
+                        <span className={ttcCls}>{total.toFixed(2)}</span>
+                      </td>
+
+                      <td className="px-4 py-2">
+                        <Badge
+                          value={row?.statut ? 'Validé' : 'En attente'}
+                          severity={row?.statut ? 'success' : 'warning'}
+                          className="text-xs px-2 py-1"
+                        />
+                      </td>
+
+                      <td className="px-4 py-2">
+                        {typeof row?.user === 'object'
+                          ? ((row.user as any)?.nom ?? '—')
+                          : ((row as any)?.user ?? '—')}
+                      </td>
+
+                      <td className="px-4 py-2">
+                        {(() => {
+                          try {
+                            return new Date(row?.createdAt || '').toLocaleDateString();
+                          } catch {
+                            return '—';
+                          }
+                        })()}
+                      </td>
+
+                      <td className="px-4 py-2">
+                        <Button
+                          icon="pi pi-bars"
+                          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                          onClick={(e) => openActionsMenu(e, row)}
+                          disabled={!isNonEmptyString((row as any)?._id)}
+                          aria-haspopup
+                        />
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ---------- PAGINATION TAILWIND ----------- */}
+        <div className="flex items-center justify-between mt-3">
+          <div className="text-sm text-gray-700">
+            Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+            <span className="font-semibold">{total}</span> éléments
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+            <select
+              className="border rounded px-2 py-1 text-sm"
+              value={rows}
+              onChange={(e) => onChangeRows(Number(e.target.value))}
+            >
+              {[10, 20, 30, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+
+            <Button
+              label="«"
+              className="!bg-gray-200 !text-gray-800 px-2 py-1"
+              onClick={() => goTo(1)}
+              disabled={page <= 1}
+            />
+            <Button
+              label="‹"
+              className="!bg-gray-200 !text-gray-800 px-2 py-1"
+              onClick={() => goTo(page - 1)}
+              disabled={page <= 1}
+            />
+            <Button
+              label="›"
+              className="!bg-gray-200 !text-gray-800 px-2 py-1"
+              onClick={() => goTo(page + 1)}
+              disabled={page >= totalPages}
+            />
+            <Button
+              label="»"
+              className="!bg-gray-200 !text-gray-800 px-2 py-1"
+              onClick={() => goTo(totalPages)}
+              disabled={page >= totalPages}
+            />
+          </div>
+        </div>
+
+        {/* Menu Actions (global) */}
+        <Menu
+          model={actionsModel}
+          popup
+          ref={actionsMenuRef}
+          appendTo={typeof document !== 'undefined' ? document.body : undefined}
+          baseZIndex={1000}
+        />
+      </div>
+
+      {/* Validation dialog */}
+      <ValidationDialog
+        visible={isValidateMvt}
+        onHide={() => setIsValidateMvt(false)}
+        onConfirm={async (item) => {
+          try {
+            if (!item?._id) return;
+            const r = await dispatch(validateMouvementStock(item._id as any));
+            // @ts-ignore
+            if (
+              validateMouvementStock.fulfilled?.match?.(r) ||
+              r?.meta?.requestStatus === 'fulfilled'
+            ) {
+              toast.current?.show({
+                severity: 'success',
+                summary: 'Validé',
+                detail: "L'opération a été validée.",
+                life: 2500,
+              });
+              // refresh page courante
+              dispatch(fetchMouvementsStock(serverParams));
+              setIsValidateMvt(false);
+            } else {
+              throw new Error();
+            }
+          } catch {
+            toast.current?.show({
+              severity: 'error',
+              summary: 'Erreur',
+              detail: 'Échec de la validation.',
+              life: 3000,
+            });
+          }
+        }}
+        item={selectedMvt}
+        objectLabel="l'opération"
+        displayField="nom"
+      />
     </div>
   );
 };

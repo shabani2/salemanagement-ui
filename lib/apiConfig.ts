@@ -51,20 +51,21 @@ export const getApiUrl = (): string => {
 
   const currentEnv = envFromRuntime();
 
-  const apiProd    = process.env.NEXT_PUBLIC_API_PROD;
+  const apiProd = process.env.NEXT_PUBLIC_API_PROD;
   const apiPreview = process.env.NEXT_PUBLIC_API_PREVIEW || process.env.NEXT_PUBLIC_API_STAGING;
-  const apiDev     = process.env.NEXT_PUBLIC_API_DEV;
-  const apiTest    = process.env.NEXT_PUBLIC_API_TEST;
+  const apiDev = process.env.NEXT_PUBLIC_API_DEV;
+  const apiTest = process.env.NEXT_PUBLIC_API_TEST;
 
   let resolved =
-    (currentEnv === 'production'   && (apiProd || DEFAULT_API_FALLBACK)) ||
-    (currentEnv === 'preview'      && (apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||
-    (currentEnv === 'test'         && (apiTest || apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||
-    (currentEnv === 'development'  && (apiDev || DEFAULT_API_FALLBACK)) ||
+    (currentEnv === 'production' && (apiProd || DEFAULT_API_FALLBACK)) ||
+    (currentEnv === 'preview' && (apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||
+    (currentEnv === 'test' && (apiTest || apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||
+    (currentEnv === 'development' && (apiDev || DEFAULT_API_FALLBACK)) ||
     DEFAULT_API_FALLBACK;
 
   return normalizeUrl(resolved);
 };
+
 
 /** Base URL dynamique */
 let API_URL_RUNTIME = '';
