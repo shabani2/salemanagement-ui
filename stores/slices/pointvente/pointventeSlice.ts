@@ -288,8 +288,9 @@ const pointVenteSlice = createSlice({
       })
       .addCase(fetchPointVentes.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { data, meta } = action.payload;
-        pointVenteAdapter.setAll(state, data ?? []);
+        const { meta } = action.payload;
+        //@ts-ignore
+        pointVenteAdapter.setAll(state, action.payload ?? []);
         state.meta = meta ?? null;
       })
       .addCase(fetchPointVentes.rejected, (state, action) => {
@@ -304,8 +305,9 @@ const pointVenteSlice = createSlice({
       })
       .addCase(searchPointVentes.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { data, meta } = action.payload;
-        pointVenteAdapter.setAll(state, data ?? []);
+        const { meta } = action.payload;
+        //@ts-ignore
+        pointVenteAdapter.setAll(state, action.payload ?? []);
         state.meta = meta ?? null;
       })
       .addCase(searchPointVentes.rejected, (state, action) => {
@@ -320,8 +322,9 @@ const pointVenteSlice = createSlice({
       })
       .addCase(fetchPointVentesByRegionId.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { data, meta } = action.payload;
-        pointVenteAdapter.setAll(state, data ?? []);
+        const { meta } = action.payload;
+        //@ts-ignore
+        pointVenteAdapter.setAll(state, action.payload ?? []);
         state.meta = meta ?? null;
       })
       .addCase(fetchPointVentesByRegionId.rejected, (state, action) => {

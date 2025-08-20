@@ -407,7 +407,8 @@ const mouvementStockSlice = createSlice({
       .addCase(fetchMouvementsStock.fulfilled, (state, action) => {
         state.status = 'succeeded';
         const { data, meta } = action.payload;
-        mouvementStockAdapter.setAll(state, data ?? []);
+        //@ts-ignore
+        mouvementStockAdapter.setAll(state, action.payload);
         state.meta = normalizeMeta(meta);
       })
       .addCase(fetchMouvementsStock.rejected, (state, action) => {
@@ -422,8 +423,9 @@ const mouvementStockSlice = createSlice({
       })
       .addCase(searchMouvementsStock.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { data, meta } = action.payload;
-        mouvementStockAdapter.setAll(state, data ?? []);
+        const { meta } = action.payload;
+        //@ts-ignore
+        mouvementStockAdapter.setAll(state, action.payload);
         state.meta = normalizeMeta(meta);
       })
       .addCase(searchMouvementsStock.rejected, (state, action) => {

@@ -300,9 +300,10 @@ const produitSlice = createSlice({
       })
       .addCase(fetchProduits.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { data, meta } = action.payload;
-        produitAdapter.setAll(state, data ?? []);
-        state.meta = normalizeMeta(meta);
+        // const { data, meta } = action.payload;
+        //@ts-ignore
+        produitAdapter.setAll(state, action.payload);
+        // state.meta = normalizeMeta(meta);
       })
       .addCase(fetchProduits.rejected, (state, action) => {
         state.status = 'failed';
@@ -359,9 +360,10 @@ const produitSlice = createSlice({
         state.searchError = null;
       })
       .addCase(searchProduits.fulfilled, (state, action) => {
-        state.searchStatus = 'succeeded';
-        const { data, meta } = action.payload;
-        produitAdapter.upsertMany(state, data ?? []);
+        // state.searchStatus = 'succeeded';
+        const { meta } = action.payload;
+        //@ts-ignore
+        produitAdapter.upsertMany(state, action.payload);
         state.searchMeta = normalizeMeta(meta);
       })
       .addCase(searchProduits.rejected, (state, action) => {

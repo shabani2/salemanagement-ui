@@ -24,6 +24,7 @@ import {
   selectAllRegions,
   selectRegionMeta,
   selectRegionStatus,
+  selectRegionError,
 } from '@/stores/slices/regions/regionSlice';
 
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
@@ -34,7 +35,7 @@ import {
 } from '@/stores/slices/document/importDocuments/exportDoc';
 
 /* ----------------------------- Helpers ----------------------------- */
-type Region = {
+type RegionVM = {
   _id?: string;
   nom?: string;
   ville?: string;
@@ -43,7 +44,6 @@ type Region = {
   updatedAt?: string;
 };
 
-const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 
 const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
@@ -59,31 +59,32 @@ export default function RegionManagement() {
   const toast = useRef<Toast>(null);
 
   // Store
-  const regions = useSelector((state: RootState) => asArray<Region>(selectAllRegions(state)));
+  const regions = useSelector((state: RootState) => selectAllRegions(state));
   const meta = useSelector(selectRegionMeta);
   const status = useSelector(selectRegionStatus);
+  const error = useSelector(selectRegionError);
   const loading = status === 'loading';
 
   // Requête serveur (params) — 1-based + tri custom
   const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
-  const [sortBy, setSortBy] = useState<string>('createdAt'); // tu peux passer à 'updatedAt' si tu préfères
+  const [sortBy, setSortBy] = useState<string>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [searchText, setSearchText] = useState('');
   const [villeFilter, setVilleFilter] = useState('');
 
   // Modals / sélection
   const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
-  const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<RegionVM | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState<boolean>(false);
 
   // Formulaire création/édition
-  const [form, setForm] = useState<Pick<Region, 'nom' | 'ville'>>({ nom: '', ville: '' });
+  const [form, setForm] = useState<Pick<RegionVM, 'nom' | 'ville'>>({ nom: '', ville: '' });
 
   // ✅ Un seul Menu global pour corriger le bug de sélection
   const menuRef = useRef<Menu>(null);
-  const selectedRowDataRef = useRef<Region | null>(null);
-  const handleAction = useCallback((action: 'details' | 'edit' | 'delete', row: Region) => {
+  const selectedRowDataRef = useRef<RegionVM | null>(null);
+  const handleAction = useCallback((action: 'details' | 'edit' | 'delete', row: RegionVM) => {
     setSelectedRegion(row ?? null);
     if (action === 'delete') {
       setIsDeleteOpen(true);
@@ -131,6 +132,17 @@ export default function RegionManagement() {
   useEffect(() => {
     fetchServer();
   }, [fetchServer]);
+
+  useEffect(() => {
+    if (status === 'failed' && error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: error,
+        life: 3000,
+      });
+    }
+  }, [status, error]);
 
   /* -------------------------- Tri & pagination (UI) ------------------------- */
   const total = meta?.total ?? 0;
@@ -191,6 +203,7 @@ export default function RegionManagement() {
       });
       return;
     }
+    //@ts-ignore
     const r = await dispatch(addRegion({ nom: form.nom.trim(), ville: form.ville.trim() }) as any);
     if ((addRegion as any).fulfilled.match(r)) {
       toast.current?.show({
@@ -299,7 +312,6 @@ export default function RegionManagement() {
     async ({
       type,
       format,
-      file,
     }: {
       type: 'import' | 'export';
       format: 'csv' | 'pdf' | 'excel';
@@ -350,7 +362,7 @@ export default function RegionManagement() {
   );
 
   const actionButton = useCallback(
-    (rowData: Region) => (
+    (rowData: RegionVM) => (
       <Button
         icon="pi pi-bars"
         className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
@@ -363,6 +375,7 @@ export default function RegionManagement() {
     ),
     []
   );
+  console.log('regions = ', regions);
 
   /* --------------------------------- UI ----------------------------------- */
   return (
@@ -473,20 +486,19 @@ export default function RegionManagement() {
                       key={r._id}
                       className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
                     >
-                      <td className="px-4 py-2">{firstIndex + idx + 1}</td>
+                      <td className="px-4 py-2">
+                        {(meta?.page ? (meta.page - 1) * (meta.limit ?? 10) : 0) + idx + 1}
+                      </td>
                       <td className="px-4 py-2">{r?.nom ?? '—'}</td>
                       <td className="px-4 py-2">{String(r?.pointVenteCount ?? 0)}</td>
                       <td className="px-4 py-2">{r?.ville ?? '—'}</td>
                       <td className="px-4 py-2">
-                        {(() => {
-                          try {
-                            return new Date((r as any)?.createdAt || '').toLocaleDateString();
-                          } catch {
-                            return '—';
-                          }
-                        })()}
+                        {r?.createdAt ? new Date(r.createdAt).toLocaleDateString() : '—'}
                       </td>
-                      <td className="px-4 py-2">{actionButton(r)}</td>
+                      <td className="px-4 py-2">{
+                        //@ts-ignore
+                      actionButton(r)
+                      }</td>
                     </tr>
                   ))
                 )}
@@ -497,8 +509,9 @@ export default function RegionManagement() {
           {/* -------- PAGINATION TAILWIND -------- */}
           <div className="flex items-center justify-between mt-3">
             <div className="text-sm text-gray-700">
-              Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
-              <span className="font-semibold">{total}</span> éléments
+              Page <span className="font-semibold">{meta?.page ?? 1}</span> /{' '}
+              {Math.max(1, meta?.totalPages ?? 1)} —{' '}
+              <span className="font-semibold">{meta?.total ?? 0}</span> éléments
             </div>
 
             <div className="flex items-center gap-2">
@@ -518,28 +531,28 @@ export default function RegionManagement() {
               <button
                 className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
                 onClick={() => goTo(1)}
-                disabled={page <= 1}
+                disabled={(meta?.page ?? 1) <= 1}
               >
                 «
               </button>
               <button
                 className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
-                onClick={() => goTo(page - 1)}
-                disabled={page <= 1}
+                onClick={() => goTo((meta?.page ?? 1) - 1)}
+                disabled={(meta?.page ?? 1) <= 1}
               >
                 ‹
               </button>
               <button
                 className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
-                onClick={() => goTo(page + 1)}
-                disabled={page >= totalPages}
+                onClick={() => goTo((meta?.page ?? 1) + 1)}
+                disabled={(meta?.page ?? 1) >= Math.max(1, meta?.totalPages ?? 1)}
               >
                 ›
               </button>
               <button
                 className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
-                onClick={() => goTo(totalPages)}
-                disabled={page >= totalPages}
+                onClick={() => goTo(Math.max(1, meta?.totalPages ?? 1))}
+                disabled={(meta?.page ?? 1) >= Math.max(1, meta?.totalPages ?? 1)}
               >
                 »
               </button>

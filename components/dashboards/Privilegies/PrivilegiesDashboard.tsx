@@ -39,7 +39,7 @@ import { fetchProduits } from '@/stores/slices/produits/produitsSlice';
 import type { Produit } from '@/Models/produitsType';
 import type { Stock } from '@/Models/stock';
 
-import { Package, Box, CreditCard, Building, Truck } from 'lucide-react';
+import { Package, Box, CreditCard, Building } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   startOfDay,
@@ -187,20 +187,20 @@ export default function PrivilegiesDashboard() {
     [allMvtStocks]
   );
 
-  const totalCommandes = useMemo(
-    //@ts-ignore
-    () => allMvtStocks.filter((m) => m.type === 'Commande').length,
-    [allMvtStocks]
-  );
+  // const totalCommandes = useMemo(
+  //   //@ts-ignore
+  //   () => allMvtStocks.filter((m) => m.type === 'Commande').length,
+  //   [allMvtStocks]
+  // );
 
-  const totalLivraisons = useMemo(
-    //@ts-ignore
-    () => allMvtStocks.filter((m) => m.type === 'Livraison').length,
-    [allMvtStocks]
-  );
+  // const totalLivraisons = useMemo(
+  //   //@ts-ignore
+  //   () => allMvtStocks.filter((m) => m.type === 'Livraison').length,
+  //   [allMvtStocks]
+  // );
 
-  const tauxLivraison =
-    totalCommandes > 0 ? Math.round((totalLivraisons / totalCommandes) * 100) : 0;
+  // const tauxLivraison =
+  //   totalCommandes > 0 ? Math.round((totalLivraisons / totalCommandes) * 100) : 0;
 
   const regionStats = useMemo(() => {
     return computeRegionStats(
@@ -330,7 +330,7 @@ export default function PrivilegiesDashboard() {
             icon={CreditCard}
           />
           <KpiCard title="Points de Vente" value={formatNombre(totalPointsVente)} icon={Building} />
-          <KpiCard title="Taux Livraison" value={`${tauxLivraison}%`} icon={Truck} />
+          {/* <KpiCard title="Taux Livraison" value={`${tauxLivraison}%`} icon={Truck} /> */}
         </div>
 
         {/* --- Graphique + Produits critiques --- */}

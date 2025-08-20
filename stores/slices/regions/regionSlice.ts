@@ -230,9 +230,10 @@ const regionSlice = createSlice({
       })
       .addCase(fetchRegions.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { data, meta } = action.payload;
-        regionAdapter.setAll(state, data ?? []);
-        state.meta = meta ?? null;
+        // const { data, meta } = action.payload;
+        //@ts-ignore
+        regionAdapter.setAll(state, action.payload);
+        // state.meta = meta ?? null;
       })
       .addCase(fetchRegions.rejected, (state, action) => {
         state.status = 'failed';
@@ -246,9 +247,10 @@ const regionSlice = createSlice({
       })
       .addCase(searchRegions.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { data, meta } = action.payload;
-        regionAdapter.setAll(state, data ?? []);
-        state.meta = meta ?? null;
+        // const { data, meta } = action.payload;
+        //@ts-ignore
+        regionAdapter.setAll(state, action.payload);
+        // state.meta = meta ?? null;
       })
       .addCase(searchRegions.rejected, (state, action) => {
         state.status = 'failed';

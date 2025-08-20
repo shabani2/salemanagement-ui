@@ -4,6 +4,7 @@ export interface Region {
   nom: string;
   ville: string;
   pointVenteCount?: number;
+  createdAt: Date;
 }
 
 export interface RegionStats {

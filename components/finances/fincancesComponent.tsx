@@ -18,7 +18,7 @@ import {
 import {
   fetchCurrencies,
   selectAllCurrencies,
-  selectCurrencyStatus,
+  selectCurrenciesStatus,
 } from '@/stores/slices/finances/currencySlice';
 import { AppDispatch } from '@/stores/store';
 import { useDispatch, useSelector } from 'react-redux';
@@ -49,7 +49,7 @@ const FinancialSettingsForm = () => {
   const settingsError = useSelector(selectFinancialSettingsError);
 
   const currencies = useSelector(selectAllCurrencies);
-  const currenciesStatus = useSelector(selectCurrencyStatus);
+  const currenciesStatus = useSelector(selectCurrenciesStatus);
 
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -68,14 +68,12 @@ const FinancialSettingsForm = () => {
 
     // Initialiser les paramètres locaux quand les données sont chargées
     if (settings && currencies) {
-      setLocalSettings(
-        // @ts-expect-error - compat: external lib types mismatch
-        {
-          ...settings,
-          defaultCurrency:
-            currencies.find((c) => c?._id === settings.defaultCurrency) || settings.defaultCurrency,
-        }
-      );
+      setLocalSettings({
+        ...settings,
+        //@ts-ignore
+        defaultCurrency:
+          currencies.find((c) => c?._id === settings.defaultCurrency) || settings.defaultCurrency,
+      });
     }
   }, [settings, currencies, settingsStatus, currenciesStatus, dispatch]);
 

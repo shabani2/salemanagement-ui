@@ -1,169 +1,172 @@
-// finance/currencySlice.ts
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
-import { createSlice, createAsyncThunk, createEntityAdapter } from '@reduxjs/toolkit';
+import {
+  createSlice,
+  createAsyncThunk,
+  createEntityAdapter,
+  type EntityAdapter,
+} from '@reduxjs/toolkit';
 import { RootState } from '../../store';
 import { apiClient } from '../../../lib/apiConfig';
-import { Currency } from '@/Models/FinanceModel';
 
-// Adapter pour les devises
-const currencyAdapter = createEntityAdapter<Currency, string>({
-  selectId: (currency) => currency._id,
-  sortComparer: (a, b) => a.code.localeCompare(b.code),
-});
+/* ---------- Types ---------- */
+export type Status = 'idle' | 'loading' | 'succeeded' | 'failed';
+// types/CurrencyDTO.ts
+export interface CurrencyDTO {
+  _id?: string; // ObjectId en string côté front
+  code: string; // ex: "USD", "CDF"
+  name: string; // ex: "US Dollar"
+  symbol?: string; // ex: "$", "FC"
+  isBase?: boolean; // true si devise de base
+  createdAt?: string; // ISO string
+  updatedAt?: string; // ISO string
+}
 
-interface CurrencyState {
-  status: 'idle' | 'loading' | 'succeeded' | 'failed';
+export interface Currency {
+  _id?: string;
+  code: string;
+  name: string;
+  symbol?: string;
+  isBase?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface CurrencyStateExtra {
+  status: Status;
   error: string | null;
   baseCurrency: Currency | null;
 }
 
-const initialState = currencyAdapter.getInitialState<CurrencyState>({
+const currencyAdapter: EntityAdapter<Currency, string> = createEntityAdapter<Currency, string>({
+  // @ts-expect-error allow ObjectId
+  selectId: (c) => c._id ?? c.id,
+  sortComparer: (a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
+});
+
+const initialState = currencyAdapter.getInitialState<CurrencyStateExtra>({
   status: 'idle',
   error: null,
   baseCurrency: null,
 });
 
+/* ---------- Utils ---------- */
 const getAuthHeaders = () => {
+  if (typeof window === 'undefined') return {};
   const token = localStorage.getItem('token-agricap');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// Thunks
-export const fetchCurrencies = createAsyncThunk(
-  'currencies/fetchAll',
+const toQueryString = (params: Record<string, any>) => {
+  const sp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return;
+    sp.append(k, String(v));
+  });
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+};
+
+/* ---------- Thunks ---------- */
+
+// GET /finance/currencies
+export const fetchCurrencies = createAsyncThunk<
+  Currency[],
+  { q?: string } | undefined,
+  { rejectValue: string }
+>('currencies/fetchAll', async (params, { rejectWithValue }) => {
+  try {
+    // NB: /finance/currencies n’a pas d’endpoint /search ; on envoie q si tu veux l’exploiter plus tard
+    const qs = toQueryString({ q: params?.q });
+    const res = await apiClient.get(`/finance/currencies${qs}`, { headers: getAuthHeaders() });
+    return (Array.isArray(res.data) ? res.data : (res.data?.data ?? [])) as Currency[];
+  } catch (e: any) {
+    return rejectWithValue(e?.message ?? 'Erreur lors du chargement des devises');
+  }
+});
+
+// GET /finance/currencies/base
+export const fetchBaseCurrency = createAsyncThunk<Currency, void, { rejectValue: string }>(
+  'currencies/fetchBase',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get('/finance/currencies', {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors du chargement des devises'
-      );
+      const res = await apiClient.get('/finance/currencies/base', { headers: getAuthHeaders() });
+      return res.data as Currency;
+    } catch (e: any) {
+      return rejectWithValue(e?.message ?? 'Erreur lors du chargement de la devise de base');
     }
   }
 );
 
-export const addCurrency = createAsyncThunk(
-  'currencies/add',
-  async (currency: Omit<Currency, '_id'>, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.post('/finance/currencies', currency, {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || "Erreur lors de l'ajout de la devise"
-      );
-    }
+// POST /finance/currencies
+export const addCurrency = createAsyncThunk<
+  Currency,
+  Omit<Currency, '_id'>,
+  { rejectValue: string }
+>('currencies/add', async (payload, { rejectWithValue }) => {
+  try {
+    const res = await apiClient.post('/finance/currencies', payload, { headers: getAuthHeaders() });
+    return res.data as Currency;
+  } catch (e: any) {
+    return rejectWithValue(e?.message ?? 'Erreur lors de la création de la devise');
   }
-);
+});
 
-export const updateCurrency = createAsyncThunk(
-  'currencies/update',
-  async ({ id, currency }: { id: string; currency: Partial<Currency> }, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.put(`/finance/currencies/${id}`, currency, {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors de la mise à jour de la devise'
-      );
-    }
-  }
-);
-
-export const deleteCurrency = createAsyncThunk(
-  'currencies/delete',
-  async (id: string, { rejectWithValue }) => {
-    try {
-      await apiClient.delete(`/finance/currencies/${id}`, {
-        headers: getAuthHeaders(),
-      });
-      return id;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors de la suppression de la devise'
-      );
-    }
-  }
-);
-
-export const setBaseCurrency = createAsyncThunk(
-  'currencies/setBase',
-  async (id: string, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.patch(
-        `/finance/currencies/${id}/set-base`,
-        {},
-        {
-          headers: getAuthHeaders(),
-        }
-      );
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors du changement de devise de base'
-      );
-    }
-  }
-);
-
+/* ---------- Slice ---------- */
 const currencySlice = createSlice({
   name: 'currencies',
   initialState,
   reducers: {},
   extraReducers: (builder) => {
     builder
+      // fetchCurrencies
       .addCase(fetchCurrencies.pending, (state) => {
         state.status = 'loading';
+        state.error = null;
       })
       .addCase(fetchCurrencies.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        currencyAdapter.setAll(state, action.payload);
-        state.baseCurrency = action.payload.find((c: Currency) => c.isBase) || null;
+        currencyAdapter.setAll(state, action.payload ?? []);
       })
       .addCase(fetchCurrencies.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload as string;
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
       })
-      .addCase(addCurrency.fulfilled, currencyAdapter.addOne)
-      .addCase(updateCurrency.fulfilled, (state, action) => {
-        currencyAdapter.updateOne(state, {
-          id: action.payload._id,
-          changes: action.payload,
-        });
-        if (action.payload.isBase) {
-          state.baseCurrency = action.payload;
-        }
+      // fetchBaseCurrency
+      .addCase(fetchBaseCurrency.fulfilled, (state, action) => {
+        state.baseCurrency = action.payload ?? null;
       })
-      .addCase(deleteCurrency.fulfilled, currencyAdapter.removeOne)
-      .addCase(setBaseCurrency.fulfilled, (state, action) => {
-        // Mettre à jour toutes les devises
-        state.ids.forEach((id) => {
-          if (state.entities[id]) {
-            state.entities[id]!.isBase = id === action.payload._id;
-          }
-        });
-        state.baseCurrency = action.payload;
+      .addCase(fetchBaseCurrency.rejected, (state, action) => {
+        state.baseCurrency = null;
+        state.error = (action.payload as string) ?? state.error;
+      })
+      // addCurrency
+      .addCase(addCurrency.pending, (state) => {
+        state.status = 'loading';
+      })
+      .addCase(addCurrency.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        currencyAdapter.addOne(state, action.payload);
+      })
+      .addCase(addCurrency.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = (action.payload as string) ?? 'Erreur lors de la création';
       });
   },
 });
 
 export const currencyReducer = currencySlice.reducer;
 
-// Sélecteurs
+/* ---------- Selectors ---------- */
 export const {
   selectAll: selectAllCurrencies,
   selectById: selectCurrencyById,
   selectEntities: selectCurrencyEntities,
-} = currencyAdapter.getSelectors<RootState>((state) => state.currencies);
+} = currencyAdapter.getSelectors<RootState>((s) => (s as any).currencies);
 
-export const selectBaseCurrency = (state: RootState) => state.currencies.baseCurrency;
-export const selectCurrencyStatus = (state: RootState) => state.currencies.status;
-export const selectCurrencyError = (state: RootState) => state.currencies.error;
+export const selectCurrenciesStatus = (s: RootState) => (s as any).currencies?.status as Status;
+export const selectCurrenciesError = (s: RootState) =>
+  (s as any).currencies?.error as string | null;
+export const selectBaseCurrency = (s: RootState) =>
+  (s as any).currencies?.baseCurrency as Currency | null;
