@@ -314,7 +314,7 @@ const Page = () => {
         searchProduits({ q, page: 1, limit: 10, includeTotal: false }) as any
       );
       if ((searchProduits as any).fulfilled.match(action)) {
-        const list = asArray<Produit>(action.payload?.data);
+        const list = asArray<Produit>(action.payload);
         list.forEach((p) => {
           if (p?._id) productCacheRef.current[p._id] = p;
         });
@@ -449,7 +449,7 @@ const Page = () => {
   );
 
   /* ------------------------------- UI -------------------------------------- */
-  console.log('org : ', org[0]);
+  console.log('org : ', searchProduits);
   return (
     <div className="min-h-screen p-4 text-xs">
       <Toast ref={toast} />

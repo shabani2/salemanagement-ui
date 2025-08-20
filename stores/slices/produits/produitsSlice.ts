@@ -360,7 +360,7 @@ const produitSlice = createSlice({
         state.searchError = null;
       })
       .addCase(searchProduits.fulfilled, (state, action) => {
-        // state.searchStatus = 'succeeded';
+        state.searchStatus = 'succeeded';
         const { meta } = action.payload;
         //@ts-ignore
         produitAdapter.upsertMany(state, action.payload);

@@ -495,10 +495,12 @@ export default function RegionManagement() {
                       <td className="px-4 py-2">
                         {r?.createdAt ? new Date(r.createdAt).toLocaleDateString() : '—'}
                       </td>
-                      <td className="px-4 py-2">{
-                        //@ts-ignore
-                      actionButton(r)
-                      }</td>
+                      <td className="px-4 py-2">
+                        {
+                          //@ts-ignore
+                          actionButton(r)
+                        }
+                      </td>
                     </tr>
                   ))
                 )}
