@@ -340,7 +340,6 @@ const CurrencyForm = ({ currency, onSuccess, onCancel, dispatch }: CurrencyFormP
           })
         ).unwrap();
       } else {
-        
         const { _id, ...cleanData } = formData;
         // @ts-expect-error - compat: external lib types mismatch
         await dispatch(addCurrency(cleanData)).unwrap();

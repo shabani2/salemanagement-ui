@@ -118,7 +118,7 @@ export const fetchStockByRegionId = createAsyncThunk(
       const res = await dispatch(
         fetchStocks({ region: regionId, includeTotal: true, includeRefs: true }) as any
       );
-    
+
       return res.payload;
     } catch (error: unknown) {
       if (error instanceof Error) return rejectWithValue(error.message);
@@ -134,7 +134,7 @@ export const fetchStockByPointVenteId = createAsyncThunk(
       const res = await dispatch(
         fetchStocks({ pointVente: pointVenteId, includeTotal: true, includeRefs: true }) as any
       );
-   
+
       return res.payload;
     } catch (error: unknown) {
       if (error instanceof Error) return rejectWithValue(error.message);

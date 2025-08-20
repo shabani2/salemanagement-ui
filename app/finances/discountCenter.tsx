@@ -114,7 +114,6 @@ const DiscountCenter = () => {
         showError(errorData.message || "Erreur lors de l'opération");
       }
     } catch (error: unknown) {
-     
       showError('Erreur réseau');
     }
   };
@@ -152,7 +151,6 @@ const DiscountCenter = () => {
         showError('Erreur lors de la mise à jour');
       }
     } catch (error) {
-      
       showError('Erreur réseau');
     }
   };
@@ -520,13 +518,12 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
     name: '',
     code: '',
     type: DiscountType.PERCENTAGE,
-   
+
     value: 0,
     // @ts-expect-error - compat: external lib types mismatch
     startDate: new Date(),
     appliesTo: 'ALL',
 
-   
     isActive: true,
     ...discount,
     // @ts-expect-error - compat: external lib types mismatch
@@ -583,7 +580,6 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
       life: 5000,
     });
   };
-
 
   const handleChange = (field: keyof Discount, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

@@ -110,7 +110,6 @@ export const ExchangeRatesPanel = () => {
       await dispatch(deleteExchangeRate(id)).unwrap();
       showSuccess('Taux de change supprimé avec succès');
     } catch (error: any) {
-      
       showError(error.message || 'Erreur lors de la suppression');
     }
   };

@@ -25,7 +25,7 @@ const Page = () => {
   }
 
   const [settings, setSettings] = useState<FinancialSettings | null>(null);
- 
+
   const [currencies, setCurrencies] = useState<any[]>([]);
 
   useEffect(() => {
@@ -70,7 +70,6 @@ const Page = () => {
                   <i className="pi pi-wallet mr-2" /> Devises
                 </span>
               }
-             
             >
               <CurrencyManager
                 // @ts-expect-error - compat: external lib types mismatch

@@ -40,12 +40,11 @@ const VendeurDashboard = () => {
     setLoading(true);
     try {
       const result = await dispatch(
-        fetchMouvementsStockAggregatedByUserId(
+        fetchMouvementsStockAggregatedByUserId()
         //   {
         //   userId: user._id,
         //   page: currentPage,
         // }
-      )
       ).unwrap();
 
       setTableData(result.mouvements);
@@ -423,4 +422,3 @@ export default VendeurDashboard;
 function fetchMouvementsStockAggregatedByUserId(): any {
   throw new Error('Function not implemented.');
 }
-

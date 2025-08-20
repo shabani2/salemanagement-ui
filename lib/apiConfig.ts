@@ -66,7 +66,6 @@ export const getApiUrl = (): string => {
   return normalizeUrl(resolved);
 };
 
-
 /** Base URL dynamique */
 let API_URL_RUNTIME = '';
 

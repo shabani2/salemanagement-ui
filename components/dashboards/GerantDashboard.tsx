@@ -51,8 +51,8 @@ const GerantDashboard = () => {
     } else if (user.role === 'Logisticien') {
       dispatch(fetchCommandesByUser(user?.pointVente?._id));
     }
-   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - typage imprécis de la lib externe
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - typage imprécis de la lib externe
   }, [dispatch]);
 
   const showMenu = (event: React.MouseEvent, commandeId: string) => {

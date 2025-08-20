@@ -104,7 +104,7 @@ const Page: React.FC = () => {
 
       // @ts-expect-error - compat: external lib types mismatch
       const result = await dispatch(updateUser(payload));
-     
+
       if (updateUser.fulfilled?.match?.(result) || result?.meta?.requestStatus === 'fulfilled') {
         const updated = avatarFile
           ? { ...editedUser, image: selectedUser?.image ?? '' } // backend retournera probablement le chemin, mais on mettra à jour après re-fetch
@@ -235,7 +235,6 @@ const Page: React.FC = () => {
                     type="text"
                     name={name}
                     placeholder={placeholder}
-                   
                     value={(editedUser as Partial<User>)?.[name as keyof User] ?? ''}
                     onChange={(e) =>
                       setEditedUser((p) => (p ? { ...p, [name]: e.target.value } : p))

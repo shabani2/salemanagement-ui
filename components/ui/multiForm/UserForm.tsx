@@ -70,7 +70,6 @@ const UserForm: React.FC<{ onNext: (user: User) => void }> = ({ onNext }) => {
     ];
 
     requiredFields.forEach((field) => {
-     
       if (!user[field]?.trim()) {
         newErrors[field] = 'Ce champ est requis';
       }

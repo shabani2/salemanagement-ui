@@ -103,36 +103,38 @@ const Page: React.FC = () => {
   );
 
   /* ------------------- Paramètres serveur (query) ------------------ */
-  const serverParams = useMemo(() => {
-    const roleFilters: Record<string, any> = {};
-    if (isAdminPointVente && isNonEmptyString((user as any)?.pointVente?._id)) {
-      roleFilters.pointVente = (user as any).pointVente._id;
-    } else if (isAdminRegion && isNonEmptyString((user as any)?.region?._id)) {
-      roleFilters.region = (user as any).region._id;
-    }
-    return {
-      page, // ✅ 1-based (évite les “sauts” d’offset)
-      limit: rows,
-      q: search || undefined,
+  const serverParams = useMemo(
+    () => {
+      const roleFilters: Record<string, any> = {};
+      if (isAdminPointVente && isNonEmptyString((user as any)?.pointVente?._id)) {
+        roleFilters.pointVente = (user as any).pointVente._id;
+      } else if (isAdminRegion && isNonEmptyString((user as any)?.region?._id)) {
+        roleFilters.region = (user as any).region._id;
+      }
+      return {
+        page, // ✅ 1-based (évite les “sauts” d’offset)
+        limit: rows,
+        q: search || undefined,
+        sortBy,
+        order,
+        includeTotal: true,
+        includeRefs: true,
+        ...roleFilters,
+      };
+    },
+    //@ts-ignore
+    [
+      page,
+      rows,
+      search,
       sortBy,
       order,
-      includeTotal: true,
-      includeRefs: true,
-      ...roleFilters,
-    };
-  },
-  //@ts-ignore
-   [
-    page,
-    rows,
-    search,
-    sortBy,
-    order,
-    isAdminPointVente,
-    isAdminRegion,
-    user?.region?._id,
-    user?.pointVente?._id,
-  ]);
+      isAdminPointVente,
+      isAdminRegion,
+      user?.region?._id,
+      user?.pointVente?._id,
+    ]
+  );
 
   /* --------------------------- Chargement data --------------------------- */
   useEffect(() => {
@@ -511,7 +513,7 @@ const Page: React.FC = () => {
           try {
             if (!item?._id) return;
             const r = await dispatch(validateMouvementStock(item._id as any));
-       
+
             if (
               validateMouvementStock.fulfilled?.match?.(r) ||
               r?.meta?.requestStatus === 'fulfilled'

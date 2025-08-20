@@ -203,9 +203,11 @@ const RegionDistributionPieChart: React.FC<Props> = ({ data, userRole, region, p
 
         <div className="relative flex-grow" style={{ minHeight: 250 }}>
           {chartData.labels.length > 0 ? (
-            <Pie data={chartData} 
-            //@ts-ignore
-             options={options} />
+            <Pie
+              data={chartData}
+              //@ts-ignore
+              options={options}
+            />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
               <PieChart size={40} />

@@ -140,7 +140,7 @@ const Page = () => {
   } = useForm<FormValues>({ defaultValues, mode: 'onChange' });
 
   const { fields, append, remove, update } = useFieldArray({ control, name: 'produits' });
-//@ts-ignore
+  //@ts-ignore
   const watchProduits = watch('produits') ?? [];
   const selectedPointVente = watch('pointVente');
   const type = watch('type');
@@ -211,7 +211,7 @@ const Page = () => {
     const regionVal = getValues('region');
     const userRegionId =
       typeof user?.region === 'string' ? user?.region : (user as any)?.region?._id;
-      //@ts-ignore
+    //@ts-ignore
     if (userRegionId && regionVal !== userRegionId) setValue('region', userRegionId);
   }, [isPointVenteLocked, pointsVente, user?.pointVente, user?.region, getValues, setValue]);
 

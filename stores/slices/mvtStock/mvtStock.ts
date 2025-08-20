@@ -360,8 +360,6 @@ export const fetchMouvementsAggregate = createAsyncThunk<
   }
 });
 
-
-
 // 2. Agrégation par point de vente (total par produit/type)
 export const fetchMouvementStockAggregatedByPointVente = createAsyncThunk(
   'mouvementStock/fetchAggregatedByPointVente',
@@ -385,8 +383,6 @@ export const fetchMouvementStockAggregatedByPointVente = createAsyncThunk(
     }
   }
 );
-
-
 
 /* ---------------- Slice ---------------- */
 

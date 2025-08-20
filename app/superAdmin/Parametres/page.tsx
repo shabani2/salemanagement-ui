@@ -120,7 +120,7 @@ const Page = () => {
   useEffect(() => {
     (async () => {
       const resp = await dispatch(fetchOrganisations());
-     
+
       const data: Organisation[] = Array.isArray(resp?.payload) ? resp.payload : [];
       setOrgs(data);
     })();
@@ -213,7 +213,7 @@ const Page = () => {
 
       // rafraîchir
       const resp = await dispatch(fetchOrganisations());
-   
+
       setOrgs(Array.isArray(resp?.payload) ? resp.payload : []);
     } catch (e: any) {
       notify('error', 'Erreur', "Échec de l'opération");

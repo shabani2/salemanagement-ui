@@ -172,7 +172,6 @@ const CommandeForm = () => {
       setCommandeProduits((prev) => [
         ...prev,
         {
-        
           produit: selectedProduit,
           quantite,
           nom: selectedProduit.nom,
@@ -283,8 +282,8 @@ const CommandeForm = () => {
         const prix =
           typeof p.produit === 'object'
             ? Number(p.produit.prix ?? 0)
-            // @ts-expect-error - compat: external lib types mismatch
-            : Number(p?.produit.prix ?? 0);
+            : // @ts-expect-error - compat: external lib types mismatch
+              Number(p?.produit.prix ?? 0);
         return total + prix * (p.quantite ?? 0);
       }, 0),
     [commandeProduits]

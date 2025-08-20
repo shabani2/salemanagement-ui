@@ -65,10 +65,7 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
                 <div className="relative w-12 h-12 rounded-full overflow-hidden">
                   {categorie.image && (
                     <img
-                      src={
-                       
-                        `http://localhost:8000/${categorie.image.replace('../', '')}`
-                      }
+                      src={`http://localhost:8000/${categorie.image.replace('../', '')}`}
                       alt={categorie.nom}
                       className="object-cover w-full h-full"
                     />

@@ -115,7 +115,7 @@ const MouvementRegionMontantChart: React.FC<Props> = ({
         : userRole === 'AdminRegion'
           ? ['(aucun PV)']
           : ['(aucune région)'];
-          //@ts-ignore
+    //@ts-ignore
   }, [data, userRole, region?._id, pointVente?._id, pointVente?.nom]);
 
   /* ----------------------------- Datasets (y-values) ----------------------------- */

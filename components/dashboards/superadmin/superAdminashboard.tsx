@@ -21,11 +21,7 @@ import { MouvementStock } from '@/Models/mouvementStockType';
 import MouvementStockAreaChart from './charts/mvtChart';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
-import {
-  fetchMouvementsStock,
- 
-  selectAllMouvementsStock,
-} from '@/stores/slices/mvtStock/mvtStock';
+import { fetchMouvementsStock, selectAllMouvementsStock } from '@/stores/slices/mvtStock/mvtStock';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { computeRegionStats } from '@/lib/utils/DataConvertRegion';
@@ -176,9 +172,11 @@ export default function SuperAdminDashboard() {
       <div className="flex flex-wrap gap-4">
         <DropdownTimeFilter data={allMvtForCharts} onChange={handleTimeChange} />
         <DropdownPointVenteFilter onSelect={handlePointVenteChange} />
-        <DropdownTypeFilter mvtStocks={allMvtForCharts}
-        //@ts-ignore
-         onChange={handleTypeChange} />
+        <DropdownTypeFilter
+          mvtStocks={allMvtForCharts}
+          //@ts-ignore
+          onChange={handleTypeChange}
+        />
       </div>
 
       {/* KPIs */}
