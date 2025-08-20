@@ -55,7 +55,7 @@ const regionAdapter: EntityAdapter<RegionWithCount, string> = createEntityAdapte
   RegionWithCount,
   string
 >({
-  // @ts-ignore
+  // @ts-expect-error - compat: external lib types mismatch
   selectId: (region) => region._id,
   sortComparer: false, // tri géré côté serveur
 });

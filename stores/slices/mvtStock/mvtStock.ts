@@ -360,6 +360,34 @@ export const fetchMouvementsAggregate = createAsyncThunk<
   }
 });
 
+
+
+// 2. Agrégation par point de vente (total par produit/type)
+export const fetchMouvementStockAggregatedByPointVente = createAsyncThunk(
+  'mouvementStock/fetchAggregatedByPointVente',
+  async (
+    { pointVenteId, page = 1 }: { pointVenteId: string; page?: number },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await apiClient.get(
+        `/mouvementStock/by-point-vente/aggregate/${pointVenteId}?page=${page}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Erreur lors de l'agrégation des mouvements");
+    }
+  }
+);
+
+
+
 /* ---------------- Slice ---------------- */
 
 const mouvementStockSlice = createSlice({

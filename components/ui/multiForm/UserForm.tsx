@@ -19,7 +19,7 @@ const UserForm: React.FC<{ onNext: (user: User) => void }> = ({ onNext }) => {
     adresse: '',
     role: 'SuperAdmin',
     password: '',
-    //@ts-ignore
+    // @ts-expect-error - compat: external lib types mismatch
     image: null,
   });
 
@@ -47,7 +47,7 @@ const UserForm: React.FC<{ onNext: (user: User) => void }> = ({ onNext }) => {
       reader.readAsDataURL(file);
 
       // Mettre à jour l'état de l'utilisateur
-      //@ts-ignore
+      // @ts-expect-error - compat: external lib types mismatch
       setUser({ ...user, image: file });
     }
   };
@@ -70,7 +70,7 @@ const UserForm: React.FC<{ onNext: (user: User) => void }> = ({ onNext }) => {
     ];
 
     requiredFields.forEach((field) => {
-      // @ts-ignore
+     
       if (!user[field]?.trim()) {
         newErrors[field] = 'Ce champ est requis';
       }

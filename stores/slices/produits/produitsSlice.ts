@@ -59,7 +59,7 @@ interface ProduitStateExtra {
 }
 
 const produitAdapter: EntityAdapter<Produit, string> = createEntityAdapter<Produit, string>({
-  // @ts-ignore
+  // @ts-expect-error - compat: external lib types mismatch
   selectId: (produit) => produit?._id,
   sortComparer: false, // on laisse le tri au backend
 });

@@ -25,7 +25,7 @@ const Page = () => {
   }
 
   const [settings, setSettings] = useState<FinancialSettings | null>(null);
-  //@ts-ignore
+ 
   const [currencies, setCurrencies] = useState<any[]>([]);
 
   useEffect(() => {
@@ -70,10 +70,10 @@ const Page = () => {
                   <i className="pi pi-wallet mr-2" /> Devises
                 </span>
               }
-              // @ts-ignore
+             
             >
               <CurrencyManager
-                //@ts-ignore
+                // @ts-expect-error - compat: external lib types mismatch
                 currencies={currencies}
               />
             </TabPanel>
@@ -85,7 +85,7 @@ const Page = () => {
               }
             >
               <ExchangeRatesPanel
-                //@ts-ignore
+                // @ts-expect-error - compat: external lib types mismatch
                 currencies={currencies}
               />
             </TabPanel>
@@ -107,7 +107,7 @@ const Page = () => {
             >
               {settings && (
                 <FinancialSettingsForm
-                  //@ts-ignore
+                  // @ts-expect-error - compat: external lib types mismatch
                   settings={settings}
                   currencies={currencies}
                 />

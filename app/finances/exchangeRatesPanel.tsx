@@ -89,7 +89,7 @@ export const ExchangeRatesPanel = () => {
         rate: rateValue,
         effectiveDate: effectiveDate.toISOString(),
       };
-      //@ts-ignore
+      // @ts-expect-error - compat: external lib types mismatch
       await dispatch(addExchangeRate(newRate)).unwrap();
 
       setBaseCurrency(null);
@@ -110,7 +110,7 @@ export const ExchangeRatesPanel = () => {
       await dispatch(deleteExchangeRate(id)).unwrap();
       showSuccess('Taux de change supprimé avec succès');
     } catch (error: any) {
-      //@ts-ignore
+      
       showError(error.message || 'Erreur lors de la suppression');
     }
   };

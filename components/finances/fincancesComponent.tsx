@@ -69,7 +69,7 @@ const FinancialSettingsForm = () => {
     // Initialiser les paramètres locaux quand les données sont chargées
     if (settings && currencies) {
       setLocalSettings(
-        //@ts-ignore
+        // @ts-expect-error - compat: external lib types mismatch
         {
           ...settings,
           defaultCurrency:

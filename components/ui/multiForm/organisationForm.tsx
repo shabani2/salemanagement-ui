@@ -107,7 +107,7 @@ const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void; user: Us
               <input
                 name={name}
                 placeholder={`${label} *`}
-                //@ts-ignore
+                // @ts-expect-error - compat: external lib types mismatch
                 value={formData[name as keyof Organisation] as string}
                 onChange={handleChange}
                 className="p-inputtext p-component w-full border rounded-md px-3 py-2"

@@ -340,10 +340,9 @@ const CurrencyForm = ({ currency, onSuccess, onCancel, dispatch }: CurrencyFormP
           })
         ).unwrap();
       } else {
-        // Création
-        //@ts-ignore
+        
         const { _id, ...cleanData } = formData;
-        //@ts-ignore
+        // @ts-expect-error - compat: external lib types mismatch
         await dispatch(addCurrency(cleanData)).unwrap();
       }
 
@@ -424,7 +423,7 @@ const CurrencyForm = ({ currency, onSuccess, onCancel, dispatch }: CurrencyFormP
         <div className="field col-12 md:col-8 flex align-items-center">
           <Checkbox
             inputId="isBase"
-            //@ts-ignore
+            // @ts-expect-error - compat: external lib types mismatch
             checked={formData.isBase}
             onChange={(e) => handleChange('isBase', e.checked)}
             disabled={formData.isBase && !!formData._id}

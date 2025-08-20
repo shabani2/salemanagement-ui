@@ -115,6 +115,7 @@ const MouvementRegionMontantChart: React.FC<Props> = ({
         : userRole === 'AdminRegion'
           ? ['(aucun PV)']
           : ['(aucune région)'];
+          //@ts-ignore
   }, [data, userRole, region?._id, pointVente?._id, pointVente?.nom]);
 
   /* ----------------------------- Datasets (y-values) ----------------------------- */
@@ -349,7 +350,7 @@ const MouvementRegionMontantChart: React.FC<Props> = ({
         <div className="relative" style={{ height: '340px' }}>
           <Line
             data={chartData}
-            // @ts-ignore
+            // @ts-expect-error - compat: external lib types mismatch
             options={options}
           />
         </div>

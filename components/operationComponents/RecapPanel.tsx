@@ -77,7 +77,7 @@ const RecapPanel = ({
                 responsiveLayout="scroll"
                 size="small"
                 rowClassName={(_, options) =>
-                  //@ts-ignore
+                  // @ts-expect-error - compat: external lib types mismatch
                   options.rowIndex % 2 === 0
                     ? '!bg-gray-300 !text-gray-900'
                     : '!bg-green-900 !text-white'

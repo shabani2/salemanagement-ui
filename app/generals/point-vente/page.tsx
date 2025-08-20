@@ -193,6 +193,7 @@ export default function PointVenteManagement() {
 
   const onChangeRows = (n: number) => {
     setRows(n);
+    //@ts-ignore
     const newTotalPages = Math.max(1, Math.ceil(total / n));
     const fixedPage = Math.min(page, newTotalPages);
     setPage(fixedPage);

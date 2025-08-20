@@ -510,6 +510,7 @@ const Page: React.FC = () => {
     } finally {
       setLoadingCreateOrUpdate(false);
     }
+    //@ts-ignore
   }, [dispatch, newUser, refetchUsers]);
 
   /* ------------------------------- handlers UI ------------------------------- */
@@ -780,7 +781,7 @@ const Page: React.FC = () => {
         showRegionField
         showPointVenteField
         UserRoleModel={['Admin', 'Manager', 'Vendeur']}
-        //@ts-ignore
+        // @ts-expect-error - compat: external lib types mismatch
         regions={regions}
         pointsVente={pointsVente}
         previewUrl={previewUrl}

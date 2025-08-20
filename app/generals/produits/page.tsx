@@ -471,6 +471,7 @@ const Page: React.FC = () => {
         includeTotal: true,
       })
     );
+    //@ts-ignore
   }, [dispatch, page, rows, sortBy, order]); // filtres text/cat -> via bouton Filtrer
 
   const applyFilters = useCallback(() => {

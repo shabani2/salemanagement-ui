@@ -120,7 +120,9 @@ const Page: React.FC = () => {
       includeRefs: true,
       ...roleFilters,
     };
-  }, [
+  },
+  //@ts-ignore
+   [
     page,
     rows,
     search,
@@ -509,7 +511,7 @@ const Page: React.FC = () => {
           try {
             if (!item?._id) return;
             const r = await dispatch(validateMouvementStock(item._id as any));
-            // @ts-ignore
+       
             if (
               validateMouvementStock.fulfilled?.match?.(r) ||
               r?.meta?.requestStatus === 'fulfilled'

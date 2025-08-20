@@ -2,9 +2,7 @@ import { PointVente } from './pointVenteType';
 import { Region } from './regionTypes';
 
 export interface User {
-  createdAt: any;
-  createdAt: any;
-  createdAt: any;
+  
   createdAt: any;
   _id: string;
   id: string;

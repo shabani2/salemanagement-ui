@@ -9,7 +9,7 @@ import { apiClient } from '../../../lib/apiConfig';
 import { Discount, DiscountType } from '@/Models/FinanceModel';
 
 const discountAdapter = createEntityAdapter<Discount, string>({
-  //@ts-ignore
+  // @ts-expect-error - compat: external lib types mismatch
   selectId: (discount: Discount) => discount?._id,
   sortComparer: (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
 });

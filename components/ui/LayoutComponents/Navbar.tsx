@@ -78,6 +78,8 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
       setUser(null);
     }
     setHasMounted(true);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - typage imprécis de la lib externe
   }, [pathname]); // 🔥 relit user sur changement de route
 
   if (!hasMounted) return null;

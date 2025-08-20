@@ -20,7 +20,7 @@ import { InputNumber } from 'primereact/inputnumber';
 import { InputText } from 'primereact/inputtext';
 
 interface Discount {
-  //@ts-ignore
+  // @ts-expect-error - compat: external lib types mismatch
   _id: string;
   name: string;
   code: string;
@@ -114,7 +114,7 @@ const DiscountCenter = () => {
         showError(errorData.message || "Erreur lors de l'opération");
       }
     } catch (error: unknown) {
-      //@ts-ignore
+     
       showError('Erreur réseau');
     }
   };
@@ -152,7 +152,7 @@ const DiscountCenter = () => {
         showError('Erreur lors de la mise à jour');
       }
     } catch (error) {
-      //@ts-ignore
+      
       showError('Erreur réseau');
     }
   };
@@ -480,15 +480,15 @@ const DiscountCenter = () => {
 export { DiscountCenter };
 
 interface Discount {
-  //@ts-ignore
+  // @ts-expect-error - compat: external lib types mismatch
   _id?: string;
   name: string;
   code: string;
   type: DiscountType;
   value: number;
-  //@ts-ignore
+  // @ts-expect-error - compat: external lib types mismatch
   startDate: Date;
-  //@ts-ignore
+  // @ts-expect-error - compat: external lib types mismatch
   endDate?: Date;
   maxAmount?: number;
   minPurchase?: number;
@@ -520,18 +520,18 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
     name: '',
     code: '',
     type: DiscountType.PERCENTAGE,
-    // @ts-ignore
+   
     value: 0,
-    //@ts-ignore
+    // @ts-expect-error - compat: external lib types mismatch
     startDate: new Date(),
     appliesTo: 'ALL',
 
-    // @ts-ignore
+   
     isActive: true,
     ...discount,
-    //@ts-ignore
+    // @ts-expect-error - compat: external lib types mismatch
     startDate: discount?.startDate ? new Date(discount.startDate) : new Date(),
-    //@ts-ignore
+    // @ts-expect-error - compat: external lib types mismatch
     endDate: discount?.endDate ? new Date(discount.endDate) : undefined,
   });
 
@@ -583,7 +583,7 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
       life: 5000,
     });
   };
-  //@ts-ignore
+
 
   const handleChange = (field: keyof Discount, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -654,7 +654,7 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
         <div className="field col-12 md:col-6">
           <label>Date de Début*</label>
           <Calendar
-            //@ts-ignore
+            // @ts-expect-error - compat: external lib types mismatch
             value={formData.startDate}
             onChange={(e) => handleChange('startDate', e.value as Date)}
             showTime
@@ -667,7 +667,7 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
         <div className="field col-12 md:col-6">
           <label>Date de Fin</label>
           <Calendar
-            //@ts-ignore
+            // @ts-expect-error - compat: external lib types mismatch
             value={formData.endDate}
             onChange={(e) => handleChange('endDate', e.value as Date)}
             showTime

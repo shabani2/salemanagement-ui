@@ -119,15 +119,14 @@ const Page: React.FC = () => {
 
   /* ------------------------------ Chargement data --------------------------- */
   useEffect(() => {
-    // fetch immédiat, pas de décalage
-    // @ts-ignore
+  
     dispatch(fetchStocks(serverFilters));
   }, [dispatch, serverFilters]);
 
   // fallback si pas de rôle connu au 1er rendu
   useEffect(() => {
     if (!user?.role) {
-      // @ts-ignore
+      
       dispatch(fetchStocks(serverFilters));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

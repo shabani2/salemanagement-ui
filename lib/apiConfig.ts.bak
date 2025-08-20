@@ -56,7 +56,7 @@ export const getApiUrl = (): string => {
   const apiDev = process.env.NEXT_PUBLIC_API_DEV;
   const apiTest = process.env.NEXT_PUBLIC_API_TEST;
 
-  const resolved =
+  let resolved =
     (currentEnv === 'production' && (apiProd || DEFAULT_API_FALLBACK)) ||
     (currentEnv === 'preview' && (apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||
     (currentEnv === 'test' && (apiTest || apiPreview || apiProd || DEFAULT_API_FALLBACK)) ||

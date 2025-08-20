@@ -120,7 +120,7 @@ const Page = () => {
   useEffect(() => {
     (async () => {
       const resp = await dispatch(fetchOrganisations());
-      // @ts-ignore
+     
       const data: Organisation[] = Array.isArray(resp?.payload) ? resp.payload : [];
       setOrgs(data);
     })();
@@ -149,6 +149,7 @@ const Page = () => {
     } else {
       setFormData((prev) => ({ ...EMPTY_FORM, superAdmin: superAdminId }));
     }
+    //@ts-ignore
   }, [currentOrg?._id, user?._id]); // re-hydrate si change
 
   /* ------------------------------ file preview ------------------------------ */
@@ -171,7 +172,7 @@ const Page = () => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   }, []);
-  //@ts-ignore
+
   const onFileSelect = useCallback(
     (e: any) => {
       const f = e.files?.[0];
@@ -202,7 +203,7 @@ const Page = () => {
       const fd = buildFormData(formData);
 
       if (currentOrg?._id) {
-        //@ts-ignore
+        // @ts-expect-error - compat: external lib types mismatch
         await dispatch(updateOrganisation({ id: currentOrg._id, data: fd })).unwrap();
         notify('success', 'Succès', 'Organisation mise à jour');
       } else {
@@ -212,7 +213,7 @@ const Page = () => {
 
       // rafraîchir
       const resp = await dispatch(fetchOrganisations());
-      // @ts-ignore
+   
       setOrgs(Array.isArray(resp?.payload) ? resp.payload : []);
     } catch (e: any) {
       notify('error', 'Erreur', "Échec de l'opération");

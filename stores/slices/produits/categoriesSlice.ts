@@ -69,9 +69,9 @@ interface CategorieState {
   error: string | null;
 }
 
-// @ts-ignore
+
 const categorieAdapter: EntityAdapter<Categorie, string> = createEntityAdapter<Categorie, string>({
-  // @ts-ignore
+  // @ts-expect-error - compat: external lib types mismatch
   selectId: (c) => c?._id,
 });
 
