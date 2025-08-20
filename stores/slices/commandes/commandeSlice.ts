@@ -13,6 +13,30 @@ import { apiClient } from '../../../lib/apiConfig';
 import { Commande } from '@/Models/commandeType';
 import { CommandeProduit } from '@/Models/CommandeProduitType';
 
+// types/commandes.ts (exemple)
+export type CommandeProduitInput = {
+  produit: string; // ObjectId du produit
+  quantite: number;
+};
+
+export type CommandePayload = {
+  user: string; // ObjectId
+  region?: string; // ObjectId
+  pointVente?: string; // ObjectId
+  depotCentral?: boolean;
+  produits: CommandeProduitInput[];
+
+  // impression immédiate
+  print?: boolean; // si true => PDF
+  format?: 'pos58' | 'pos80' | 'A5' | 'A4';
+  organisation?: any; // si tu veux passer l’orga au controller
+};
+
+// Réponse discriminée du thunk createCommande
+export type CreateCommandeResult =
+  | { type: 'json'; data: Commande } // création standard
+  | { type: 'pdf'; blob: Blob; filename: string }; // création + PDF
+
 interface CommandeState {
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
@@ -22,18 +46,37 @@ interface CommandeState {
 }
 
 // ✅ types d’input pour la création
-type CommandeProduitInput = {
-  produit: string; // ObjectId as string
-  quantite: number;
-  uniteMesure?: string; // optionnel
-};
+// type CommandeProduitInput = {
+//   produit: string; // ObjectId as string
+//   quantite: number;
+//   uniteMesure?: string; // optionnel
+// };
 
-export interface CommandePayload {
-  user: string;
-  region?: string;
-  pointVente?: string;
-  depotCentral?: boolean;
-  produits: CommandeProduitInput[]; // ⬅️ au lieu du Pick<>
+// export interface CommandePayload {
+//   user: string;
+//   region?: string;
+//   pointVente?: string;
+//   depotCentral?: boolean;
+//   produits: CommandeProduitInput[]; // ⬅️ au lieu du Pick<>
+// }
+
+// utils/download.ts
+export function downloadBlob(blob: Blob, filename = 'document.pdf') {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// utils/http.ts
+export function parseFilenameFromDisposition(cd?: string): string | null {
+  if (!cd) return null;
+  const match = /filename\*=UTF-8''([^;]+)|filename="?([^\";]+)"?/i.exec(cd);
+  return decodeURIComponent(match?.[1] || match?.[2] || '');
 }
 
 const commandeAdapter: EntityAdapter<Commande, string> = createEntityAdapter<Commande, string>({
@@ -153,23 +196,72 @@ export const fetchCommandeById = createAsyncThunk(
 );
 
 // Create
-export const createCommande = createAsyncThunk(
-  'commandes/createCommande',
-  async (payload: CommandePayload, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.post('/commandes', payload, {
-        headers: getAuthHeaders(),
-      });
-      // renvoie la commande peuplée
-      return response.data as Commande;
-    } catch (error: any) {
-      return rejectWithValue(
-        error?.response?.data?.message || 'Erreur lors de la création de la commande'
+export const createCommande = createAsyncThunk<
+  CreateCommandeResult,
+  CommandePayload,
+  { rejectValue: string }
+>('commandes/createCommande', async (payload, { rejectWithValue }) => {
+  try {
+    // impression immédiate -> on utilise ?pdf=1&format=...
+    if (payload.print) {
+      const { print, format = 'pos80', ...body } = payload;
+      const res = await apiClient.post(
+        `/commandes?pdf=1&format=${encodeURIComponent(format)}`,
+        body,
+        {
+          headers: {
+            ...getAuthHeaders(),
+            Accept: 'application/pdf',
+          },
+          responseType: 'blob', // <- important pour récupérer le PDF
+        }
       );
-    }
-  }
-);
 
+      const cd =
+        (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
+      const filename = parseFilenameFromDisposition(cd) || 'Bon_de_commande.pdf';
+
+      return { type: 'pdf', blob: res.data as Blob, filename };
+    }
+
+    // création simple -> JSON
+    const res = await apiClient.post('/commandes', payload, {
+      headers: getAuthHeaders(),
+    });
+    return { type: 'json', data: res.data as Commande };
+  } catch (error: any) {
+    return rejectWithValue(
+      error?.response?.data?.message || 'Erreur lors de la création de la commande'
+    );
+  }
+});
+
+// 2) Imprimer une commande existante
+export const printCommandeById = createAsyncThunk<
+  { blob: Blob; filename: string },
+  { id: string; format?: 'pos58' | 'pos80' | 'A5' | 'A4' },
+  { rejectValue: string }
+>('commandes/printCommandeById', async ({ id, format = 'pos80' }, { rejectWithValue }) => {
+  try {
+    const res = await apiClient.get(`/commandes/${id}/print?format=${encodeURIComponent(format)}`, {
+      headers: {
+        ...getAuthHeaders(),
+        Accept: 'application/pdf',
+      },
+      responseType: 'blob',
+    });
+
+    const cd =
+      (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
+    const filename = parseFilenameFromDisposition(cd) || `Bon_de_commande_${id}.pdf`;
+
+    return { blob: res.data as Blob, filename };
+  } catch (error: any) {
+    return rejectWithValue(
+      error?.response?.data?.message || "Erreur lors de l'impression du bon de commande"
+    );
+  }
+});
 // Update
 export const updateCommande = createAsyncThunk(
   'commandes/updateCommande',
@@ -259,6 +351,7 @@ const commandeSlice = createSlice({
 
       // create / update / delete
       .addCase(createCommande.fulfilled, (state, action) => {
+        //@ts-ignore
         commandeAdapter.addOne(state, action.payload);
         state.totalCommandes += 1;
       })

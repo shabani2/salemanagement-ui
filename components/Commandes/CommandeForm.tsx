@@ -31,7 +31,7 @@ import {
   fetchPointVentesByRegionId,
   selectAllPointVentes,
 } from '@/stores/slices/pointvente/pointventeSlice';
-import { createCommande } from '@/stores/slices/commandes/commandeSlice';
+import { createCommande, downloadBlob } from '@/stores/slices/commandes/commandeSlice';
 
 import { CommandeNotification } from '../CommandeNotification';
 
@@ -125,7 +125,7 @@ const CommandeForm = () => {
 
         // si fulfilled, on prend action.payload.data
         if ((searchProduits as any).fulfilled.match(action)) {
-          const list = asArray<Produit>(action.payload?.data);
+          const list = asArray<Produit>(action.payload);
           setSuggestions(list);
         } else {
           setSuggestions([]);
@@ -203,6 +203,92 @@ const CommandeForm = () => {
     return hasItems && hasLocation && status !== 'loading';
   }, [commandeProduits.length, selectedRegion, selectedPointVente, status]);
 
+  // const handleSubmit = useCallback(async () => {
+  //   if (commandeProduits.length === 0) {
+  //     toast.current?.show({
+  //       severity: 'warn',
+  //       summary: 'Commande vide',
+  //       detail: 'Veuillez ajouter au moins un produit',
+  //       life: 3000,
+  //     });
+  //     return;
+  //   }
+
+  //   if (!selectedRegion && !selectedPointVente) {
+  //     toast.current?.show({
+  //       severity: 'warn',
+  //       summary: 'Localisation requise',
+  //       detail: 'Choisissez une région ou un point de vente.',
+  //       life: 3000,
+  //     });
+  //     return;
+  //   }
+
+  //   setStatus('loading');
+
+  //   const produitsPourAPI = commandeProduits.map((item) => ({
+  //     produit: typeof item.produit === 'object' ? item.produit._id : item.produit,
+  //     quantite: item.quantite,
+  //     // uniteMesure?: si tu l’utilises un jour
+  //   }));
+
+  //   const payload = {
+  //     user: user?._id,
+  //     region: selectedRegion?._id || undefined,
+  //     pointVente: selectedPointVente?._id || undefined,
+  //     depotCentral: false,
+  //     produits: produitsPourAPI,
+  //   };
+
+  //   try {
+  //     // @ts-expect-error - compat: external lib types mismatch
+  //     const resultAction = await dispatch(createCommande(payload));
+  //     if (createCommande.fulfilled.match(resultAction)) {
+  //       toast.current?.show({
+  //         severity: 'success',
+  //         summary: 'Succès',
+  //         detail: 'Commande créée avec succès',
+  //         life: 3000,
+  //       });
+  //       // reset “soft”
+  //       setCommandeProduits([]);
+  //       // garde tes sélections si tu veux, sinon :
+  //       setSelectedRegion(null);
+  //       setSelectedPointVente(null);
+  //     } else {
+  //       toast.current?.show({
+  //         severity: 'error',
+  //         summary: 'Erreur',
+  //         // @ts-expect-error - compat: external lib types mismatch
+  //         detail: resultAction.payload || 'Erreur lors de la création de la commande',
+  //         life: 5000,
+  //       });
+  //     }
+  //   } catch (err) {
+  //     toast.current?.show({
+  //       severity: 'error',
+  //       summary: 'Erreur',
+  //       detail: (err as Error).message || 'Erreur inconnue',
+  //       life: 5000,
+  //     });
+  //   } finally {
+  //     setStatus('idle');
+  //   }
+  // }, [commandeProduits, selectedRegion, selectedPointVente, dispatch, user?._id]);
+
+  const totalCommande = useMemo(
+    () =>
+      commandeProduits.reduce((total, p) => {
+        const prix =
+          typeof p.produit === 'object'
+            ? Number(p.produit.prix ?? 0)
+            : // @ts-expect-error - compat: external lib types mismatch
+              Number(p?.produit.prix ?? 0);
+        return total + prix * (p.quantite ?? 0);
+      }, 0),
+    [commandeProduits]
+  );
+
   const handleSubmit = useCallback(async () => {
     if (commandeProduits.length === 0) {
       toast.current?.show({
@@ -229,7 +315,6 @@ const CommandeForm = () => {
     const produitsPourAPI = commandeProduits.map((item) => ({
       produit: typeof item.produit === 'object' ? item.produit._id : item.produit,
       quantite: item.quantite,
-      // uniteMesure?: si tu l’utilises un jour
     }));
 
     const payload = {
@@ -238,28 +323,43 @@ const CommandeForm = () => {
       pointVente: selectedPointVente?._id || undefined,
       depotCentral: false,
       produits: produitsPourAPI,
+      print: true, // ← AJOUTE ÇA pour demander l'impression
+      format: 'pos80', // ← Optionnel : format par défaut
     };
 
     try {
-      // @ts-expect-error - compat: external lib types mismatch
+      //@ts-ignore
       const resultAction = await dispatch(createCommande(payload));
+
       if (createCommande.fulfilled.match(resultAction)) {
-        toast.current?.show({
-          severity: 'success',
-          summary: 'Succès',
-          detail: 'Commande créée avec succès',
-          life: 3000,
-        });
-        // reset “soft”
+        const result = resultAction.payload;
+
+        if (result.type === 'pdf') {
+          // Télécharger le PDF
+          downloadBlob(result.blob, result.filename);
+          toast.current?.show({
+            severity: 'success',
+            summary: 'Succès',
+            detail: 'Commande créée et imprimée avec succès',
+            life: 3000,
+          });
+        } else {
+          toast.current?.show({
+            severity: 'success',
+            summary: 'Succès',
+            detail: 'Commande créée avec succès',
+            life: 3000,
+          });
+        }
+
+        // Reset
         setCommandeProduits([]);
-        // garde tes sélections si tu veux, sinon :
         setSelectedRegion(null);
         setSelectedPointVente(null);
       } else {
         toast.current?.show({
           severity: 'error',
           summary: 'Erreur',
-          // @ts-expect-error - compat: external lib types mismatch
           detail: resultAction.payload || 'Erreur lors de la création de la commande',
           life: 5000,
         });
@@ -275,19 +375,6 @@ const CommandeForm = () => {
       setStatus('idle');
     }
   }, [commandeProduits, selectedRegion, selectedPointVente, dispatch, user?._id]);
-
-  const totalCommande = useMemo(
-    () =>
-      commandeProduits.reduce((total, p) => {
-        const prix =
-          typeof p.produit === 'object'
-            ? Number(p.produit.prix ?? 0)
-            : // @ts-expect-error - compat: external lib types mismatch
-              Number(p?.produit.prix ?? 0);
-        return total + prix * (p.quantite ?? 0);
-      }, 0),
-    [commandeProduits]
-  );
 
   /* ---------------------------------- UI ---------------------------------- */
   return (
