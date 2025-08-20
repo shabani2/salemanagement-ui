@@ -1,108 +1,162 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// finance/exchangeRateSlice.ts
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
-import { createSlice, createAsyncThunk, createEntityAdapter } from '@reduxjs/toolkit';
+import {
+  createSlice,
+  createAsyncThunk,
+  createEntityAdapter,
+  type EntityAdapter,
+} from '@reduxjs/toolkit';
 import { RootState } from '../../store';
 import { apiClient } from '../../../lib/apiConfig';
-import { ExchangeRate } from '@/Models/FinanceModel';
+import type { Status } from './currencySlice';
 
-const exchangeRateAdapter = createEntityAdapter<ExchangeRate, string>({
-  selectId: (rate) => rate._id,
-  sortComparer: (a, b) => new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime(),
-});
-
-interface ExchangeRateState {
-  status: 'idle' | 'loading' | 'succeeded' | 'failed';
-  error: string | null;
+/* ---------- Types ---------- */
+export interface CurrencyRef {
+  _id?: string;
+  code?: string;
+  name?: string;
+  symbol?: string;
 }
 
-const initialState = exchangeRateAdapter.getInitialState<ExchangeRateState>({
-  status: 'idle',
-  error: null,
+export interface ExchangeRate {
+  _id?: string;
+  baseCurrency: string | CurrencyRef;
+  targetCurrency: string | CurrencyRef;
+  rate: number;
+  effectiveDate?: string;
+  expirationDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface ExchangeRateStateExtra {
+  status: Status;
+  error: string | null;
+  lastPair?: { baseId: string; targetId: string } | null;
+  lastPairRate?: ExchangeRate | null;
+}
+
+const adapter: EntityAdapter<ExchangeRate, string> = createEntityAdapter<ExchangeRate, string>({
+  selectId: (r) =>
+    r._id ??
+    `${(r.baseCurrency as any)?._id ?? r.baseCurrency}__${(r.targetCurrency as any)?._id ?? r.targetCurrency}`,
+  sortComparer: (a, b) => (b.effectiveDate ?? '').localeCompare(a.effectiveDate ?? ''),
 });
 
+const initialState = adapter.getInitialState<ExchangeRateStateExtra>({
+  status: 'idle',
+  error: null,
+  lastPair: null,
+  lastPairRate: null,
+});
+
+/* ---------- Utils ---------- */
 const getAuthHeaders = () => {
+  if (typeof window === 'undefined') return {};
   const token = localStorage.getItem('token-agricap');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// Thunks
-export const fetchExchangeRates = createAsyncThunk(
-  'exchangeRates/fetchAll',
-  async (_, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.get('/finance/exchange-rates', {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors du chargement des taux de change'
-      );
-    }
-  }
-);
+const toQueryString = (params: Record<string, any>) => {
+  const sp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return;
+    sp.append(k, String(v));
+  });
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+};
 
-export const addExchangeRate = createAsyncThunk(
-  'exchangeRates/add',
-  async (rate: Omit<ExchangeRate, '_id'>, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.post('/finance/exchange-rates', rate, {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || "Erreur lors de l'ajout du taux de change"
-      );
-    }
-  }
-);
+/* ---------- Thunks ---------- */
 
-export const deleteExchangeRate = createAsyncThunk(
-  'exchangeRates/delete',
-  async (id: string, { rejectWithValue }) => {
-    try {
-      await apiClient.delete(`/finance/exchange-rates/${id}`, {
-        headers: getAuthHeaders(),
-      });
-      return id;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors de la suppression du taux de change'
-      );
-    }
+// GET /finance/exchange-rates?baseCurrency=&targetCurrency=&active=
+export const fetchExchangeRates = createAsyncThunk<
+  ExchangeRate[],
+  { baseCurrency?: string; targetCurrency?: string; active?: boolean } | undefined,
+  { rejectValue: string }
+>('exchangeRates/fetchAll', async (params, { rejectWithValue }) => {
+  try {
+    const qs = toQueryString({
+      baseCurrency: params?.baseCurrency,
+      targetCurrency: params?.targetCurrency,
+      active: params?.active,
+    });
+    const res = await apiClient.get(`/finance/exchange-rates${qs}`, { headers: getAuthHeaders() });
+    return (Array.isArray(res.data) ? res.data : (res.data?.data ?? [])) as ExchangeRate[];
+  } catch (e: any) {
+    return rejectWithValue(e?.message ?? 'Erreur lors du chargement des taux');
   }
-);
+});
 
+// GET /finance/exchange-rates/:baseId/:targetId
+export const fetchExchangeRateByPair = createAsyncThunk<
+  ExchangeRate,
+  { baseId: string; targetId: string },
+  { rejectValue: string }
+>('exchangeRates/fetchByPair', async ({ baseId, targetId }, { rejectWithValue }) => {
+  try {
+    const res = await apiClient.get(`/finance/exchange-rates/${baseId}/${targetId}`, {
+      headers: getAuthHeaders(),
+    });
+    return res.data as ExchangeRate;
+  } catch (e: any) {
+    return rejectWithValue(e?.message ?? 'Taux non trouvé');
+  }
+});
+
+/* ---------- Slice ---------- */
 const exchangeRateSlice = createSlice({
   name: 'exchangeRates',
   initialState,
   reducers: {},
   extraReducers: (builder) => {
     builder
+      // fetchExchangeRates
       .addCase(fetchExchangeRates.pending, (state) => {
         state.status = 'loading';
+        state.error = null;
       })
       .addCase(fetchExchangeRates.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        exchangeRateAdapter.setAll(state, action.payload);
+        adapter.setAll(state, action.payload ?? []);
       })
       .addCase(fetchExchangeRates.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload as string;
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
       })
-      .addCase(addExchangeRate.fulfilled, exchangeRateAdapter.addOne)
-      .addCase(deleteExchangeRate.fulfilled, exchangeRateAdapter.removeOne);
+      // fetchExchangeRateByPair
+      .addCase(fetchExchangeRateByPair.fulfilled, (state, action) => {
+        state.lastPair = {
+          baseId: String((action.payload.baseCurrency as any)?._id ?? action.payload.baseCurrency),
+          targetId: String(
+            (action.payload.targetCurrency as any)?._id ?? action.payload.targetCurrency
+          ),
+        };
+        state.lastPairRate = action.payload;
+        adapter.upsertOne(state, action.payload);
+      })
+      .addCase(fetchExchangeRateByPair.rejected, (state, action) => {
+        state.lastPairRate = null;
+        state.error = (action.payload as string) ?? state.error;
+      });
   },
 });
 
 export const exchangeRateReducer = exchangeRateSlice.reducer;
 
-// Sélecteurs
-export const { selectAll: selectAllExchangeRates, selectById: selectExchangeRateById } =
-  exchangeRateAdapter.getSelectors<RootState>((state) => state.exchangeRates);
+/* ---------- Selectors ---------- */
+export const {
+  selectAll: selectAllExchangeRates,
+  selectById: selectExchangeRateById,
+  selectEntities: selectExchangeRateEntities,
+} = adapter.getSelectors<RootState>((s) => (s as any).exchangeRates);
 
-export const selectExchangeRateStatus = (state: RootState) => state.exchangeRates.status;
-export const selectExchangeRateError = (state: RootState) => state.exchangeRates.error;
+export const selectExchangeRatesStatus = (s: RootState) =>
+  (s as any).exchangeRates?.status as Status;
+export const selectExchangeRatesError = (s: RootState) =>
+  (s as any).exchangeRates?.error as string | null;
+export const selectLastPair = (s: RootState) =>
+  (s as any).exchangeRates?.lastPair as { baseId: string; targetId: string } | null;
+export const selectLastPairRate = (s: RootState) =>
+  (s as any).exchangeRates?.lastPairRate as ExchangeRate | null;

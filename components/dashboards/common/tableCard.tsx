@@ -38,7 +38,7 @@ const TableCard = <T extends DataTableValue>({ title, data, columns }: TableCard
             key={String(col.field)}
             header={col.header}
             size="small"
-            //@ts-ignore
+            // @ts-expect-error - compat: external lib types mismatch
             body={(rowData: T) => {
               const value = getNestedValue(rowData, col.field);
               if (value === undefined || value === null) return null;

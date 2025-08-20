@@ -95,19 +95,19 @@ const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void; user: Us
           {[
             { name: 'nom', label: 'Nom' },
             { name: 'rccm', label: 'RCCM' },
+            { name: 'idNat', label: 'ID National' },
+            { name: 'numeroImpot', label: "Numéro d'impôt" },
             { name: 'contact', label: 'Contact' },
             { name: 'siegeSocial', label: 'Siège social' },
             { name: 'devise', label: 'Devise' },
             { name: 'pays', label: 'Pays' },
             { name: 'emailEntreprise', label: 'Email de l’entreprise' },
-            { name: 'idNat', label: 'ID National' },
-            { name: 'numeroImpot', label: "Numéro d'impôt" },
           ].map(({ name, label }) => (
             <div key={name}>
               <input
                 name={name}
                 placeholder={`${label} *`}
-                //@ts-ignore
+                // @ts-expect-error - compat: external lib types mismatch
                 value={formData[name as keyof Organisation] as string}
                 onChange={handleChange}
                 className="p-inputtext p-component w-full border rounded-md px-3 py-2"

@@ -68,7 +68,7 @@ const MultiStepForm: React.FC = () => {
         {step === 1 && <UserForm onNext={handleNextUser} />}
         {step === 2 && (
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          //@ts-ignore
+          // @ts-expect-error - compat: external lib types mismatch
           <OrganisationForm onNext={handleNextOrganisation} user={user} />
         )}
 

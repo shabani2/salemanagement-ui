@@ -1,164 +1,174 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
-// finance/discountSlice.ts
 'use client';
 
-import { createSlice, createAsyncThunk, createEntityAdapter } from '@reduxjs/toolkit';
+import {
+  createSlice,
+  createAsyncThunk,
+  createEntityAdapter,
+  type EntityAdapter,
+} from '@reduxjs/toolkit';
 import { RootState } from '../../store';
 import { apiClient } from '../../../lib/apiConfig';
-import { Discount, DiscountType } from '@/Models/FinanceModel';
+import type { Status } from './currencySlice';
 
-const discountAdapter = createEntityAdapter<Discount, string>({
-  //@ts-ignore
-  selectId: (discount: Discount) => discount?._id,
-  sortComparer: (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
-});
-
-interface DiscountState {
-  status: 'idle' | 'loading' | 'succeeded' | 'failed';
-  error: string | null;
+/* ---------- Types ---------- */
+export interface Discount {
+  _id?: string;
+  code: string;
+  description?: string;
+  type?: string; // e.g., 'percent' | 'fixed'
+  value?: number;
+  isActive?: boolean;
+  startDate?: string;
+  endDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-const initialState = discountAdapter.getInitialState<DiscountState>({
-  status: 'idle',
-  error: null,
+interface DiscountStateExtra {
+  status: Status;
+  error: string | null;
+  lastValidation?: { code: string; valid: boolean; discount?: Discount } | null;
+}
+
+const adapter: EntityAdapter<Discount, string> = createEntityAdapter<Discount, string>({
+  // @ts-expect-error ObjectId compat
+  selectId: (d) => d._id ?? d.id ?? d.code,
+  sortComparer: (a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
 });
 
+const initialState = adapter.getInitialState<DiscountStateExtra>({
+  status: 'idle',
+  error: null,
+  lastValidation: null,
+});
+
+/* ---------- Utils ---------- */
 const getAuthHeaders = () => {
+  if (typeof window === 'undefined') return {};
   const token = localStorage.getItem('token-agricap');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// Thunks
-export const fetchDiscounts = createAsyncThunk(
-  'discounts/fetchAll',
-  async (_, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.get('/finance/discounts', {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors du chargement des réductions'
-      );
-    }
-  }
-);
+const toQueryString = (params: Record<string, any>) => {
+  const sp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return;
+    sp.append(k, String(v));
+  });
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+};
 
-export const addDiscount = createAsyncThunk(
-  'discounts/add',
-  async (discount: Omit<Discount, '_id'>, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.post('/finance/discounts', discount, {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || "Erreur lors de l'ajout de la réduction"
-      );
-    }
-  }
-);
+/* ---------- Thunks ---------- */
 
-export const updateDiscount = createAsyncThunk(
-  'discounts/update',
-  async ({ id, discount }: { id: string; discount: Partial<Discount> }, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.put(`/finance/discounts/${id}`, discount, {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors de la mise à jour de la réduction'
-      );
-    }
+// GET /finance/discounts?type=&active=
+export const fetchDiscounts = createAsyncThunk<
+  Discount[],
+  { type?: string; active?: boolean } | undefined,
+  { rejectValue: string }
+>('discounts/fetchAll', async (params, { rejectWithValue }) => {
+  try {
+    const qs = toQueryString({ type: params?.type, active: params?.active });
+    const res = await apiClient.get(`/finance/discounts${qs}`, { headers: getAuthHeaders() });
+    return (Array.isArray(res.data) ? res.data : (res.data?.data ?? [])) as Discount[];
+  } catch (e: any) {
+    return rejectWithValue(e?.message ?? 'Erreur lors du chargement des réductions');
   }
-);
+});
 
-export const deleteDiscount = createAsyncThunk(
-  'discounts/delete',
-  async (id: string, { rejectWithValue }) => {
-    try {
-      await apiClient.delete(`/finance/discounts/${id}`, {
-        headers: getAuthHeaders(),
-      });
-      return id;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors de la suppression de la réduction'
-      );
-    }
+// POST /finance/discounts
+export const addDiscount = createAsyncThunk<
+  Discount,
+  Omit<Discount, '_id'>,
+  { rejectValue: string }
+>('discounts/add', async (payload, { rejectWithValue }) => {
+  try {
+    const res = await apiClient.post('/finance/discounts', payload, { headers: getAuthHeaders() });
+    return res.data as Discount;
+  } catch (e: any) {
+    return rejectWithValue(e?.message ?? 'Erreur lors de la création de la réduction');
   }
-);
+});
 
-export const toggleDiscountStatus = createAsyncThunk(
-  'discounts/toggleStatus',
-  async (id: string, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.patch(
-        `/finance/discounts/${id}/toggle-status`,
-        {},
-        {
-          headers: getAuthHeaders(),
-        }
-      );
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Erreur lors du changement de statut'
-      );
-    }
+// GET /finance/discounts/validate/:code
+export const validateDiscountCode = createAsyncThunk<
+  { code: string; valid: boolean; discount?: Discount },
+  { code: string },
+  { rejectValue: string }
+>('discounts/validate', async ({ code }, { rejectWithValue }) => {
+  try {
+    const res = await apiClient.get(`/finance/discounts/validate/${encodeURIComponent(code)}`, {
+      headers: getAuthHeaders(),
+    });
+    const payload = res.data as { valid: boolean; discount?: Discount };
+    return { code, valid: payload.valid, discount: payload.discount };
+  } catch (e: any) {
+    // 404 => invalide
+    return rejectWithValue(e?.message ?? 'Code invalide ou expiré');
   }
-);
+});
 
+/* ---------- Slice ---------- */
 const discountSlice = createSlice({
   name: 'discounts',
   initialState,
   reducers: {},
   extraReducers: (builder) => {
     builder
+      // fetchDiscounts
       .addCase(fetchDiscounts.pending, (state) => {
         state.status = 'loading';
+        state.error = null;
       })
       .addCase(fetchDiscounts.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        discountAdapter.setAll(state, action.payload);
+        adapter.setAll(state, action.payload ?? []);
       })
       .addCase(fetchDiscounts.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload as string;
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
       })
-      .addCase(addDiscount.fulfilled, discountAdapter.addOne)
-      .addCase(updateDiscount.fulfilled, (state, action) => {
-        discountAdapter.updateOne(state, {
-          id: action.payload._id,
-          changes: action.payload,
-        });
+      // addDiscount
+      .addCase(addDiscount.pending, (state) => {
+        state.status = 'loading';
       })
-      .addCase(deleteDiscount.fulfilled, discountAdapter.removeOne)
-      .addCase(toggleDiscountStatus.fulfilled, (state, action) => {
-        discountAdapter.updateOne(state, {
-          id: action.payload._id,
-          changes: { isActive: action.payload.isActive },
-        });
+      .addCase(addDiscount.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        adapter.addOne(state, action.payload);
+      })
+      .addCase(addDiscount.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = (action.payload as string) ?? 'Erreur lors de la création';
+      })
+      // validateDiscountCode
+      .addCase(validateDiscountCode.fulfilled, (state, action) => {
+        state.lastValidation = action.payload;
+        if (action.payload.valid && action.payload.discount) {
+          adapter.upsertOne(state, action.payload.discount);
+        }
+      })
+      .addCase(validateDiscountCode.rejected, (state, action) => {
+        state.lastValidation = { code: '', valid: false };
+        state.error = (action.payload as string) ?? state.error;
       });
   },
 });
 
 export const discountReducer = discountSlice.reducer;
 
-// Sélecteurs
-export const { selectAll: selectAllDiscounts, selectById: selectDiscountById } =
-  discountAdapter.getSelectors<RootState>((state) => state.discounts);
+/* ---------- Selectors ---------- */
+export const {
+  selectAll: selectAllDiscounts,
+  selectById: selectDiscountById,
+  selectEntities: selectDiscountEntities,
+} = adapter.getSelectors<RootState>((s) => (s as any).discounts);
 
-export const selectActiveDiscounts = (state: RootState) =>
-  selectAllDiscounts(state).filter((d) => d.isActive);
-
-export const selectDiscountByType = (type: DiscountType) => (state: RootState) =>
-  selectAllDiscounts(state).filter((d) => d.type === type);
-
-export const selectDiscountStatus = (state: RootState) => state.discounts.status;
-export const selectDiscountError = (state: RootState) => state.discounts.error;
+export const selectDiscountsStatus = (s: RootState) => (s as any).discounts?.status as Status;
+export const selectDiscountsError = (s: RootState) => (s as any).discounts?.error as string | null;
+export const selectLastDiscountValidation = (s: RootState) =>
+  (s as any).discounts?.lastValidation as {
+    code: string;
+    valid: boolean;
+    discount?: Discount;
+  } | null;

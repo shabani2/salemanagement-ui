@@ -69,8 +69,12 @@ const Page = () => {
 
   /* ------------------------------ helpers ------------------------------ */
   const notify = useCallback(
-    (severity: 'success' | 'info' | 'warn' | 'error', summary: string, detail: string, life = 3000) =>
-      toast.current?.show({ severity, summary, detail, life }),
+    (
+      severity: 'success' | 'info' | 'warn' | 'error',
+      summary: string,
+      detail: string,
+      life = 3000
+    ) => toast.current?.show({ severity, summary, detail, life }),
     []
   );
 
@@ -107,7 +111,7 @@ const Page = () => {
       const tooLarge = p.logo.size > 2_000_000; // 2 Mo
       const notImage = !p.logo.type.startsWith('image/');
       if (tooLarge) errors.push('Le logo ne doit pas dépasser 2 Mo.');
-      if (notImage) errors.push("Le logo doit être une image (png/jpg/webp…).");
+      if (notImage) errors.push('Le logo doit être une image (png/jpg/webp…).');
     }
     return errors;
   };
@@ -116,7 +120,7 @@ const Page = () => {
   useEffect(() => {
     (async () => {
       const resp = await dispatch(fetchOrganisations());
-      // @ts-ignore
+
       const data: Organisation[] = Array.isArray(resp?.payload) ? resp.payload : [];
       setOrgs(data);
     })();
@@ -137,13 +141,15 @@ const Page = () => {
         pays: currentOrg.pays ?? '',
         emailEntreprise: currentOrg.emailEntreprise ?? '',
         logo: currentOrg.logo ?? null,
-        superAdmin: (currentOrg.superAdmin as any)?._id ?? (currentOrg.superAdmin as any) ?? superAdminId,
+        superAdmin:
+          (currentOrg.superAdmin as any)?._id ?? (currentOrg.superAdmin as any) ?? superAdminId,
         idNat: currentOrg.idNat ?? 'non affecté',
         numeroImpot: currentOrg.numeroImpot ?? 'non affecté',
       });
     } else {
       setFormData((prev) => ({ ...EMPTY_FORM, superAdmin: superAdminId }));
     }
+    //@ts-ignore
   }, [currentOrg?._id, user?._id]); // re-hydrate si change
 
   /* ------------------------------ file preview ------------------------------ */
@@ -154,7 +160,7 @@ const Page = () => {
       return () => URL.revokeObjectURL(url);
     }
     if (typeof formData.logo === 'string' && formData.logo.trim()) {
-      const src = `${API_URL}/${formData.logo.replace('../', '')}`;
+      const src = `${API_URL()}/${formData.logo.replace('../', '')}`;
       setPreviewUrl(src);
       return;
     }
@@ -162,28 +168,28 @@ const Page = () => {
   }, [formData.logo]);
 
   /* ------------------------------ handlers ------------------------------ */
-  const onChangeField = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const { name, value } = e.target;
-      setFormData((prev) => ({ ...prev, [name]: value }));
+  const onChangeField = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  }, []);
+
+  const onFileSelect = useCallback(
+    (e: any) => {
+      const f = e.files?.[0];
+      if (!f) return;
+      if (!f.type?.startsWith('image/')) {
+        notify('warn', 'Fichier invalide', 'Veuillez sélectionner une image (png/jpg/webp…).');
+        return;
+      }
+      if (f.size > 2_000_000) {
+        notify('warn', 'Fichier trop volumineux', 'Taille maximale: 2 Mo.');
+        return;
+      }
+      setFormData((prev) => ({ ...prev, logo: f }));
+      setUploadKey((k) => k + 1); // reset UI FileUpload
     },
-    []
+    [notify]
   );
-//@ts-ignore
-  const onFileSelect = useCallback((e: any) => {
-    const f = e.files?.[0];
-    if (!f) return;
-    if (!f.type?.startsWith('image/')) {
-      notify('warn', 'Fichier invalide', 'Veuillez sélectionner une image (png/jpg/webp…).');
-      return;
-    }
-    if (f.size > 2_000_000) {
-      notify('warn', 'Fichier trop volumineux', 'Taille maximale: 2 Mo.');
-      return;
-    }
-    setFormData((prev) => ({ ...prev, logo: f }));
-    setUploadKey((k) => k + 1); // reset UI FileUpload
-  }, [notify]);
 
   const onSubmit = useCallback(async () => {
     const errors = validate(formData);
@@ -197,7 +203,7 @@ const Page = () => {
       const fd = buildFormData(formData);
 
       if (currentOrg?._id) {
-        //@ts-ignore
+        // @ts-expect-error - compat: external lib types mismatch
         await dispatch(updateOrganisation({ id: currentOrg._id, data: fd })).unwrap();
         notify('success', 'Succès', 'Organisation mise à jour');
       } else {
@@ -207,7 +213,7 @@ const Page = () => {
 
       // rafraîchir
       const resp = await dispatch(fetchOrganisations());
-      // @ts-ignore
+
       setOrgs(Array.isArray(resp?.payload) ? resp.payload : []);
     } catch (e: any) {
       notify('error', 'Erreur', "Échec de l'opération");
@@ -233,20 +239,22 @@ const Page = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Colonne gauche */}
           <div className="space-y-6 p-3">
-            {(['nom', 'rccm', 'contact', 'siegeSocial', 'idNat', 'numeroImpot'] as const).map((field) => (
-              <span className="p-float-label p-3" key={field}>
-                <InputText
-                  id={field}
-                  name={field}
-                  value={String(formData[field] ?? '')}
-                  onChange={onChangeField}
-                  className="w-full"
-                />
-                <label htmlFor={field} className="capitalize">
-                  {field}
-                </label>
-              </span>
-            ))}
+            {(['nom', 'rccm', 'contact', 'siegeSocial', 'idNat', 'numeroImpot'] as const).map(
+              (field) => (
+                <span className="p-float-label p-3" key={field}>
+                  <InputText
+                    id={field}
+                    name={field}
+                    value={String(formData[field] ?? '')}
+                    onChange={onChangeField}
+                    className="w-full"
+                  />
+                  <label htmlFor={field} className="capitalize">
+                    {field}
+                  </label>
+                </span>
+              )
+            )}
           </div>
 
           {/* Colonne droite */}

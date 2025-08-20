@@ -5,209 +5,324 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
-import { DataTable } from 'primereact/datatable';
-import { Column } from 'primereact/column';
 import { Dialog } from 'primereact/dialog';
 import { Menu } from 'primereact/menu';
-import { useDispatch, useSelector } from 'react-redux';
-import { AppDispatch, RootState } from '@/stores/store';
-import {
-  addRegion,
-  updateRegion,
-  deleteRegion,
-  fetchRegions,
-  selectAllRegions,
-} from '@/stores/slices/regions/regionSlice';
-import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
 import { Toast } from 'primereact/toast';
 
-/* ----------------------------- Helpers robustes ---------------------------- */
-type Region = { _id?: string; nom?: string; ville?: string; pointVenteCount?: number };
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '@/stores/store';
 
-const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
-const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
-const safeNumber = (v: unknown, fallback = 0) => {
-  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
-  return Number.isFinite(n) ? n : fallback;
+import {
+  addRegion,
+  updateRegion as updateRegionThunk,
+  deleteRegion as deleteRegionThunk,
+  fetchRegions,
+  selectAllRegions,
+  selectRegionMeta,
+  selectRegionStatus,
+  selectRegionError,
+} from '@/stores/slices/regions/regionSlice';
+
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
+
+/* ----------------------------- Helpers ----------------------------- */
+type RegionVM = {
+  _id?: string;
+  nom?: string;
+  ville?: string;
+  pointVenteCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
-const normalize = (s: unknown) =>
-  (typeof s === 'string' ? s : '')
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .trim();
 
-type MenuMap = Record<string, Menu | null>;
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
+  <span className="inline-block align-middle ml-1">
+    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+  </span>
+);
+
+/* --------------------------------- Page ---------------------------------- */
 
 export default function RegionManagement() {
   const dispatch = useDispatch<AppDispatch>();
   const toast = useRef<Toast>(null);
 
-  /* ------------------------------- Store data ------------------------------- */
-  const regions = useSelector((state: RootState) => asArray<Region>(selectAllRegions(state)));
+  // Store
+  const regions = useSelector((state: RootState) => selectAllRegions(state));
+  const meta = useSelector(selectRegionMeta);
+  const status = useSelector(selectRegionStatus);
+  const error = useSelector(selectRegionError);
+  const loading = status === 'loading';
 
-  /* --------------------------------- UI state ------------------------------- */
-  const [search, setSearch] = useState('');
-  const [dialogType, setDialogType] = useState<'create' | 'edit' | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
-  const [newRegion, setNewRegion] = useState<Region>({ nom: '', ville: '' });
-  const [first, setFirst] = useState(0);
-  const [rows, setRows] = useState(5);
-  const [loading, setLoading] = useState(false);
+  // Requête serveur (params) — 1-based + tri custom
+  const [page, setPage] = useState(1); // 1-based
+  const [rows, setRows] = useState(10);
+  const [sortBy, setSortBy] = useState<string>('createdAt');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchText, setSearchText] = useState('');
+  const [villeFilter, setVilleFilter] = useState('');
 
-  /* ------------------------------ Menus par ligne --------------------------- */
-  const menuRefs = useRef<MenuMap>({});
-  const setMenuRef = useCallback((id: string, el: Menu | null) => {
-    if (!id) return;
-    menuRefs.current[id] = el;
+  // Modals / sélection
+  const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<RegionVM | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState<boolean>(false);
+
+  // Formulaire création/édition
+  const [form, setForm] = useState<Pick<RegionVM, 'nom' | 'ville'>>({ nom: '', ville: '' });
+
+  // ✅ Un seul Menu global pour corriger le bug de sélection
+  const menuRef = useRef<Menu>(null);
+  const selectedRowDataRef = useRef<RegionVM | null>(null);
+  const handleAction = useCallback((action: 'details' | 'edit' | 'delete', row: RegionVM) => {
+    setSelectedRegion(row ?? null);
+    if (action === 'delete') {
+      setIsDeleteOpen(true);
+      setDialogType(null);
+    } else {
+      setDialogType(action);
+    }
   }, []);
-  const showMenu = useCallback((e: React.MouseEvent, id: string, row: Region) => {
-    setSelectedRegion(row);
-    menuRefs.current[id]?.toggle(e);
-  }, []);
+  const menuModel = useMemo(
+    () => [
+      {
+        label: 'Détails',
+        command: () =>
+          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
+      },
+      {
+        label: 'Modifier',
+        command: () =>
+          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
+      },
+      {
+        label: 'Supprimer',
+        command: () =>
+          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
+      },
+    ],
+    [handleAction]
+  );
 
-  /* ------------------------------ Chargement data --------------------------- */
+  /* ------------------------------ Fetch serveur ----------------------------- */
+  const fetchServer = useCallback(() => {
+    dispatch(
+      fetchRegions({
+        page,
+        limit: rows,
+        q: searchText || undefined,
+        ville: villeFilter || undefined,
+        sortBy,
+        order,
+        includeTotal: true,
+      })
+    );
+  }, [dispatch, page, rows, searchText, villeFilter, sortBy, order]);
+
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        await dispatch(fetchRegions());
-      } catch {
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Erreur',
-          detail: 'Impossible de charger les régions.',
-          life: 3000,
-        });
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [dispatch]);
+    fetchServer();
+  }, [fetchServer]);
 
-  /* --------------------------------- Filtrage ------------------------------- */
-  const filteredRegions = useMemo(() => {
-    const q = normalize(search);
-    return regions.filter((r) => {
-      const nom = normalize(r?.nom);
-      const ville = normalize(r?.ville);
-      const pvc = String(safeNumber(r?.pointVenteCount)).toLowerCase();
-      return !q || nom.includes(q) || ville.includes(q) || pvc.includes(q);
-    });
-  }, [regions, search]);
+  useEffect(() => {
+    if (status === 'failed' && error) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: error,
+        life: 3000,
+      });
+    }
+  }, [status, error]);
 
-  /* ------------------------------ CRUD handlers ----------------------------- */
+  /* -------------------------- Tri & pagination (UI) ------------------------- */
+  const total = meta?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const firstIndex = (page - 1) * rows;
+
+  const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
+  const toggleSort = (field: string) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
+      setPage(1);
+    } else {
+      setOrder(order === 'asc' ? 'desc' : 'asc');
+      setPage(1);
+    }
+  };
+
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
+
+  const onChangeRows = (n: number) => {
+    setRows(n);
+    const newTotalPages = Math.max(1, Math.ceil(total / n));
+    const fixed = Math.min(page, newTotalPages);
+    setPage(fixed);
+  };
+
+  const applyFilters = useCallback(() => {
+    setPage(1);
+    fetchServer();
+  }, [fetchServer]);
+
+  // Actions CRUD
+  const resetForm = useCallback(() => {
+    setForm({ nom: '', ville: '' });
+    setDialogType(null);
+    setSelectedRegion(null);
+  }, []);
+
+  useEffect(() => {
+    if (dialogType === 'edit' || dialogType === 'details') {
+      setForm({ nom: selectedRegion?.nom ?? '', ville: selectedRegion?.ville ?? '' });
+    } else if (dialogType === 'create') {
+      setForm({ nom: '', ville: '' });
+    }
+  }, [dialogType, selectedRegion]);
+
   const handleCreate = useCallback(async () => {
-    if (!isNonEmptyString(newRegion.nom) || !isNonEmptyString(newRegion.ville)) {
+    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.ville)) {
       toast.current?.show({
         severity: 'warn',
         summary: 'Champs requis',
-        detail: 'Veuillez renseigner Nom et Ville.',
+        detail: 'Nom et Ville sont requis',
         life: 2500,
       });
       return;
     }
-    try {
-      setLoading(true);
-      const res = await dispatch(addRegion({ nom: newRegion.nom.trim(), ville: newRegion.ville.trim() }) as any);
-      // @ts-ignore
-      if (addRegion.fulfilled?.match?.(res) || res?.meta?.requestStatus === 'fulfilled') {
-        toast.current?.show({ severity: 'success', summary: 'Ajouté', detail: 'Région créée.', life: 2000 });
-        setDialogType(null);
-        setNewRegion({ nom: '', ville: '' });
-        await dispatch(fetchRegions());
-      } else {
-        throw new Error();
-      }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'ajout.", life: 3000 });
-    } finally {
-      setLoading(false);
+    //@ts-ignore
+    const r = await dispatch(addRegion({ nom: form.nom.trim(), ville: form.ville.trim() }) as any);
+    if ((addRegion as any).fulfilled.match(r)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Ajouté',
+        detail: 'Région créée',
+        life: 2000,
+      });
+      resetForm();
+      fetchServer();
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: "Échec de l'ajout",
+        life: 3000,
+      });
     }
-  }, [dispatch, newRegion]);
+  }, [dispatch, form, fetchServer, resetForm]);
 
   const handleUpdate = useCallback(async () => {
     if (!selectedRegion?._id) return;
-    if (!isNonEmptyString(selectedRegion.nom) || !isNonEmptyString(selectedRegion.ville)) {
+    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.ville)) {
       toast.current?.show({
         severity: 'warn',
         summary: 'Champs requis',
-        detail: 'Veuillez renseigner Nom et Ville.',
+        detail: 'Nom et Ville sont requis',
         life: 2500,
       });
       return;
     }
-    try {
-      setLoading(true);
-      const res = await dispatch(updateRegion(selectedRegion as any) as any);
-      // @ts-ignore
-      if (updateRegion.fulfilled?.match?.(res) || res?.meta?.requestStatus === 'fulfilled') {
-        toast.current?.show({ severity: 'success', summary: 'Modifié', detail: 'Région mise à jour.', life: 2000 });
-        setDialogType(null);
-        await dispatch(fetchRegions());
-      } else {
-        throw new Error();
-      }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la modification.', life: 3000 });
-    } finally {
-      setLoading(false);
+    const r = await dispatch(
+      updateRegionThunk({
+        _id: selectedRegion._id,
+        nom: form.nom.trim(),
+        ville: form.ville.trim(),
+      } as any)
+    );
+    if ((updateRegionThunk as any).fulfilled.match(r)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Modifié',
+        detail: 'Région mise à jour',
+        life: 2000,
+      });
+      resetForm();
+      fetchServer();
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la modification',
+        life: 3000,
+      });
     }
-  }, [dispatch, selectedRegion]);
+  }, [dispatch, selectedRegion, form, fetchServer, resetForm]);
 
   const handleDelete = useCallback(async () => {
     if (!selectedRegion?._id) return;
-    try {
-      setLoading(true);
-      const res = await dispatch(deleteRegion(selectedRegion._id) as any);
-      // @ts-ignore
-      if (deleteRegion.fulfilled?.match?.(res) || res?.meta?.requestStatus === 'fulfilled') {
-        toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Région supprimée.', life: 2000 });
-        await dispatch(fetchRegions());
-      } else {
-        throw new Error();
-      }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la suppression.', life: 3000 });
-    } finally {
-      setLoading(false);
+    const r = await dispatch(deleteRegionThunk(selectedRegion._id) as any);
+    if ((deleteRegionThunk as any).fulfilled.match(r)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Supprimé',
+        detail: 'Région supprimée',
+        life: 2000,
+      });
+      // si la page devient vide, reculer d’une page
+      const nextPage =
+        regions.length === 1 && (meta?.page ?? 1) > 1 ? meta!.page - 1 : (meta?.page ?? page);
+      setPage(nextPage);
+      dispatch(
+        fetchRegions({
+          page: nextPage,
+          limit: rows,
+          q: searchText || undefined,
+          ville: villeFilter || undefined,
+          sortBy,
+          order,
+          includeTotal: true,
+        })
+      );
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la suppression',
+        life: 3000,
+      });
     }
-  }, [dispatch, selectedRegion?._id]);
+  }, [
+    dispatch,
+    selectedRegion,
+    regions.length,
+    meta,
+    page,
+    rows,
+    searchText,
+    villeFilter,
+    sortBy,
+    order,
+  ]);
 
-  /* ----------------------------- Import / Export ---------------------------- */
+  // Export
   const handleFileManagement = useCallback(
     async ({
       type,
       format,
-      file,
     }: {
       type: 'import' | 'export';
       format: 'csv' | 'pdf' | 'excel';
       file?: File;
     }) => {
-      if (type === 'import' && file) {
-        toast.current?.show({
-          severity: 'info',
-          summary: `Import ${format.toUpperCase()}`,
-          detail: `Fichier importé: ${file.name}`,
-          life: 3000,
-        });
-        // TODO: implémenter parsing + validations
-        return;
-      }
-
       if (type === 'export') {
         if (format === 'pdf') {
           toast.current?.show({
             severity: 'warn',
-            summary: 'Export PDF non supporté',
-            detail: "L'export PDF n'est pas disponible pour ce module.",
+            summary: 'Export non supporté',
+            detail: "L'export PDF n'est pas disponible",
             life: 3000,
           });
           return;
@@ -217,7 +332,7 @@ export default function RegionManagement() {
           const r = await dispatch(
             exportFile({
               url: '/export/regions',
-              mouvements: filteredRegions,
+              mouvements: regions, // idéalement: endpoint backend d’export avec les mêmes filtres
               fileType,
             }) as any
           );
@@ -243,184 +358,281 @@ export default function RegionManagement() {
         }
       }
     },
-    [dispatch, filteredRegions]
+    [dispatch, regions]
   );
 
-  /* --------------------------------- UI ------------------------------------ */
+  const actionButton = useCallback(
+    (rowData: RegionVM) => (
+      <Button
+        icon="pi pi-bars"
+        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+        onClick={(event) => {
+          selectedRowDataRef.current = rowData ?? null;
+          menuRef.current?.toggle(event);
+        }}
+        aria-haspopup
+      />
+    ),
+    []
+  );
+  console.log('regions = ', regions);
+
+  /* --------------------------------- UI ----------------------------------- */
   return (
     <div className="min-h-screen">
-      <Toast ref={toast} />
+      <Toast ref={toast} position="top-right" />
+      {/* Menu global */}
+      <Menu model={menuModel} popup ref={menuRef} />
 
-      <div className="flex items-center justify-between mb-3 mt-3">
+      <div className="flex items-center justify-between mt-3 mb-3">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des régions' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Régions' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
         <h2 className="text-2xl font-bold text-gray-700">Gestion des Régions</h2>
       </div>
 
-      <div className="bg-white p-2 rounded-lg">
-        <div className="flex justify-between my-4">
-          <div className="relative w-2/3 flex justify-between gap-2">
-            <InputText
-              className="p-2 pl-10 border rounded w-full"
-              placeholder="Rechercher..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value ?? '')}
-            />
-            <div className="ml-3 flex gap-2 w-2/5">
+      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row w-full">
+        <div className="bg-white p-4 rounded-lg w-full">
+          <div className="gap-4 mb-4 w-full flex justify-between flex-wrap">
+            <div className="relative w-full md:w-2/3 flex flex-row gap-2 flex-wrap">
+              <InputText
+                className="p-2 border rounded w-full md:w-1/3"
+                placeholder="Rechercher (nom, ville, etc.)"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value ?? '')}
+                onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+              />
+              <InputText
+                className="p-2 border rounded w-full md:w-1/3"
+                placeholder="Filtrer par ville"
+                value={villeFilter}
+                onChange={(e) => setVilleFilter(e.target.value ?? '')}
+                onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+              />
+
+              <Button
+                label="Filtrer"
+                icon="pi pi-search"
+                className="!bg-green-700 text-white"
+                onClick={applyFilters}
+              />
+
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
+
+            <Button
+              label="Nouveau"
+              icon="pi pi-plus"
+              className="!bg-green-700 text-white p-2 rounded"
+              onClick={() => setDialogType('create')}
+            />
           </div>
 
-          <Button
-            icon="pi pi-plus"
-            label="nouveau"
-            className="!bg-green-700 text-white p-2 rounded border-none"
-            onClick={() => {
-              setNewRegion({ nom: '', ville: '' });
-              setDialogType('create');
-            }}
-          />
-        </div>
+          {/* -------- TABLE TAILWIND (look DataTable) -------- */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-[60rem] w-full text-sm">
+              <thead>
+                <tr className="bg-green-800 text-white">
+                  <th className="px-4 py-2 text-left">N°</th>
 
-        <div className="rounded-lg shadow-md">
-          <DataTable
-            value={filteredRegions}
-            paginator
-            rows={rows}
-            first={first}
-            onPage={(e) => {
-              setFirst(e.first ?? 0);
-              setRows(e.rows ?? 5);
-            }}
-            loading={loading}
-            size="small"
-            className="rounded-lg text-[11px]"
-            tableStyle={{ minWidth: '50rem' }}
-            rowClassName={(_, options) => {
-              //@ts-ignore
-              const idx = options?.rowIndex ?? 0;
-              const global = first + idx;
-              return global % 2 === 0 ? '!bg-gray-300 !text-gray-900' : '!bg-green-900 !text-white';
-            }}
-          >
-            <Column
-              header="#"
-              body={(_, options) => <span className="text-[11px]">{(options?.rowIndex ?? 0) + 1}</span>}
-              headerClassName="text-[11px] !bg-green-900 !text-white"
-            />
-            <Column field="nom" header="Nom" sortable headerClassName="text-[11px] !bg-green-900 !text-white" />
-            <Column
-              field="pointVenteCount"
-              header="Points de vente"
-              body={(r: Region) => safeNumber(r?.pointVenteCount).toString()}
-              headerClassName="text-[11px] !bg-green-900 !text-white"
-            />
-            <Column field="ville" header="Ville" sortable headerClassName="text-[11px] !bg-green-900 !text-white" />
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('nom')}
+                    title="Trier par nom"
+                  >
+                    Nom <SortIcon order={sortedOrderFor('nom')} />
+                  </th>
 
-            <Column
-              header="Actions"
-              body={(row: Region) => (
-                <>
-                  <Button
-                    icon="pi pi-bars"
-                    className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-                    onClick={(e) => showMenu(e, row?._id ?? '', row)}
-                    disabled={!isNonEmptyString(row?._id)}
-                    aria-haspopup
-                  />
-                  <Menu
-                    popup
-                    ref={(el) => setMenuRef(row?._id ?? '', el)}
-                    model={[
-                      { label: 'Détails', command: () => setSelectedRegion(row) },
-                      {
-                        label: 'Modifier',
-                        command: () => {
-                          setSelectedRegion(row);
-                          setDialogType('edit');
-                        },
-                      },
-                      {
-                        label: 'Supprimer',
-                        command: () => {
-                          setSelectedRegion(row);
-                          setDeleteDialogOpen(true);
-                        },
-                      },
-                    ]}
-                  />
-                </>
-              )}
-              headerClassName="!text-[11px] !bg-green-900 !text-white"
-            />
-          </DataTable>
+                  <th className="px-4 py-2 text-left">Points de vente</th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('ville')}
+                    title="Trier par ville"
+                  >
+                    Ville <SortIcon order={sortedOrderFor('ville')} />
+                  </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('createdAt')}
+                    title="Trier par date de création"
+                  >
+                    Créée le <SortIcon order={sortedOrderFor('createdAt')} />
+                  </th>
+
+                  <th className="px-4 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading && regions.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={6}>
+                      Chargement...
+                    </td>
+                  </tr>
+                ) : regions.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={6}>
+                      Aucune région trouvée
+                    </td>
+                  </tr>
+                ) : (
+                  regions.map((r, idx) => (
+                    <tr
+                      key={r._id}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">
+                        {(meta?.page ? (meta.page - 1) * (meta.limit ?? 10) : 0) + idx + 1}
+                      </td>
+                      <td className="px-4 py-2">{r?.nom ?? '—'}</td>
+                      <td className="px-4 py-2">{String(r?.pointVenteCount ?? 0)}</td>
+                      <td className="px-4 py-2">{r?.ville ?? '—'}</td>
+                      <td className="px-4 py-2">
+                        {r?.createdAt ? new Date(r.createdAt).toLocaleDateString() : '—'}
+                      </td>
+                      <td className="px-4 py-2">{
+                        //@ts-ignore
+                      actionButton(r)
+                      }</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* -------- PAGINATION TAILWIND -------- */}
+          <div className="flex items-center justify-between mt-3">
+            <div className="text-sm text-gray-700">
+              Page <span className="font-semibold">{meta?.page ?? 1}</span> /{' '}
+              {Math.max(1, meta?.totalPages ?? 1)} —{' '}
+              <span className="font-semibold">{meta?.total ?? 0}</span> éléments
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={rows}
+                onChange={(e) => onChangeRows(Number(e.target.value))}
+              >
+                {[10, 20, 30, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+                onClick={() => goTo(1)}
+                disabled={(meta?.page ?? 1) <= 1}
+              >
+                «
+              </button>
+              <button
+                className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+                onClick={() => goTo((meta?.page ?? 1) - 1)}
+                disabled={(meta?.page ?? 1) <= 1}
+              >
+                ‹
+              </button>
+              <button
+                className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+                onClick={() => goTo((meta?.page ?? 1) + 1)}
+                disabled={(meta?.page ?? 1) >= Math.max(1, meta?.totalPages ?? 1)}
+              >
+                ›
+              </button>
+              <button
+                className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+                onClick={() => goTo(Math.max(1, meta?.totalPages ?? 1))}
+                disabled={(meta?.page ?? 1) >= Math.max(1, meta?.totalPages ?? 1)}
+              >
+                »
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Dialog édition */}
+      {/* Dialog Create/Edit */}
       <Dialog
-        visible={dialogType === 'edit'}
-        header="Modifier une région"
-        onHide={() => setDialogType(null)}
-        style={{ width: '40vw', maxWidth: 700 }}
+        visible={dialogType === 'create' || dialogType === 'edit'}
+        header={dialogType === 'edit' ? 'Modifier la région' : 'Ajouter une région'}
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
         modal
       >
-        <div className="p-4">
-          {(['nom', 'ville'] as const).map((key) => (
-            <div key={key} className="mb-4">
+        <div className="p-4 space-y-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Nom*</label>
               <InputText
-                type="text"
-                placeholder={key === 'nom' ? 'Nom' : 'Ville'}
-                value={(selectedRegion as any)?.[key] ?? ''}
-                onChange={(e) => setSelectedRegion((p) => (p ? { ...p, [key]: e.target.value } : p))}
+                value={form.nom ?? ''}
+                onChange={(e) => setForm((p) => ({ ...p, nom: e.target.value ?? '' }))}
                 required
                 className="w-full p-2 border rounded"
               />
             </div>
-          ))}
-          <div className="flex justify-end mt-4">
-            <Button label="Modifier" className="!bg-green-700 text-white" onClick={handleUpdate} loading={loading} />
-          </div>
-        </div>
-      </Dialog>
-
-      {/* Dialog création */}
-      <Dialog
-        visible={dialogType === 'create'}
-        header="Ajouter une région"
-        onHide={() => setDialogType(null)}
-        style={{ width: '40vw', maxWidth: 700 }}
-        modal
-      >
-        <div className="p-4">
-          {(['nom', 'ville'] as const).map((key) => (
-            <div key={key} className="mb-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Ville*</label>
               <InputText
-                type="text"
-                placeholder={key === 'nom' ? 'Nom' : 'Ville'}
-                value={(newRegion as any)?.[key] ?? ''}
-                onChange={(e) => setNewRegion((p) => ({ ...p, [key]: e.target.value }))}
+                value={form.ville ?? ''}
+                onChange={(e) => setForm((p) => ({ ...p, ville: e.target.value ?? '' }))}
                 required
                 className="w-full p-2 border rounded"
               />
             </div>
-          ))}
-          <div className="flex justify-end mt-4">
-            <Button label="Ajouter" className="!bg-green-700 text-white" onClick={handleCreate} loading={loading} />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
+            <Button
+              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              className="!bg-green-700 text-white"
+              onClick={dialogType === 'edit' ? handleUpdate : handleCreate}
+            />
           </div>
         </div>
       </Dialog>
 
-      {/* Dialog suppression */}
+      {/* Dialog Details */}
+      <Dialog
+        visible={dialogType === 'details'}
+        header="Détails de la région"
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
+        modal
+      >
+        <div className="p-4 space-y-3 text-sm">
+          <div className="flex justify-between">
+            <span className="font-medium">Nom</span>
+            <span>{selectedRegion?.nom ?? '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Ville</span>
+            <span>{selectedRegion?.ville ?? '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Points de vente</span>
+            <span>{selectedRegion?.pointVenteCount ?? 0}</span>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Confirm Delete */}
       <ConfirmDeleteDialog
-        visible={deleteDialogOpen}
-        onHide={() => setDeleteDialogOpen(false)}
+        visible={isDeleteOpen}
+        onHide={() => setIsDeleteOpen(false)}
         onConfirm={() => {
+          setIsDeleteOpen(false);
           handleDelete();
-          setDeleteDialogOpen(false);
         }}
         item={selectedRegion ?? { _id: '', nom: '' }}
         objectLabel="la région"

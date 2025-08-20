@@ -84,7 +84,7 @@ const Page: React.FC = () => {
         if (!user?.role) return;
 
         if (isSuperAdmin) {
-          // @ts-expect-error - compat: external lib types mismatch
+          //@ts-ignore
           await dispatch(fetchCommandes());
         } else if (isAdminPointVente && isNonEmptyString((user as any)?.pointVente?._id)) {
           await dispatch(fetchCommandesByPointVente((user as any).pointVente._id));
@@ -93,7 +93,7 @@ const Page: React.FC = () => {
         } else if (user?.role === 'Logisticien' && isNonEmptyString(user?._id)) {
           await dispatch(fetchCommandesByUser(user._id));
         } else {
-          // @ts-expect-error - compat: external lib types mismatch
+          //@ts-ignore
           await dispatch(fetchCommandes());
         }
       } catch {
@@ -150,7 +150,7 @@ const Page: React.FC = () => {
     try {
       const updatedProduits = asArray<CommandeProduit>(produitsLivrables).map((p) => ({
         ...p,
-        // @ts-expect-error champ temporaire
+        // @ts-ignore champ temporaire
         statut: p._tempChecked ? 'livré' : p.statut,
       }));
 

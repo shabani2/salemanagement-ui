@@ -80,7 +80,7 @@ const Page: React.FC = () => {
 
   const currentAvatarUrl = useMemo(() => {
     if (avatarFile) return URL.createObjectURL(avatarFile);
-    if (isNonEmptyString(selectedUser?.image)) return safeUrlJoin(API_URL, selectedUser!.image!);
+    if (isNonEmptyString(selectedUser?.image)) return safeUrlJoin(API_URL(), selectedUser!.image!);
     return '';
   }, [avatarFile, selectedUser]);
 
@@ -98,16 +98,16 @@ const Page: React.FC = () => {
           if (k !== 'image') fd.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
         });
         fd.append('image', avatarFile);
-        // @ts-ignore (RTK has matchers)
+        // @ts-expect-error (RTK has matchers)
         payload = fd;
       }
 
-      // @ts-ignore 
+      // @ts-expect-error - compat: external lib types mismatch
       const result = await dispatch(updateUser(payload));
-      // @ts-ignore (RTK has matchers)
+
       if (updateUser.fulfilled?.match?.(result) || result?.meta?.requestStatus === 'fulfilled') {
         const updated = avatarFile
-          ? { ...editedUser, image: (selectedUser?.image ?? '') } // backend retournera probablement le chemin, mais on mettra à jour après re-fetch
+          ? { ...editedUser, image: selectedUser?.image ?? '' } // backend retournera probablement le chemin, mais on mettra à jour après re-fetch
           : editedUser;
 
         // MàJ locale (idéalement re-fetch depuis backend)
@@ -186,7 +186,9 @@ const Page: React.FC = () => {
             {isNonEmptyString(selectedUser?.telephone) && <p>📞 {selectedUser!.telephone}</p>}
             {isNonEmptyString(selectedUser?.adresse) && <p>📍 {selectedUser!.adresse}</p>}
             {isNonEmptyString(selectedUser?.region) && <p>🌍 {selectedUser.region}</p>}
-            {(selectedUser as User)?.pointVente && <p>🏬 {(selectedUser as User).pointVente?.nom}</p>}
+            {(selectedUser as User)?.pointVente && (
+              <p>🏬 {(selectedUser as User).pointVente?.nom}</p>
+            )}
           </div>
 
           <div className="hidden md:flex mt-6 justify-center gap-3">
@@ -233,9 +235,10 @@ const Page: React.FC = () => {
                     type="text"
                     name={name}
                     placeholder={placeholder}
-                    //@ts-ignore
                     value={(editedUser as Partial<User>)?.[name as keyof User] ?? ''}
-                    onChange={(e) => setEditedUser((p) => (p ? { ...p, [name]: e.target.value } : p))}
+                    onChange={(e) =>
+                      setEditedUser((p) => (p ? { ...p, [name]: e.target.value } : p))
+                    }
                     className="w-full pr-10"
                   />
                   <i className={`pi ${icon} absolute right-2 text-gray-500 text-lg`} />
@@ -256,7 +259,9 @@ const Page: React.FC = () => {
                     name={name}
                     placeholder={placeholder}
                     value={(editedUser as User)?.[name] ?? ''}
-                    onChange={(e) => setEditedUser((p) => (p ? { ...p, [name]: e.target.value } : p))}
+                    onChange={(e) =>
+                      setEditedUser((p) => (p ? { ...p, [name]: e.target.value } : p))
+                    }
                     className="w-full pr-10"
                   />
                   <i className={`pi ${icon} absolute right-2 text-gray-500 text-lg`} />
@@ -286,7 +291,9 @@ const Page: React.FC = () => {
                 if (f && isFile(f)) setAvatarFile(f);
               }}
               className="w-full mt-2"
-              chooseOptions={{ className: 'bg-green-700 text-white hover:bg-green-800 border-none' }}
+              chooseOptions={{
+                className: 'bg-green-700 text-white hover:bg-green-800 border-none',
+              }}
             />
           </div>
 

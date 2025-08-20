@@ -1,7 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
-// features/commandeProduit/commandeProduitSlice.ts
-
 'use client';
 
 import {
@@ -23,8 +21,7 @@ const commandeProduitAdapter: EntityAdapter<CommandeProduit, string> = createEnt
   CommandeProduit,
   string
 >({
-  //@ts-ignore
-  selectId: (cp) => cp?._id,
+  selectId: (cp) => (cp as any)?._id as string,
 });
 
 const initialState = commandeProduitAdapter.getInitialState<CommandeProduitState>({
@@ -33,10 +30,14 @@ const initialState = commandeProduitAdapter.getInitialState<CommandeProduitState
 });
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('token-agricap');
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token-agricap') : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
+/**
+ * GET /commande-produits/:commandeId
+ * -> { commande, produits: CommandeProduit[] }
+ */
 export const fetchCommandeProduitsByCommande = createAsyncThunk(
   'commandeProduits/fetchByCommande',
   async (commandeId: string, { rejectWithValue }) => {
@@ -44,36 +45,100 @@ export const fetchCommandeProduitsByCommande = createAsyncThunk(
       const res = await apiClient.get(`/commande-produits/${commandeId}`, {
         headers: getAuthHeaders(),
       });
-      return res.data.produits; // assuming structure: { produits: [...] }
+      return Array.isArray(res.data?.produits) ? res.data.produits : [];
     } catch (error: any) {
       return rejectWithValue(
-        error.message || 'Erreur lors de la récupération des produits de la commande'
+        error?.message || 'Erreur lors de la récupération des produits de la commande'
       );
     }
   }
 );
 
-export const updateStatutProduitCommande = createAsyncThunk(
-  'commandeProduits/updateStatut',
+/**
+ * GET /commande-produits/by-user/:userId
+ */
+export const fetchCommandeProduitsByUser = createAsyncThunk(
+  'commandeProduits/fetchByUser',
+  async (userId: string, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get(`/commande-produits/by-user/${userId}`, {
+        headers: getAuthHeaders(),
+      });
+      return Array.isArray(res.data) ? res.data : [];
+    } catch (error: any) {
+      return rejectWithValue(
+        error?.message || 'Erreur lors de la récupération des produits (utilisateur)'
+      );
+    }
+  }
+);
+
+/**
+ * GET /commande-produits/by-pointvente/:pointVenteId
+ */
+export const fetchCommandeProduitsByPointVente = createAsyncThunk(
+  'commandeProduits/fetchByPointVente',
+  async (pointVenteId: string, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get(`/commande-produits/by-pointvente/${pointVenteId}`, {
+        headers: getAuthHeaders(),
+      });
+      return Array.isArray(res.data) ? res.data : [];
+    } catch (error: any) {
+      return rejectWithValue(
+        error?.message || 'Erreur lors de la récupération des produits (point de vente)'
+      );
+    }
+  }
+);
+
+/**
+ * GET /commande-produits/by-region/:regionId
+ */
+export const fetchCommandeProduitsByRegion = createAsyncThunk(
+  'commandeProduits/fetchByRegion',
+  async (regionId: string, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get(`/commande-produits/by-region/${regionId}`, {
+        headers: getAuthHeaders(),
+      });
+      return Array.isArray(res.data) ? res.data : [];
+    } catch (error: any) {
+      return rejectWithValue(
+        error?.message || 'Erreur lors de la récupération des produits (région)'
+      );
+    }
+  }
+);
+
+/**
+ * PUT /commande-produits/:id
+ * Body: champs optionnels { produit?, quantite?, statut?, mouvementStockId? }
+ * -> renvoie l’élément CommandeProduit mis à jour
+ */
+export const updateCommandeProduit = createAsyncThunk(
+  'commandeProduits/updateOne',
   async (
     {
-      commandeId,
-      produitId,
-      statut,
-    }: { commandeId: string; produitId: string; statut: 'attente' | 'livré' | 'annulé' },
+      id,
+      updates,
+    }: {
+      id: string;
+      updates: Partial<Pick<CommandeProduit, 'produit' | 'quantite' | 'statut'>> & {
+        mouvementStockId?: string | null;
+      };
+    },
     { rejectWithValue }
   ) => {
     try {
-      const res = await apiClient.put(
-        `/commande-produits/${commandeId}`,
-        { produitId, statut },
-        {
-          headers: getAuthHeaders(),
-        }
-      );
+      const res = await apiClient.put(`/commande-produits/${id}`, updates, {
+        headers: getAuthHeaders(),
+      });
       return res.data;
     } catch (error: any) {
-      return rejectWithValue(error.message || 'Erreur lors de la mise à jour du statut du produit');
+      return rejectWithValue(
+        error?.message || 'Erreur lors de la mise à jour du produit de commande'
+      );
     }
   }
 );
@@ -84,8 +149,10 @@ const commandeProduitSlice = createSlice({
   reducers: {},
   extraReducers: (builder) => {
     builder
+      // fetch by commande
       .addCase(fetchCommandeProduitsByCommande.pending, (state) => {
         state.status = 'loading';
+        state.error = null;
       })
       .addCase(fetchCommandeProduitsByCommande.fulfilled, (state, action) => {
         state.status = 'succeeded';
@@ -95,7 +162,39 @@ const commandeProduitSlice = createSlice({
         state.status = 'failed';
         state.error = action.payload as string;
       })
-      .addCase(updateStatutProduitCommande.fulfilled, (state, action) => {
+
+      // by user
+      .addCase(fetchCommandeProduitsByUser.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        commandeProduitAdapter.setAll(state, action.payload);
+      })
+      .addCase(fetchCommandeProduitsByUser.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
+      })
+
+      // by pointVente
+      .addCase(fetchCommandeProduitsByPointVente.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        commandeProduitAdapter.setAll(state, action.payload);
+      })
+      .addCase(fetchCommandeProduitsByPointVente.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
+      })
+
+      // by region
+      .addCase(fetchCommandeProduitsByRegion.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        commandeProduitAdapter.setAll(state, action.payload);
+      })
+      .addCase(fetchCommandeProduitsByRegion.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
+      })
+
+      // update one
+      .addCase(updateCommandeProduit.fulfilled, (state, action) => {
         commandeProduitAdapter.upsertOne(state, action.payload);
       });
   },
@@ -103,6 +202,7 @@ const commandeProduitSlice = createSlice({
 
 export const commandeProduitReducer = commandeProduitSlice.reducer;
 
+// Selectors
 export const {
   selectAll: selectAllCommandeProduits,
   selectById: selectCommandeProduitById,

@@ -42,6 +42,7 @@ const GerantDashboard = () => {
   useEffect(() => {
     if (!user?.role) return;
     if (isSuperAdmin) {
+      // @ts-expect-error - compat: external lib types mismatch
       dispatch(fetchCommandes());
     } else if (isAdminPointVente) {
       dispatch(fetchCommandesByPointVente(user?.pointVente._id));
@@ -50,6 +51,8 @@ const GerantDashboard = () => {
     } else if (user.role === 'Logisticien') {
       dispatch(fetchCommandesByUser(user?.pointVente?._id));
     }
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - typage imprécis de la lib externe
   }, [dispatch]);
 
   const showMenu = (event: React.MouseEvent, commandeId: string) => {

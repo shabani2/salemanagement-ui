@@ -1,31 +1,37 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useState, useMemo } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment, react-hooks/exhaustive-deps, @typescript-eslint/no-unused-vars */
+'use client';
+
+import React, { useMemo } from 'react';
 import { Dropdown } from 'primereact/dropdown';
 import { Filter } from 'lucide-react';
-import { getOptionsByRole } from '@/lib/utils';
 
-interface DropdownTypeFilterProps {
-  mvtStocks: any[];
-  onChange: (filtered: any[], selected: string | null) => void;
-}
+type DropdownTypeFilterProps = {
+  /** Valeur sélectionnée (null = "Tout") */
+  value: string | null;
+  /** Liste des types autorisés (ex: ['Entrée','Sortie','Commande','Livraison']) */
+  options: string[];
+  /** Callback quand la sélection change (null = "Tout") */
+  onChange: (next: string | null) => void;
+  /** Afficher l’option “Tout” (par défaut: true) */
+  includeAll?: boolean;
+  className?: string;
+};
 
-const DropdownTypeFilter: React.FC<DropdownTypeFilterProps> = ({ mvtStocks, onChange }) => {
-  const [selectedType, setSelectedType] = useState<string | null>('Tout');
-  const user =
-    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
-  const filteredTypeOptions = useMemo(() => user && getOptionsByRole(user?.role), [user]);
-  const safeTypeOptions = Array.isArray(filteredTypeOptions) ? filteredTypeOptions : [];
+const DropdownTypeFilter: React.FC<DropdownTypeFilterProps> = ({
+  value,
+  options,
+  onChange,
+  includeAll = true,
+  className,
+}) => {
+  const items = useMemo(() => {
+    const uniques = Array.from(new Set(options?.filter(Boolean)));
+    const base = uniques.map((v) => ({ label: v, value: v }));
+    return includeAll ? [{ label: 'Tout', value: 'Tout' }, ...base] : base;
+  }, [options, includeAll]);
 
-  const mvtOptions = [{ label: 'Tout', value: 'Tout' }, ...safeTypeOptions];
-
-  useEffect(() => {
-    if (selectedType === 'Tout') {
-      onChange(mvtStocks, null);
-    } else {
-      const filtered = mvtStocks.filter((s) => s.type === selectedType);
-      onChange(filtered, selectedType);
-    }
-  }, [selectedType, mvtStocks, onChange]);
+  // On affiche "Tout" côté UI quand value === null
+  const uiValue = value ?? (includeAll ? 'Tout' : null);
 
   const valueTemplate = (option: any, props: any) => (
     <div className="flex items-center gap-2 text-white">
@@ -37,17 +43,23 @@ const DropdownTypeFilter: React.FC<DropdownTypeFilterProps> = ({ mvtStocks, onCh
   return (
     <div className="w-full md:w-64">
       <Dropdown
-        value={selectedType}
-        onChange={(e) => setSelectedType(e.value)}
-        options={mvtOptions}
+        value={uiValue}
+        options={items}
         optionLabel="label"
         placeholder="Sélectionner le type d'opération"
-        className="w-full !bg-green-700 !text-gray-100 font-semibold rounded-md border-none"
-        showClear
+        className={
+          className ?? 'w-full !bg-green-700 !text-gray-100 font-semibold rounded-md border-none'
+        }
         valueTemplate={valueTemplate}
+        showClear
+        onChange={(e) => {
+          // PrimeReact renvoie null quand on clique sur "clear"
+          if (e.value === 'Tout' || e.value == null) onChange(null);
+          else onChange(e.value as string);
+        }}
       />
     </div>
   );
 };
 
-export default DropdownTypeFilter;
+export default React.memo(DropdownTypeFilter);

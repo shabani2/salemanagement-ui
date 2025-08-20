@@ -3,12 +3,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
-import { DataTable } from 'primereact/datatable';
-import { Column } from 'primereact/column';
 import { Dialog } from 'primereact/dialog';
 import { Menu } from 'primereact/menu';
 import { Dropdown } from 'primereact/dropdown';
@@ -19,35 +17,38 @@ import { AppDispatch, RootState } from '@/stores/store';
 
 import {
   addPointVente,
-  deletePointVente,
+  deletePointVente as deletePointVenteThunk,
   fetchPointVentes,
-  fetchPointVentesByRegionId,
   selectAllPointVentes,
-  updatePointVente,
+  selectPointVenteMeta,
+  selectPointVenteStatus,
+  updatePointVente as updatePointVenteThunk,
 } from '@/stores/slices/pointvente/pointventeSlice';
 
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 
 import { PointVente } from '@/Models/pointVenteType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
-/* ----------------------------- Helpers robustes ---------------------------- */
+/* ----------------------------- Helpers ----------------------------- */
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
-const normalize = (s: unknown) =>
-  (typeof s === 'string' ? s : '')
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .trim();
 
-/* --------------------------------- Types ----------------------------------- */
+type RegionLite = { _id: string; nom: string };
+type PVForm = { nom: string; adresse: string; region: string };
 
-type PVForm = { nom: string; adresse: string; region: string | null };
-type ActionKind = 'create' | 'details' | 'edit' | 'delete' | null;
-type MenuMap = Record<string, Menu | null>;
+/* --------- Petit composant d’icône de tri --------- */
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
+  <span className="inline-block align-middle ml-1">
+    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+  </span>
+);
 
 /* -------------------------------- Component -------------------------------- */
 
@@ -55,158 +56,312 @@ export default function PointVenteManagement() {
   const dispatch = useDispatch<AppDispatch>();
   const toast = useRef<Toast>(null);
 
-  const pointsVente = useSelector((state: RootState) => asArray<PointVente>(selectAllPointVentes(state)));
-  const regions = useSelector((state: RootState) => asArray<{ _id: string; nom: string }>(selectAllRegions(state)));
+  // Store
+  const pointsVente = useSelector((state: RootState) =>
+    asArray<PointVente>(selectAllPointVentes(state))
+  );
+  const regions = useSelector((state: RootState) => asArray<RegionLite>(selectAllRegions(state)));
+  const meta = useSelector(selectPointVenteMeta); // doit contenir { total, page, limit, ... }
+  const status = useSelector(selectPointVenteStatus);
+  const loading = status === 'loading';
 
-  const [dialogType, setDialogType] = useState<ActionKind>(null);
-  const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(null);
-  const [newPointVente, setNewPointVente] = useState<PVForm>({ nom: '', adresse: '', region: null });
+  // Requête serveur (params)
+  const [page, setPage] = useState(1); // 1-based
+  const [rows, setRows] = useState(10);
+  const [sortBy, setSortBy] = useState<string>('updatedAt'); // 👈 tri par updatedAt par défaut
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchText, setSearchText] = useState('');
+  const [regionFilter, setRegionFilter] = useState<string>('');
 
-  // Menus par ligne
-  const menuRefs = useRef<MenuMap>({});
-  const setMenuRef = useCallback((id: string, el: Menu | null) => {
-    if (!id) return;
-    menuRefs.current[id] = el;
-  }, []);
-  const showMenu = useCallback((event: React.MouseEvent, id: string, row: PointVente) => {
-    setSelectedPointVente(row ?? null);
-    menuRefs.current[id]?.toggle(event);
-  }, []);
+  // Modals / sélection
+  const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
+  const [selectedPV, setSelectedPV] = useState<PointVente | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState<boolean>(false);
 
-  // user côté client
-  const user =
-    typeof window !== 'undefined'
-      ? (() => {
-          try {
-            return JSON.parse(localStorage.getItem('user-agricap') || 'null');
-          } catch {
-            return null;
-          }
-        })()
-      : null;
+  // Formulaire création/édition
+  const [form, setForm] = useState<PVForm>({ nom: '', adresse: '', region: '' });
 
-  /* ----------------------------- Chargement data ---------------------------- */
-  useEffect(() => {
-    let isActive = true;
-    (async () => {
-      try {
-        await dispatch(fetchRegions());
-        if (user?.role === 'AdminRegion' && isNonEmptyString(user?.region?._id)) {
-          await dispatch(fetchPointVentesByRegionId(user.region._id));
-        } else {
-          await dispatch(fetchPointVentes());
-        }
-      } catch {
-        if (!isActive) return;
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Erreur',
-          detail: 'Impossible de charger les points de vente.',
-          life: 3000,
-        });
-      }
-    })();
-    return () => {
-      isActive = false;
-    };
-  }, [dispatch, user?.role, user?.region?._id]);
-
-  /* --------------------------------- Recherche ------------------------------ */
-  const [searchPV, setSearchPV] = useState('');
-  const filteredPointsVente = useMemo(() => {
-    const q = normalize(searchPV);
-    if (!q) return pointsVente;
-    return pointsVente.filter((pv) => {
-      const regionNom =
-        typeof pv?.region === 'object' && pv?.region !== null && 'nom' in pv.region
-          ? normalize((pv.region as any).nom)
-          : '';
-      return normalize(pv?.nom).includes(q) || normalize(pv?.adresse).includes(q) || regionNom.includes(q);
-    });
-  }, [pointsVente, searchPV]);
-
-  /* ---------------------------------- Actions ------------------------------- */
-  const handleAction = useCallback((action: ActionKind, row: PointVente | null) => {
-    setSelectedPointVente(row ?? null);
-    setDialogType(action);
-  }, []);
-
-  const refresh = useCallback(async () => {
-    if (user?.role === 'AdminRegion' && isNonEmptyString(user?.region?._id)) {
-      await dispatch(fetchPointVentesByRegionId(user.region._id));
+  // ✅ Un seul Menu global pour corriger le bug de sélection
+  const menuRef = useRef<Menu>(null);
+  const selectedRowDataRef = useRef<PointVente | null>(null);
+  const handleAction = useCallback((action: 'details' | 'edit' | 'delete', row: PointVente) => {
+    setSelectedPV(row ?? null);
+    if (action === 'delete') {
+      setIsDeleteOpen(true);
+      setDialogType(null);
     } else {
-      await dispatch(fetchPointVentes());
+      setDialogType(action);
     }
-  }, [dispatch, user?.role, user?.region?._id]);
+  }, []);
+  const menuModel = useMemo(
+    () => [
+      {
+        label: 'Détails',
+        command: () =>
+          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
+      },
+      {
+        label: 'Modifier',
+        command: () =>
+          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
+      },
+      {
+        label: 'Supprimer',
+        command: () =>
+          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
+      },
+    ],
+    [handleAction]
+  );
 
+  /* ----------------------------- Chargement initial ---------------------------- */
+  useEffect(() => {
+    dispatch(fetchRegions());
+  }, [dispatch]);
+
+  // Si l'utilisateur AdminRegion est stocké côté client, on préfiltre par sa région:
+  useEffect(() => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('user-agricap') : null;
+    if (!raw) return;
+    try {
+      const u = JSON.parse(raw);
+      if (u?.role === 'AdminRegion' && isNonEmptyString(u?.region?._id)) {
+        setRegionFilter(u.region._id);
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  /* ------------------------------ Fetch serveur ----------------------------- */
+  const fetchServer = useCallback(() => {
+    dispatch(
+      fetchPointVentes({
+        page,
+        limit: rows,
+        q: searchText || undefined,
+        region: regionFilter || undefined,
+        sortBy,
+        order,
+        includeTotal: true,
+      })
+    );
+  }, [dispatch, page, rows, searchText, regionFilter, sortBy, order]);
+
+  // 1) premier fetch & quand filtres manuels appliqués
+  useEffect(() => {
+    fetchServer();
+  }, [fetchServer]);
+
+  // 2) refetch quand page/rows/sort changent via contrôles (pagination/tri custom)
+  useEffect(() => {
+    dispatch(
+      fetchPointVentes({
+        page,
+        limit: rows,
+        q: searchText || undefined,
+        region: regionFilter || undefined,
+        sortBy,
+        order,
+        includeTotal: true,
+      })
+    );
+  }, [dispatch, page, rows, sortBy, order]); // search/region via bouton "Filtrer"
+
+  /* ------------------------------- Tri custom ------------------------------- */
+  const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
+  const toggleSort = (field: string) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
+      setPage(1);
+    } else {
+      setOrder(order === 'asc' ? 'desc' : 'asc');
+      setPage(1);
+    }
+  };
+
+  /* --------------------------- Pagination custom ---------------------------- */
+  const total = meta?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const firstIndex = (page - 1) * rows;
+
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
+
+  const onChangeRows = (n: number) => {
+    setRows(n);
+    //@ts-ignore
+    const newTotalPages = Math.max(1, Math.ceil(total / n));
+    const fixedPage = Math.min(page, newTotalPages);
+    setPage(fixedPage);
+  };
+
+  /* ------------------------------- Handlers UI ------------------------------ */
+  const applyFilters = useCallback(() => {
+    setPage(1);
+    dispatch(
+      fetchPointVentes({
+        page: 1,
+        limit: rows,
+        q: searchText || undefined,
+        region: regionFilter || undefined,
+        sortBy,
+        order,
+        includeTotal: true,
+      })
+    );
+  }, [dispatch, rows, searchText, regionFilter, sortBy, order]);
+
+  // Remplir form en fonction de la modal
+  useEffect(() => {
+    if (dialogType === 'edit' || dialogType === 'details') {
+      const regionId =
+        typeof selectedPV?.region === 'string'
+          ? selectedPV?.region
+          : ((selectedPV?.region as any)?._id ?? '');
+      setForm({
+        nom: selectedPV?.nom ?? '',
+        adresse: selectedPV?.adresse ?? '',
+        region: regionId,
+      });
+    } else if (dialogType === 'create') {
+      setForm({ nom: '', adresse: '', region: regionFilter || '' });
+    }
+  }, [dialogType, selectedPV, regionFilter]);
+
+  const resetForm = useCallback(() => {
+    setForm({ nom: '', adresse: '', region: '' });
+    setDialogType(null);
+    setSelectedPV(null);
+  }, []);
+
+  /* ------------------------------ CRUD Handlers ----------------------------- */
   const handleCreate = useCallback(async () => {
-    if (!isNonEmptyString(newPointVente.nom) || !isNonEmptyString(newPointVente.adresse) || !isNonEmptyString(newPointVente.region)) {
+    if (
+      !isNonEmptyString(form.nom) ||
+      !isNonEmptyString(form.adresse) ||
+      !isNonEmptyString(form.region)
+    ) {
       toast.current?.show({
         severity: 'warn',
         summary: 'Champs requis',
-        detail: 'Nom, adresse et région sont obligatoires.',
-        life: 3000,
+        detail: 'Nom, Adresse et Région sont obligatoires',
+        life: 2500,
       });
       return;
     }
-    try {
-      const r = await dispatch(addPointVente(newPointVente as any));
-      if ((addPointVente as any).fulfilled.match(r)) {
-        toast.current?.show({ severity: 'success', summary: 'Ajouté', detail: 'Point de vente créé.', life: 2500 });
-        await refresh();
-        setDialogType(null);
-        setNewPointVente({ nom: '', adresse: '', region: null });
-      } else {
-        throw new Error('Création non aboutie');
-      }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'ajout.", life: 3000 });
+    const r = await dispatch(addPointVente(form as any) as any);
+    if ((addPointVente as any).fulfilled.match(r)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Ajouté',
+        detail: 'Point de vente créé',
+        life: 2000,
+      });
+      resetForm();
+      fetchServer();
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: "Échec de l'ajout",
+        life: 3000,
+      });
     }
-  }, [dispatch, newPointVente, refresh]);
+  }, [dispatch, form, fetchServer, resetForm]);
 
   const handleUpdate = useCallback(async () => {
-    const id = (selectedPointVente as any)?._id ?? '';
-    if (!isNonEmptyString(id)) {
-      setDialogType(null);
+    if (!selectedPV?._id) return;
+    if (
+      !isNonEmptyString(form.nom) ||
+      !isNonEmptyString(form.adresse) ||
+      !isNonEmptyString(form.region)
+    ) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Champs requis',
+        detail: 'Nom, Adresse et Région sont obligatoires',
+        life: 2500,
+      });
       return;
     }
-    try {
-      const r = await dispatch(updatePointVente({ id, updateData: selectedPointVente } as any));
-      if ((updatePointVente as any).fulfilled.match(r)) {
-        toast.current?.show({ severity: 'success', summary: 'Mis à jour', detail: 'Point de vente modifié.', life: 2500 });
-        await refresh();
-      } else {
-        throw new Error('Mise à jour non aboutie');
-      }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la mise à jour.', life: 3000 });
-    } finally {
-      setSelectedPointVente(null);
-      setDialogType(null);
+    const r = await dispatch(
+      updatePointVenteThunk({
+        id: selectedPV._id,
+        updateData: {
+          nom: form.nom.trim(),
+          adresse: form.adresse.trim(),
+          region: form.region,
+        },
+      }) as any
+    );
+    if ((updatePointVenteThunk as any).fulfilled.match(r)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Modifié',
+        detail: 'Point de vente mis à jour',
+        life: 2000,
+      });
+      resetForm();
+      fetchServer();
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la modification',
+        life: 3000,
+      });
     }
-  }, [dispatch, selectedPointVente, refresh]);
+  }, [dispatch, selectedPV, form, fetchServer, resetForm]);
 
   const handleDelete = useCallback(async () => {
-    const id = (selectedPointVente as any)?._id ?? '';
-    if (!isNonEmptyString(id)) {
-      setDialogType(null);
-      return;
+    if (!selectedPV?._id) return;
+    const r = await dispatch(deletePointVenteThunk(selectedPV._id) as any);
+    if ((deletePointVenteThunk as any).fulfilled.match(r)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Supprimé',
+        detail: 'Point de vente supprimé',
+        life: 2000,
+      });
+      // reculer si la page devient vide
+      const nextPage =
+        pointsVente.length === 1 && (meta?.page ?? 1) > 1 ? meta!.page - 1 : (meta?.page ?? page);
+      setPage(nextPage);
+      dispatch(
+        fetchPointVentes({
+          page: nextPage,
+          limit: rows,
+          q: searchText || undefined,
+          region: regionFilter || undefined,
+          sortBy,
+          order,
+          includeTotal: true,
+        })
+      );
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la suppression',
+        life: 3000,
+      });
     }
-    try {
-      const r = await dispatch(deletePointVente(id as any));
-      if ((deletePointVente as any).fulfilled.match(r)) {
-        toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Point de vente supprimé.', life: 2500 });
-        await refresh();
-      } else {
-        throw new Error('Suppression non aboutie');
-      }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la suppression.', life: 3000 });
-    } finally {
-      setDialogType(null);
-      setSelectedPointVente(null);
-    }
-  }, [dispatch, selectedPointVente, refresh]);
+  }, [
+    dispatch,
+    selectedPV,
+    pointsVente.length,
+    meta,
+    page,
+    rows,
+    searchText,
+    regionFilter,
+    sortBy,
+    order,
+  ]);
 
   /* ----------------------------- Import / Export ---------------------------- */
   const handleFileManagement = useCallback(
@@ -219,23 +374,12 @@ export default function PointVenteManagement() {
       format: 'csv' | 'pdf' | 'excel';
       file?: File;
     }) => {
-      if (type === 'import' && file) {
-        toast.current?.show({
-          severity: 'info',
-          summary: `Import ${format.toUpperCase()}`,
-          detail: `Fichier importé: ${file.name}`,
-          life: 3000,
-        });
-        // TODO: implémenter l’import réel + validations
-        return;
-      }
-
       if (type === 'export') {
         if (format === 'pdf') {
           toast.current?.show({
             severity: 'warn',
-            summary: 'Export PDF non supporté',
-            detail: "L'export PDF n'est pas disponible pour ce module.",
+            summary: 'Export non supporté',
+            detail: "L'export PDF n'est pas disponible",
             life: 3000,
           });
           return;
@@ -244,13 +388,13 @@ export default function PointVenteManagement() {
         try {
           const r = await dispatch(
             exportFile({
-              url: '/export/point-ventes',
-              mouvements: pointsVente,
+              url: '/export/pointventes',
+              mouvements: pointsVente, // idéalement: endpoint backend d’export avec les mêmes filtres
               fileType,
             }) as any
           );
           if ((exportFile as any).fulfilled.match(r)) {
-            const filename = `pointVente.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
+            const filename = `pointventes.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
             downloadExportedFile((r as any).payload, filename);
             toast.current?.show({
               severity: 'success',
@@ -274,198 +418,303 @@ export default function PointVenteManagement() {
     [dispatch, pointsVente]
   );
 
+  const regionOptions = useMemo(
+    () => [
+      { label: 'Toutes les régions', value: '' },
+      ...regions.map((r) => ({ label: r.nom, value: r._id })),
+    ],
+    [regions]
+  );
+
   /* ---------------------------------- UI ----------------------------------- */
   return (
     <div className="min-h-screen">
-      <Toast ref={toast} />
+      <Toast ref={toast} position="top-right" />
+      {/* Menu global */}
+      <Menu model={menuModel} popup ref={menuRef} />
 
-      <div className="flex items-center justify-between mt-5 mb-5">
+      <div className="flex items-center justify-between mt-3 mb-3">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des points de vente' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Points de vente' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
         <h2 className="text-2xl font-bold text-gray-700">Gestion des Points de Vente</h2>
       </div>
 
-      <div className="bg-white p-4 rounded-lg shadow-md">
-        <div className="gap-4 mb-4 flex justify-between">
-          <div className="relative w-2/3 flex flex-row">
-            <InputText
-              className="p-2 pl-10 border rounded w-full"
-              placeholder="Rechercher ..."
-              value={searchPV}
-              onChange={(e) => setSearchPV(e.target.value ?? '')}
-            />
-            <div className="ml-3 flex w-2/5">
+      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row w-full">
+        <div className="bg-white p-4 rounded-lg w-full">
+          <div className="gap-4 mb-4 w-full flex justify-between flex-wrap">
+            <div className="relative w-full md:w-2/3 flex flex-row gap-2 flex-wrap">
+              <InputText
+                className="p-2 border rounded w-full md:w-1/3"
+                placeholder="Rechercher (nom, adresse, …)"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value ?? '')}
+                onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+              />
+
+              <Dropdown
+                value={regionFilter}
+                options={regionOptions}
+                onChange={(e) => setRegionFilter(e.value)}
+                className="p-0 w-full md:w-1/3"
+                placeholder="Filtrer par région"
+              />
+
+              <Button
+                label="Filtrer"
+                icon="pi pi-search"
+                className="!bg-green-700 text-white"
+                onClick={applyFilters}
+              />
+
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
-          </div>
-          <Button
-            icon="pi pi-plus"
-            label="Nouveau"
-            className="text-white p-2 rounded !bg-green-700"
-            onClick={() => {
-              setNewPointVente({ nom: '', adresse: '', region: null });
-              setDialogType('create');
-            }}
-          />
-        </div>
 
-        <DataTable
-          value={filteredPointsVente}
-          size="small"
-          paginator
-          rows={10}
-          className="rounded-lg text-[11px]"
-          tableStyle={{ minWidth: '50rem' }}
-          //@ts-ignore
-          rowClassName={(_, opt) => (opt?.rowIndex % 2 === 0 ? '!bg-gray-100 !text-gray-900' : '!bg-green-50 !text-gray-900')}
-          emptyMessage="Aucun point de vente"
-        >
-          <Column
-            header="#"
-            body={(_, options) => (Number.isFinite(options?.rowIndex) ? (options!.rowIndex as number) + 1 : '-')}
-            className="text-[11px]"
-            headerClassName="!bg-green-900 !text-white text-[11px]"
-          />
-          <Column
-            field="region"
-            header="Région"
-            body={(row: PointVente) =>
-              typeof row?.region === 'object' && row?.region !== null ? (row.region as any)?.nom ?? 'N/A' : 'N/A'
-            }
-            sortable
-            className="text-[11px] !p-[2px]"
-            headerClassName="!bg-green-900 !text-white text-[11px]"
-          />
-          <Column field="nom" header="Nom" sortable className="text-[11px] !p-[2px]" headerClassName="!bg-green-900 !text-white text-[11px]" />
-          <Column
-            field="adresse"
-            header="Adresse"
-            sortable
-            className="text-[11px] !p-[2px]"
-            headerClassName="!bg-green-900 !text-white text-[11px]"
-          />
-          <Column
-            header="Actions"
-            className="!p-[2px] text-[11px]"
-            headerClassName="!bg-green-900 !text-white text-[11px]"
-            body={(row: PointVente) => (
-              <>
-                <Button
-                  icon="pi pi-bars"
-                  className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-                  onClick={(e) => showMenu(e, (row as any)?._id ?? '', row)}
-                  disabled={!isNonEmptyString((row as any)?._id)}
-                  aria-haspopup
-                />
-                <Menu
-                  popup
-                  model={[
-                    { label: 'Détails', command: () => handleAction('details', row) },
-                    { label: 'Modifier', command: () => handleAction('edit', row) },
-                    { label: 'Supprimer', command: () => handleAction('delete', row) },
-                  ]}
-                  ref={(el) => setMenuRef((row as any)?._id ?? '', el)}
-                />
-              </>
-            )}
-          />
-        </DataTable>
+            <Button
+              label="Nouveau"
+              icon="pi pi-plus"
+              className="!bg-green-700 text-white p-2 rounded"
+              onClick={() => setDialogType('create')}
+            />
+          </div>
+
+          {/* ---------- TABLE TAILWIND (sans DataTable) ----------- */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-[60rem] w-full text-sm">
+              <thead>
+                <tr className="bg-green-800 text-white">
+                  <th className="px-4 py-2 text-left">N°</th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('region.nom')}
+                    title="Trier"
+                  >
+                    Région <SortIcon order={sortedOrderFor('region.nom')} />
+                  </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('nom')}
+                    title="Trier"
+                  >
+                    Nom <SortIcon order={sortedOrderFor('nom')} />
+                  </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('adresse')}
+                    title="Trier"
+                  >
+                    Adresse <SortIcon order={sortedOrderFor('adresse')} />
+                  </th>
+
+                  <th className="px-4 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading && pointsVente.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
+                      Chargement...
+                    </td>
+                  </tr>
+                ) : pointsVente.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
+                      Aucun point de vente trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  pointsVente.map((row, idx) => (
+                    <tr
+                      key={row._id}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{firstIndex + idx + 1}</td>
+
+                      <td className="px-4 py-2">
+                        {(() => {
+                          const reg = row?.region as any;
+                          return reg && typeof reg === 'object'
+                            ? (reg?.nom ?? '—')
+                            : (regions.find((r) => r._id === reg)?.nom ?? '—');
+                        })()}
+                      </td>
+
+                      <td className="px-4 py-2">{row?.nom ?? '—'}</td>
+                      <td className="px-4 py-2">{row?.adresse ?? '—'}</td>
+
+                      <td className="px-4 py-2">
+                        <Button
+                          icon="pi pi-bars"
+                          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                          onClick={(event) => {
+                            selectedRowDataRef.current = row ?? null;
+                            menuRef.current?.toggle(event);
+                          }}
+                          aria-haspopup
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ---------- PAGINATION TAILWIND ----------- */}
+          <div className="flex items-center justify-between mt-3">
+            <div className="text-sm text-gray-700">
+              Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+              <span className="font-semibold">{total}</span> éléments
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={rows}
+                onChange={(e) => onChangeRows(Number(e.target.value))}
+              >
+                {[5, 10, 20, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+
+              <Button
+                label="«"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(1)}
+                disabled={page <= 1}
+              />
+              <Button
+                label="‹"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(page - 1)}
+                disabled={page <= 1}
+              />
+              <Button
+                label="›"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(page + 1)}
+                disabled={page >= totalPages}
+              />
+              <Button
+                label="»"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(totalPages)}
+                disabled={page >= totalPages}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Create */}
-      <Dialog visible={dialogType === 'create'} header="Ajouter un point de vente" onHide={() => setDialogType(null)} style={{ width: '40vw' }} modal>
-        <div className="p-4">
-          <div className="mb-4">
-            <InputText
-              type="text"
-              placeholder="Nom"
-              value={newPointVente.nom}
-              onChange={(e) => setNewPointVente((p) => ({ ...p, nom: e.target.value ?? '' }))}
-              className="w-full p-2 border rounded"
-            />
+      {/* Dialog Create/Edit */}
+      <Dialog
+        visible={dialogType === 'create' || dialogType === 'edit'}
+        header={dialogType === 'edit' ? 'Modifier le point de vente' : 'Ajouter un point de vente'}
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
+        modal
+      >
+        <div className="p-4 space-y-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Nom*</label>
+              <InputText
+                value={form.nom}
+                onChange={(e) => setForm((p) => ({ ...p, nom: e.target.value ?? '' }))}
+                required
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Adresse*</label>
+              <InputText
+                value={form.adresse}
+                onChange={(e) => setForm((p) => ({ ...p, adresse: e.target.value ?? '' }))}
+                required
+                className="w-full p-2 border rounded"
+              />
+            </div>
           </div>
-          <div className="mb-4">
-            <InputText
-              type="text"
-              placeholder="Adresse"
-              value={newPointVente.adresse}
-              onChange={(e) => setNewPointVente((p) => ({ ...p, adresse: e.target.value ?? '' }))}
-              className="w-full p-2 border rounded"
-            />
+
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Région*</label>
+              <Dropdown
+                value={form.region}
+                options={[
+                  { label: 'Sélectionner...', value: '' },
+                  ...regions.map((r) => ({ label: r.nom, value: r._id })),
+                ]}
+                onChange={(e) => setForm((p) => ({ ...p, region: e.value ?? '' }))}
+                className="w-full border rounded"
+              />
+            </div>
           </div>
-          <div className="mb-4">
-            <Dropdown
-              value={newPointVente.region}
-              options={regions.map((r) => ({ label: r?.nom ?? '—', value: r?._id ?? '' }))}
-              onChange={(e) => setNewPointVente((p) => ({ ...p, region: e.value ?? null }))}
-              placeholder="Sélectionner une région"
-              className="w-full p-2 border rounded"
+
+          <div className="flex justify-end gap-2">
+            <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
+            <Button
+              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              className="!bg-green-700 text-white"
+              onClick={dialogType === 'edit' ? handleUpdate : handleCreate}
             />
-          </div>
-          <div className="flex justify-end mt-4">
-            <Button label="Ajouter" className="!bg-green-700 text-white" onClick={handleCreate} />
           </div>
         </div>
       </Dialog>
 
-      {/* Delete */}
-      <Dialog visible={dialogType === 'delete'} header="Confirmation" onHide={() => setDialogType(null)} style={{ width: '30vw' }} modal>
-        <div className="p-4">
-          <p>Voulez-vous vraiment supprimer ce point de vente ?</p>
-          <div className="flex justify-end mt-4 gap-2">
-            <Button label="Annuler" className="p-button-secondary" onClick={() => setDialogType(null)} />
-            <Button label="Supprimer" className="bg-red-700 text-white" onClick={handleDelete} />
+      {/* Dialog Details */}
+      <Dialog
+        visible={dialogType === 'details'}
+        header="Détails du point de vente"
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
+        modal
+      >
+        <div className="p-4 space-y-3 text-sm">
+          <div className="flex justify-between">
+            <span className="font-medium">Nom</span>
+            <span>{selectedPV?.nom ?? '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Adresse</span>
+            <span>{selectedPV?.adresse ?? '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Région</span>
+            <span>
+              {(() => {
+                const reg = selectedPV?.region as any;
+                return reg && typeof reg === 'object'
+                  ? (reg?.nom ?? '—')
+                  : (regions.find((r) => r._id === reg)?.nom ?? '—');
+              })()}
+            </span>
           </div>
         </div>
       </Dialog>
 
-      {/* Details */}
-      <Dialog visible={dialogType === 'details'} header="Détails du point de vente" onHide={() => setDialogType(null)} style={{ width: '40vw' }} modal>
-        <div className="p-4">
-          <p>
-            <strong>Nom:</strong> {selectedPointVente?.nom ?? '-'}
-          </p>
-          <p>
-            <strong>Adresse:</strong> {selectedPointVente?.adresse ?? '-'}
-          </p>
-          <p>
-            <strong>Région:</strong>{' '}
-            {typeof selectedPointVente?.region === 'object' && selectedPointVente?.region !== null
-              ? (selectedPointVente.region as any)?.nom ?? 'Non défini'
-              : regions.find((r) => r._id === (selectedPointVente as any)?.region)?.nom || 'Non défini'}
-          </p>
-        </div>
-      </Dialog>
-
-      {/* Edit */}
-      <Dialog visible={dialogType === 'edit'} header="Modifier le point de vente" onHide={() => setDialogType(null)} style={{ width: '40vw' }} modal>
-        <div className="p-4">
-          <div className="mb-2">
-            <label className="block mb-1 text-xs text-gray-600">Nom</label>
-            <InputText
-              placeholder="Nom"
-              value={selectedPointVente?.nom ?? ''}
-              onChange={(e) => setSelectedPointVente((p) => (p ? { ...p, nom: e.target.value ?? '' } : p))}
-              className="w-full p-2 border rounded mb-4"
-            />
-          </div>
-          <div className="mb-2">
-            <label className="block mb-1 text-xs text-gray-600">Adresse</label>
-            <InputText
-              placeholder="Adresse"
-              value={selectedPointVente?.adresse ?? ''}
-              onChange={(e) => setSelectedPointVente((p) => (p ? { ...p, adresse: e.target.value ?? '' } : p))}
-              className="w-full p-2 border rounded mb-4"
-            />
-          </div>
-          <div className="mb-2 flex justify-end">
-            <Button label="Mettre à jour" className="!bg-green-700 text-white" onClick={handleUpdate} />
-          </div>
-        </div>
-      </Dialog>
+      {/* Confirm Delete */}
+      <ConfirmDeleteDialog
+        visible={isDeleteOpen}
+        onHide={() => setIsDeleteOpen(false)}
+        onConfirm={() => {
+          setIsDeleteOpen(false);
+          handleDelete();
+        }}
+        item={selectedPV ?? ({ _id: '', nom: '' } as any)}
+        objectLabel="le point de vente"
+        displayField="nom"
+      />
     </div>
   );
 }

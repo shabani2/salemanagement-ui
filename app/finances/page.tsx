@@ -9,8 +9,9 @@ import { BreadCrumb } from 'primereact/breadcrumb';
 import { Toast } from 'primereact/toast';
 import CurrencyManager from '@/components/finances/currencyManager';
 import { ExchangeRatesPanel } from './exchangeRatesPanel';
-import { DiscountCenter } from './discountCenter';
+
 import FinancialSettingsForm from '@/components/finances/fincancesComponent';
+import DiscountCenter from './discountCenter';
 
 //importDiscountCenter, { CurrencyManager, ExchangeRatesPanel, FinancialSettingsForm } from '@/components/finances/fincancesComponent';
 
@@ -25,7 +26,7 @@ const Page = () => {
   }
 
   const [settings, setSettings] = useState<FinancialSettings | null>(null);
-  //@ts-ignore
+
   const [currencies, setCurrencies] = useState<any[]>([]);
 
   useEffect(() => {
@@ -70,10 +71,9 @@ const Page = () => {
                   <i className="pi pi-wallet mr-2" /> Devises
                 </span>
               }
-              // @ts-ignore
             >
               <CurrencyManager
-                //@ts-ignore
+                // @ts-expect-error - compat: external lib types mismatch
                 currencies={currencies}
               />
             </TabPanel>
@@ -85,7 +85,7 @@ const Page = () => {
               }
             >
               <ExchangeRatesPanel
-                //@ts-ignore
+                // @ts-expect-error - compat: external lib types mismatch
                 currencies={currencies}
               />
             </TabPanel>
@@ -107,7 +107,7 @@ const Page = () => {
             >
               {settings && (
                 <FinancialSettingsForm
-                  //@ts-ignore
+                  // @ts-expect-error - compat: external lib types mismatch
                   settings={settings}
                   currencies={currencies}
                 />

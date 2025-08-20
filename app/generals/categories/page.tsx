@@ -29,7 +29,10 @@ import { FileUpload } from 'primereact/fileupload';
 import { Toast } from 'primereact/toast';
 
 import { API_URL } from '@/lib/apiConfig';
-import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 
 /* ----------------------------- Helpers robustes ---------------------------- */
 
@@ -67,16 +70,21 @@ const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const toast = useRef<Toast>(null);
 
-  const categories = useSelector((state: RootState) => asArray<Categorie>(selectAllCategories(state)));
+  const categories = useSelector((state: RootState) =>
+    asArray<Categorie>(selectAllCategories(state))
+  );
 
   const [actionMade, setActionMade] = useState<ActionKind>(null);
   const [selectedCategorie, setSelectedCategorie] = useState<Categorie | null>(null);
   const [isDeleteCat, setIsDeleteCat] = useState(false);
 
   // état du formulaire (sécurisé)
-  const [formState, setFormState] = useState<{ _id?: string; nom: string; type: string; image: File | string | null }>(
-    { nom: '', type: '', image: null }
-  );
+  const [formState, setFormState] = useState<{
+    _id?: string;
+    nom: string;
+    type: string;
+    image: File | string | null;
+  }>({ nom: '', type: '', image: null });
 
   /* ----------------------------- Chargement data ---------------------------- */
   useEffect(() => {
@@ -133,7 +141,6 @@ const Page: React.FC = () => {
 
   /* --------------------------------- Submit -------------------------------- */
   const handleSubmit = useCallback(async () => {
-    // validation minimale
     if (!isNonEmptyString(formState.nom) || !isNonEmptyString(formState.type)) {
       toast.current?.show({
         severity: 'warn',
@@ -146,20 +153,47 @@ const Page: React.FC = () => {
 
     try {
       if (actionMade === 'create') {
-        const payload = buildCategoriePayload(formState);
-        const r = await dispatch(addCategorie(payload as any));
+        // ✅ ENVOIE UN OBJET SIMPLE, PAS DE FormData ICI
+        const r = await dispatch(
+          addCategorie({
+            nom: formState.nom,
+            type: formState.type,
+            image: formState.image ?? null, // File | string | null (optionnelle)
+          } as any)
+        );
+
         if (addCategorie.fulfilled.match(r)) {
-          toast.current?.show({ severity: 'success', summary: 'Succès', detail: 'Catégorie créée.', life: 3000 });
+          toast.current?.show({
+            severity: 'success',
+            summary: 'Succès',
+            detail: 'Catégorie créée.',
+            life: 3000,
+          });
           await dispatch(fetchCategories());
           setActionMade(null);
         } else {
           throw new Error('Création non aboutie');
         }
       } else if (actionMade === 'update' && isNonEmptyString(formState._id)) {
-        const payload = buildCategoriePayload(formState);
-        const r = await dispatch(updateCategorie({ id: formState._id, data: payload as any }));
+        // ✅ Prépare un objet "partiel"
+        const data: any = {
+          nom: formState.nom,
+          type: formState.type,
+        };
+        // si nouveau fichier choisi
+        if (isFile(formState.image)) data.image = formState.image;
+        // si string (chemin/URL) ou null
+        else if (typeof formState.image === 'string' || formState.image === null)
+          data.image = formState.image;
+
+        const r = await dispatch(updateCategorie({ id: formState._id, data }));
         if (updateCategorie.fulfilled.match(r)) {
-          toast.current?.show({ severity: 'success', summary: 'Succès', detail: 'Catégorie mise à jour.', life: 3000 });
+          toast.current?.show({
+            severity: 'success',
+            summary: 'Succès',
+            detail: 'Catégorie mise à jour.',
+            life: 3000,
+          });
           await dispatch(fetchCategories());
           setActionMade(null);
         } else {
@@ -187,7 +221,12 @@ const Page: React.FC = () => {
       try {
         const r = await dispatch(deleteCategorie(id));
         if (deleteCategorie.fulfilled.match(r)) {
-          toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Catégorie supprimée.', life: 3000 });
+          toast.current?.show({
+            severity: 'success',
+            summary: 'Supprimé',
+            detail: 'Catégorie supprimée.',
+            life: 3000,
+          });
           await dispatch(fetchCategories());
         } else {
           throw new Error('Suppression non aboutie');
@@ -210,15 +249,7 @@ const Page: React.FC = () => {
 
   /* ------------------------- Import / Export robuste ------------------------ */
   const handleFileManagement = useCallback(
-    async ({
-      type,
-      format,
-      file,
-    }: {
-      type: 'import' | 'export';
-      format: string;
-      file?: File;
-    }) => {
+    async ({ type, format, file }: { type: 'import' | 'export'; format: string; file?: File }) => {
       if (type === 'import' && file) {
         // à implémenter selon ton backend (validation côté client recommandée)
         toast.current?.show({
@@ -278,13 +309,13 @@ const Page: React.FC = () => {
   const currentImageUrl = useMemo(() => {
     // si image = File, on fera un preview via URL.createObjectURL ; sinon on tente l’URL API
     if (isFile(formState.image)) return URL.createObjectURL(formState.image);
-    if (isNonEmptyString(formState.image)) return safeUrlJoin(API_URL, formState.image);
+    if (isNonEmptyString(formState.image)) return safeUrlJoin(API_URL(), formState.image);
     if (actionMade === 'update' && isNonEmptyString(selectedCategorie?.image)) {
-      return safeUrlJoin(API_URL, selectedCategorie?.image);
+      return safeUrlJoin(API_URL(), selectedCategorie?.image);
     }
     return '';
   }, [formState.image, selectedCategorie, actionMade]);
-
+  console.log('formState : ', formState);
   return (
     <div className="min-h-screen">
       <Toast ref={toast} position="top-right" />
@@ -389,7 +420,11 @@ const Page: React.FC = () => {
 
           {/* Boutons */}
           <div className="flex justify-end gap-2">
-            <Button label="Annuler" className="!bg-gray-500 text-white" onClick={() => setActionMade(null)} />
+            <Button
+              label="Annuler"
+              className="!bg-gray-500 text-white"
+              onClick={() => setActionMade(null)}
+            />
             <Button
               label={actionMade === 'create' ? 'Ajouter' : 'Modifier'}
               className="!bg-green-700 text-white"
