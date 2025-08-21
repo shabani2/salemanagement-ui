@@ -452,43 +452,59 @@ const Page: React.FC = () => {
     try {
       setLoadingCreateOrUpdate(true);
 
+      // UTILISE FORMDATA POUR LES DEUX CAS (création ET édition)
+      const fd = new FormData();
+
+      if (isEditMode && newUser._id) {
+        fd.append('_id', String(newUser._id));
+      }
+
+      fd.append('nom', newUser.nom);
+      fd.append('prenom', newUser.prenom);
+      fd.append('telephone', newUser.telephone ?? '');
+      fd.append('email', newUser.email);
+      fd.append('adresse', newUser.adresse ?? '');
+
+      // Pour l'édition, pas besoin de password s'il est vide
+      if (!isEditMode || newUser.password) {
+        fd.append('password', newUser.password);
+      }
+
+      fd.append('role', newUser.role ?? '');
+
+      if (newUser.region) {
+        const regionValue = isRegion(newUser.region as any)
+          ? (newUser.region as any)?._id
+          : newUser.region;
+        if (regionValue) fd.append('region', String(regionValue));
+      }
+
+      if (newUser.pointVente) {
+        const pvValue = isPointVente(newUser.pointVente as any)
+          ? (newUser.pointVente as any)?._id
+          : newUser.pointVente;
+        if (pvValue) fd.append('pointVente', String(pvValue));
+      }
+
+      // GESTION DE L'IMAGE - IMPORTANT
+      if (newUser.image instanceof File) {
+        fd.append('image', newUser.image);
+      } else if (isEditMode && typeof newUser.image === 'string') {
+        // Pour l'édition, si c'est une string (chemin existant), on ne l'envoie pas
+        // Le serveur gardera l'image existante
+      }
+
       if (isEditMode) {
-        await dispatch(updateUser(newUser as any)).unwrap();
+        // POUR L'ÉDITION AUSSI
+        //@ts-ignore
+        await dispatch(updateUser(fd)).unwrap();
         toast.current?.show({
           severity: 'success',
           summary: 'Modifié',
           detail: 'Utilisateur mis à jour.',
           life: 2000,
         });
-        setDialogType(null);
-        await refetchUsers();
       } else {
-        const fd = new FormData();
-        if (newUser._id) fd.append('_id', String(newUser._id));
-        fd.append('nom', newUser.nom);
-        fd.append('prenom', newUser.prenom);
-        fd.append('telephone', newUser.telephone ?? '');
-        fd.append('email', newUser.email);
-        fd.append('adresse', newUser.adresse ?? '');
-        fd.append('password', newUser.password);
-        fd.append('role', newUser.role ?? '');
-
-        if (newUser.region) {
-          const regionValue = isRegion(newUser.region as any)
-            ? (newUser.region as any)?._id
-            : newUser.region;
-          if (regionValue) fd.append('region', String(regionValue));
-        }
-        if (newUser.pointVente) {
-          const pvValue = isPointVente(newUser.pointVente as any)
-            ? (newUser.pointVente as any)?._id
-            : newUser.pointVente;
-          if (pvValue) fd.append('pointVente', String(pvValue));
-        }
-        if (newUser.image instanceof File) {
-          fd.append('image', newUser.image);
-        }
-
         await dispatch(registerUser(fd)).unwrap();
         toast.current?.show({
           severity: 'success',
@@ -496,10 +512,11 @@ const Page: React.FC = () => {
           detail: 'Utilisateur ajouté avec succès !',
           life: 2000,
         });
-        setDialogType(null);
         setNewUser(initialUserState);
-        await refetchUsers();
       }
+
+      setDialogType(null);
+      await refetchUsers();
     } catch (err: any) {
       toast.current?.show({
         severity: 'error',
@@ -510,7 +527,6 @@ const Page: React.FC = () => {
     } finally {
       setLoadingCreateOrUpdate(false);
     }
-    //@ts-ignore
   }, [dispatch, newUser, refetchUsers]);
 
   /* ------------------------------- handlers UI ------------------------------- */

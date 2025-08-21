@@ -64,7 +64,7 @@ export default function PointVenteManagement() {
   const meta = useSelector(selectPointVenteMeta); // doit contenir { total, page, limit, ... }
   const status = useSelector(selectPointVenteStatus);
   const loading = status === 'loading';
-
+  const [loading1, setLoading1] = useState(false);
   // Requête serveur (params)
   const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
@@ -240,6 +240,7 @@ export default function PointVenteManagement() {
 
   /* ------------------------------ CRUD Handlers ----------------------------- */
   const handleCreate = useCallback(async () => {
+    setLoading1(true);
     if (
       !isNonEmptyString(form.nom) ||
       !isNonEmptyString(form.adresse) ||
@@ -261,6 +262,7 @@ export default function PointVenteManagement() {
         detail: 'Point de vente créé',
         life: 2000,
       });
+      setLoading1(false);
       resetForm();
       fetchServer();
     } else {
@@ -270,10 +272,12 @@ export default function PointVenteManagement() {
         detail: "Échec de l'ajout",
         life: 3000,
       });
+      setLoading1(false);
     }
   }, [dispatch, form, fetchServer, resetForm]);
 
   const handleUpdate = useCallback(async () => {
+    setLoading1(true);
     if (!selectedPV?._id) return;
     if (
       !isNonEmptyString(form.nom) ||
@@ -307,6 +311,7 @@ export default function PointVenteManagement() {
       });
       resetForm();
       fetchServer();
+      setLoading1(false);
     } else {
       toast.current?.show({
         severity: 'error',
@@ -314,6 +319,7 @@ export default function PointVenteManagement() {
         detail: 'Échec de la modification',
         life: 3000,
       });
+      setLoading1(false);
     }
   }, [dispatch, selectedPV, form, fetchServer, resetForm]);
 
@@ -664,7 +670,20 @@ export default function PointVenteManagement() {
           <div className="flex justify-end gap-2">
             <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
             <Button
-              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              //@ts-ignore
+              label={
+                loading1 ? (
+                  <div className="flex items-center gap-2">
+                    <i className="pi pi-spinner pi-spin"></i>
+                    {dialogType === 'edit' ? 'Modifier' : 'Créer'}
+                  </div>
+                ) : dialogType === 'edit' ? (
+                  'Modifier'
+                ) : (
+                  'Créer'
+                )
+              }
+              disabled={loading1}
               className="!bg-green-700 text-white"
               onClick={dialogType === 'edit' ? handleUpdate : handleCreate}
             />

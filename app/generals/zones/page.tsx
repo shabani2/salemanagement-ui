@@ -113,6 +113,7 @@ export default function RegionManagement() {
     ],
     [handleAction]
   );
+  const [loading1, setLoading1] = useState(false);
 
   /* ------------------------------ Fetch serveur ----------------------------- */
   const fetchServer = useCallback(() => {
@@ -212,6 +213,7 @@ export default function RegionManagement() {
         detail: 'Région créée',
         life: 2000,
       });
+      setLoading1(false);
       resetForm();
       fetchServer();
     } else {
@@ -221,10 +223,12 @@ export default function RegionManagement() {
         detail: "Échec de l'ajout",
         life: 3000,
       });
+      setLoading1(false);
     }
   }, [dispatch, form, fetchServer, resetForm]);
 
   const handleUpdate = useCallback(async () => {
+    setLoading1(true);
     if (!selectedRegion?._id) return;
     if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.ville)) {
       toast.current?.show({
@@ -249,6 +253,7 @@ export default function RegionManagement() {
         detail: 'Région mise à jour',
         life: 2000,
       });
+      setLoading1(false);
       resetForm();
       fetchServer();
     } else {
@@ -258,6 +263,7 @@ export default function RegionManagement() {
         detail: 'Échec de la modification',
         life: 3000,
       });
+      setLoading1(false);
     }
   }, [dispatch, selectedRegion, form, fetchServer, resetForm]);
 
@@ -596,7 +602,20 @@ export default function RegionManagement() {
           <div className="flex justify-end gap-2">
             <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
             <Button
-              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              //@ts-ignore
+              label={
+                loading ? (
+                  <div className="flex items-center gap-2">
+                    <i className="pi pi-spinner pi-spin"></i>
+                    {dialogType === 'edit' ? 'Modifier' : 'Créer'}
+                  </div>
+                ) : dialogType === 'edit' ? (
+                  'Modifier'
+                ) : (
+                  'Créer'
+                )
+              }
+              disabled={loading1}
               className="!bg-green-700 text-white"
               onClick={dialogType === 'edit' ? handleUpdate : handleCreate}
             />

@@ -122,6 +122,7 @@ const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => {
 const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const toast = useRef<Toast>(null);
+  const [loading1, setLoading1] = useState(false);
 
   // Menu actions (un seul menu global)
   const menuRef = useRef<Menu>(null);
@@ -256,11 +257,14 @@ const Page: React.FC = () => {
       return;
     }
     try {
+      setLoading1(true);
       let r;
       if (selectedProduit?._id) {
         r = await dispatch(updateProduitThunk({ _id: selectedProduit._id, ...form }));
+        setLoading1(false);
       } else {
         r = await dispatch(addProduit(form));
+        setLoading1(false);
       }
       if (addProduit.fulfilled.match(r) || updateProduitThunk.fulfilled.match(r)) {
         fetchServer();
@@ -849,7 +853,20 @@ const Page: React.FC = () => {
           <div className="flex justify-end gap-2">
             <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
             <Button
-              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              //@ts-ignore
+              label={
+                loading1 ? (
+                  <div className="flex items-center gap-2">
+                    <i className="pi pi-spinner pi-spin"></i>
+                    {dialogType === 'edit' ? 'Modifier' : 'Créer'}
+                  </div>
+                ) : dialogType === 'edit' ? (
+                  'Modifier'
+                ) : (
+                  'Créer'
+                )
+              }
+              disabled={loading1}
               className="!bg-green-700 text-white"
               onClick={handleSubmitProduit}
             />

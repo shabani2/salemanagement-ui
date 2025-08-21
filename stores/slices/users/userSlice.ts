@@ -102,12 +102,33 @@ export const addUser = createAsyncThunk(
 );
 
 // ✅ Thunk pour mettre à jour un utilisateur
+// export const updateUser = createAsyncThunk(
+//   'users/updateUser',
+//   async (user: User, { rejectWithValue }) => {
+//     try {
+//       const response = await apiClient.put(`/user`, user, {
+//         headers: getAuthHeaders(), // Ajoute le token d'authentification
+//       });
+//       console.log('response updating => : ', response.data);
+//       return response.data;
+//     } catch (error: unknown) {
+//       if (error instanceof Error) {
+//         return rejectWithValue(error.message);
+//       }
+//       return rejectWithValue('Erreur lors de la mise à jour de l’utilisateur');
+//     }
+//   }
+// );
+
 export const updateUser = createAsyncThunk(
   'users/updateUser',
-  async (user: User, { rejectWithValue }) => {
+  async (formData: FormData, { rejectWithValue }) => {
     try {
-      const response = await apiClient.put(`/user`, user, {
-        headers: getAuthHeaders(), // Ajoute le token d'authentification
+      const response = await apiClient.put(`/user`, formData, {
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'multipart/form-data', // ← IMPORTANT pour les fichiers
+        },
       });
       console.log('response updating => : ', response.data);
       return response.data;

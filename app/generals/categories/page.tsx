@@ -138,9 +138,10 @@ const Page: React.FC = () => {
       setFormState({ nom: '', type: '', image: null });
     }
   }, [actionMade, selectedCategorie]);
-
+  const [loading1, setLoading1] = useState(false);
   /* --------------------------------- Submit -------------------------------- */
   const handleSubmit = useCallback(async () => {
+    setLoading1(true);
     if (!isNonEmptyString(formState.nom) || !isNonEmptyString(formState.type)) {
       toast.current?.show({
         severity: 'warn',
@@ -169,10 +170,12 @@ const Page: React.FC = () => {
             detail: 'Catégorie créée.',
             life: 3000,
           });
+          setLoading1(false);
           await dispatch(fetchCategories());
           setActionMade(null);
         } else {
           throw new Error('Création non aboutie');
+          setLoading1(false);
         }
       } else if (actionMade === 'update' && isNonEmptyString(formState._id)) {
         // ✅ Prépare un objet "partiel"
@@ -426,7 +429,21 @@ const Page: React.FC = () => {
               onClick={() => setActionMade(null)}
             />
             <Button
-              label={actionMade === 'create' ? 'Ajouter' : 'Modifier'}
+              disabled={loading1}
+              //@ts-ignore
+
+              label={
+                loading1 ? (
+                  <div className="flex items-center gap-2">
+                    <i className="pi pi-spinner pi-spin"></i>
+                    {actionMade === 'create' ? 'Ajouter' : 'Modifier'}
+                  </div>
+                ) : actionMade === 'create' ? (
+                  'Ajouter'
+                ) : (
+                  'Modifier'
+                )
+              }
               className="!bg-green-700 text-white"
               onClick={handleSubmit}
             />
