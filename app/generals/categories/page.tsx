@@ -177,6 +177,7 @@ const Page: React.FC = () => {
           throw new Error('Création non aboutie');
           setLoading1(false);
         }
+        setLoading1(false);
       } else if (actionMade === 'update' && isNonEmptyString(formState._id)) {
         // ✅ Prépare un objet "partiel"
         const data: any = {
@@ -198,9 +199,11 @@ const Page: React.FC = () => {
             life: 3000,
           });
           await dispatch(fetchCategories());
+          setLoading1(false);
           setActionMade(null);
         } else {
           throw new Error('Mise à jour non aboutie');
+          setLoading1(false);
         }
       }
     } catch (e) {
@@ -211,6 +214,7 @@ const Page: React.FC = () => {
         life: 3000,
       });
     }
+    setLoading1(false);
   }, [dispatch, actionMade, formState]);
 
   /* ----------------------------- Suppression -------------------------------- */
