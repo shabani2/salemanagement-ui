@@ -19,6 +19,7 @@ import {
   addPointVente,
   deletePointVente as deletePointVenteThunk,
   fetchPointVentes,
+  fetchPointVentesByRegionId, // ⬅️ import du thunk AdminRegion
   selectAllPointVentes,
   selectPointVenteMeta,
   selectPointVenteStatus,
@@ -29,14 +30,10 @@ import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSl
 
 import { PointVente } from '@/Models/pointVenteType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import {
-  downloadExportedFile,
-  exportFile,
-} from '@/stores/slices/document/importDocuments/exportDoc';
+import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
 /* ----------------------------- Helpers ----------------------------- */
-
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 
@@ -50,25 +47,21 @@ const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
   </span>
 );
 
-/* -------------------------------- Component -------------------------------- */
-
 export default function PointVenteManagement() {
   const dispatch = useDispatch<AppDispatch>();
   const toast = useRef<Toast>(null);
 
   // Store
-  const pointsVente = useSelector((state: RootState) =>
-    asArray<PointVente>(selectAllPointVentes(state))
-  );
+  const pointsVente = useSelector((state: RootState) => asArray<PointVente>(selectAllPointVentes(state)));
   const regions = useSelector((state: RootState) => asArray<RegionLite>(selectAllRegions(state)));
-  const meta = useSelector(selectPointVenteMeta); // doit contenir { total, page, limit, ... }
+  const meta = useSelector(selectPointVenteMeta);
   const status = useSelector(selectPointVenteStatus);
   const loading = status === 'loading';
-  const [loading1, setLoading1] = useState(false);
+
   // Requête serveur (params)
   const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
-  const [sortBy, setSortBy] = useState<string>('updatedAt'); // 👈 tri par updatedAt par défaut
+  const [sortBy, setSortBy] = useState<string>('updatedAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [searchText, setSearchText] = useState('');
   const [regionFilter, setRegionFilter] = useState<string>('');
@@ -80,6 +73,7 @@ export default function PointVenteManagement() {
 
   // Formulaire création/édition
   const [form, setForm] = useState<PVForm>({ nom: '', adresse: '', region: '' });
+  const [loading1, setLoading1] = useState(false);
 
   // ✅ Un seul Menu global pour corriger le bug de sélection
   const menuRef = useRef<Menu>(null);
@@ -95,21 +89,9 @@ export default function PointVenteManagement() {
   }, []);
   const menuModel = useMemo(
     () => [
-      {
-        label: 'Détails',
-        command: () =>
-          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
-      },
-      {
-        label: 'Modifier',
-        command: () =>
-          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
-      },
-      {
-        label: 'Supprimer',
-        command: () =>
-          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
-      },
+      { label: 'Détails', command: () => selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current) },
+      { label: 'Modifier', command: () => selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current) },
+      { label: 'Supprimer', command: () => selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current) },
     ],
     [handleAction]
   );
@@ -119,54 +101,70 @@ export default function PointVenteManagement() {
     dispatch(fetchRegions());
   }, [dispatch]);
 
-  // Si l'utilisateur AdminRegion est stocké côté client, on préfiltre par sa région:
-  useEffect(() => {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('user-agricap') : null;
-    if (!raw) return;
+  // Récupération rôle/region utilisateur (localStorage)
+  const user = useMemo(() => {
+    if (typeof window === 'undefined') return null;
     try {
-      const u = JSON.parse(raw);
-      if (u?.role === 'AdminRegion' && isNonEmptyString(u?.region?._id)) {
-        setRegionFilter(u.region._id);
-      }
+      const raw = localStorage.getItem('user-agricap');
+      return raw ? JSON.parse(raw) : null;
     } catch {
-      /* noop */
+      return null;
     }
   }, []);
+  const isAdminRegion = !!(user?.role === 'AdminRegion' && user?.region?._id);
+  const forcedRegionId: string | null = isAdminRegion ? user.region._id : null;
+
+  // Si AdminRegion, on fige le filtre région
+  useEffect(() => {
+    if (isAdminRegion && forcedRegionId) {
+      setRegionFilter(forcedRegionId);
+    }
+  }, [isAdminRegion, forcedRegionId]);
 
   /* ------------------------------ Fetch serveur ----------------------------- */
-  const fetchServer = useCallback(() => {
-    dispatch(
-      fetchPointVentes({
-        page,
-        limit: rows,
-        q: searchText || undefined,
-        region: regionFilter || undefined,
-        sortBy,
-        order,
-        includeTotal: true,
-      })
-    );
-  }, [dispatch, page, rows, searchText, regionFilter, sortBy, order]);
+  // helper pour fetch à une page précise (utile après suppression ou "Filtrer")
+  const fetchAtPage = useCallback(
+    (targetPage: number) => {
+      if (isAdminRegion && forcedRegionId) {
+        dispatch(
+          fetchPointVentesByRegionId({
+            regionId: forcedRegionId,
+            page: targetPage,
+            limit: rows,
+            q: searchText || undefined,
+            sortBy,
+            order,
+            includeTotal: true,
+            includeStock: false,
+          }) as any
+        );
+      } else {
+        dispatch(
+          fetchPointVentes({
+            page: targetPage,
+            limit: rows,
+            q: searchText || undefined,
+            region: regionFilter || undefined,
+            sortBy,
+            order,
+            includeTotal: true,
+            includeStock: false,
+          }) as any
+        );
+      }
+    },
+    [dispatch, isAdminRegion, forcedRegionId, rows, searchText, regionFilter, sortBy, order]
+  );
 
-  // 1) premier fetch & quand filtres manuels appliqués
+  // fetch "courant" basé sur l'état `page`
+  const fetchServer = useCallback(() => {
+    fetchAtPage(page);
+  }, [fetchAtPage, page]);
+
+  // 1) premier fetch & à chaque changement de dépendances (un seul effet)
   useEffect(() => {
     fetchServer();
   }, [fetchServer]);
-
-  // 2) refetch quand page/rows/sort changent via contrôles (pagination/tri custom)
-  useEffect(() => {
-    dispatch(
-      fetchPointVentes({
-        page,
-        limit: rows,
-        q: searchText || undefined,
-        region: regionFilter || undefined,
-        sortBy,
-        order,
-        includeTotal: true,
-      })
-    );
-  }, [dispatch, page, rows, sortBy, order]); // search/region via bouton "Filtrer"
 
   /* ------------------------------- Tri custom ------------------------------- */
   const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
@@ -175,9 +173,12 @@ export default function PointVenteManagement() {
       setSortBy(field);
       setOrder('asc');
       setPage(1);
+      fetchAtPage(1);
     } else {
-      setOrder(order === 'asc' ? 'desc' : 'asc');
+      const nextOrder = order === 'asc' ? 'desc' : 'asc';
+      setOrder(nextOrder);
       setPage(1);
+      fetchAtPage(1);
     }
   };
 
@@ -188,32 +189,26 @@ export default function PointVenteManagement() {
 
   const goTo = (p: number) => {
     const next = Math.min(Math.max(1, p), totalPages);
-    if (next !== page) setPage(next);
+    if (next !== page) {
+      setPage(next);
+      fetchAtPage(next);
+    }
   };
 
   const onChangeRows = (n: number) => {
-    setRows(n);
-    //@ts-ignore
-    const newTotalPages = Math.max(1, Math.ceil(total / n));
+    const newRows = Number(n);
+    setRows(newRows);
+    const newTotalPages = Math.max(1, Math.ceil(total / newRows));
     const fixedPage = Math.min(page, newTotalPages);
     setPage(fixedPage);
+    fetchAtPage(fixedPage);
   };
 
   /* ------------------------------- Handlers UI ------------------------------ */
   const applyFilters = useCallback(() => {
     setPage(1);
-    dispatch(
-      fetchPointVentes({
-        page: 1,
-        limit: rows,
-        q: searchText || undefined,
-        region: regionFilter || undefined,
-        sortBy,
-        order,
-        includeTotal: true,
-      })
-    );
-  }, [dispatch, rows, searchText, regionFilter, sortBy, order]);
+    fetchAtPage(1);
+  }, [fetchAtPage]);
 
   // Remplir form en fonction de la modal
   useEffect(() => {
@@ -228,9 +223,9 @@ export default function PointVenteManagement() {
         region: regionId,
       });
     } else if (dialogType === 'create') {
-      setForm({ nom: '', adresse: '', region: regionFilter || '' });
+      setForm({ nom: '', adresse: '', region: isAdminRegion ? forcedRegionId || '' : regionFilter || '' });
     }
-  }, [dialogType, selectedPV, regionFilter]);
+  }, [dialogType, selectedPV, regionFilter, isAdminRegion, forcedRegionId]);
 
   const resetForm = useCallback(() => {
     setForm({ nom: '', adresse: '', region: '' });
@@ -241,55 +236,42 @@ export default function PointVenteManagement() {
   /* ------------------------------ CRUD Handlers ----------------------------- */
   const handleCreate = useCallback(async () => {
     setLoading1(true);
-    if (
-      !isNonEmptyString(form.nom) ||
-      !isNonEmptyString(form.adresse) ||
-      !isNonEmptyString(form.region)
-    ) {
+    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.adresse) || !isNonEmptyString(form.region)) {
       toast.current?.show({
         severity: 'warn',
         summary: 'Champs requis',
         detail: 'Nom, Adresse et Région sont obligatoires',
         life: 2500,
       });
+      setLoading1(false); // ⬅️ éviter spinner bloqué
       return;
     }
     const r = await dispatch(addPointVente(form as any) as any);
     if ((addPointVente as any).fulfilled.match(r)) {
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Ajouté',
-        detail: 'Point de vente créé',
-        life: 2000,
-      });
+      toast.current?.show({ severity: 'success', summary: 'Ajouté', detail: 'Point de vente créé', life: 2000 });
       setLoading1(false);
       resetForm();
       fetchServer();
     } else {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Erreur',
-        detail: "Échec de l'ajout",
-        life: 3000,
-      });
+      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'ajout", life: 3000 });
       setLoading1(false);
     }
   }, [dispatch, form, fetchServer, resetForm]);
 
   const handleUpdate = useCallback(async () => {
     setLoading1(true);
-    if (!selectedPV?._id) return;
-    if (
-      !isNonEmptyString(form.nom) ||
-      !isNonEmptyString(form.adresse) ||
-      !isNonEmptyString(form.region)
-    ) {
+    if (!selectedPV?._id) {
+      setLoading1(false);
+      return;
+    }
+    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.adresse) || !isNonEmptyString(form.region)) {
       toast.current?.show({
         severity: 'warn',
         summary: 'Champs requis',
         detail: 'Nom, Adresse et Région sont obligatoires',
         life: 2500,
       });
+      setLoading1(false);
       return;
     }
     const r = await dispatch(
@@ -303,22 +285,12 @@ export default function PointVenteManagement() {
       }) as any
     );
     if ((updatePointVenteThunk as any).fulfilled.match(r)) {
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Modifié',
-        detail: 'Point de vente mis à jour',
-        life: 2000,
-      });
+      toast.current?.show({ severity: 'success', summary: 'Modifié', detail: 'Point de vente mis à jour', life: 2000 });
       resetForm();
       fetchServer();
       setLoading1(false);
     } else {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Erreur',
-        detail: 'Échec de la modification',
-        life: 3000,
-      });
+      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la modification', life: 3000 });
       setLoading1(false);
     }
   }, [dispatch, selectedPV, form, fetchServer, resetForm]);
@@ -327,59 +299,19 @@ export default function PointVenteManagement() {
     if (!selectedPV?._id) return;
     const r = await dispatch(deletePointVenteThunk(selectedPV._id) as any);
     if ((deletePointVenteThunk as any).fulfilled.match(r)) {
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Supprimé',
-        detail: 'Point de vente supprimé',
-        life: 2000,
-      });
+      toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Point de vente supprimé', life: 2000 });
       // reculer si la page devient vide
-      const nextPage =
-        pointsVente.length === 1 && (meta?.page ?? 1) > 1 ? meta!.page - 1 : (meta?.page ?? page);
+      const nextPage = pointsVente.length === 1 && (meta?.page ?? 1) > 1 ? (meta!.page - 1) : (meta?.page ?? page);
       setPage(nextPage);
-      dispatch(
-        fetchPointVentes({
-          page: nextPage,
-          limit: rows,
-          q: searchText || undefined,
-          region: regionFilter || undefined,
-          sortBy,
-          order,
-          includeTotal: true,
-        })
-      );
+      fetchAtPage(nextPage);
     } else {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Erreur',
-        detail: 'Échec de la suppression',
-        life: 3000,
-      });
+      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la suppression', life: 3000 });
     }
-  }, [
-    dispatch,
-    selectedPV,
-    pointsVente.length,
-    meta,
-    page,
-    rows,
-    searchText,
-    regionFilter,
-    sortBy,
-    order,
-  ]);
+  }, [dispatch, selectedPV, pointsVente.length, meta, page, fetchAtPage]);
 
   /* ----------------------------- Import / Export ---------------------------- */
   const handleFileManagement = useCallback(
-    async ({
-      type,
-      format,
-      file,
-    }: {
-      type: 'import' | 'export';
-      format: 'csv' | 'pdf' | 'excel';
-      file?: File;
-    }) => {
+    async ({ type, format, file }: { type: 'import' | 'export'; format: 'csv' | 'pdf' | 'excel'; file?: File }) => {
       if (type === 'export') {
         if (format === 'pdf') {
           toast.current?.show({
@@ -424,6 +356,7 @@ export default function PointVenteManagement() {
     [dispatch, pointsVente]
   );
 
+  /* ------------------------------- Options UI ------------------------------- */
   const regionOptions = useMemo(
     () => [
       { label: 'Toutes les régions', value: '' },
@@ -454,16 +387,20 @@ export default function PointVenteManagement() {
             <div className="relative w-full md:w-2/3 flex flex-row gap-2 flex-wrap">
               <InputText
                 className="p-2 border rounded w-full md:w-1/3"
-                placeholder="Rechercher (nom, adresse, …)"
+                placeholder="Rechercher (nom, adresse, région, ville…)"
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value ?? '')}
                 onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
               />
 
               <Dropdown
-                value={regionFilter}
+                value={isAdminRegion ? (forcedRegionId ?? '') : regionFilter}
                 options={regionOptions}
-                onChange={(e) => setRegionFilter(e.value)}
+                onChange={(e) => {
+                  if (isAdminRegion) return; // AdminRegion ne change pas de région
+                  setRegionFilter(e.value);
+                }}
+                disabled={!!isAdminRegion}
                 className="p-0 w-full md:w-1/3"
                 placeholder="Filtrer par région"
               />
@@ -657,12 +594,10 @@ export default function PointVenteManagement() {
               <label className="block mb-1 text-sm font-medium">Région*</label>
               <Dropdown
                 value={form.region}
-                options={[
-                  { label: 'Sélectionner...', value: '' },
-                  ...regions.map((r) => ({ label: r.nom, value: r._id })),
-                ]}
+                options={[{ label: 'Sélectionner...', value: '' }, ...regions.map((r) => ({ label: r.nom, value: r._id }))]}
                 onChange={(e) => setForm((p) => ({ ...p, region: e.value ?? '' }))}
                 className="w-full border rounded"
+                disabled={!!isAdminRegion} // ⬅️ AdminRegion : région imposée
               />
             </div>
           </div>

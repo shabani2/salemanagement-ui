@@ -30,7 +30,7 @@ export interface FetchParams {
   limit?: number;
   q?: string;
   region?: string; // ObjectId de la région
-  sortBy?: string; // ex: 'createdAt' | 'nom'
+  sortBy?: string; // ex: 'createdAt' | 'nom' | 'region.nom'
   order?: Order; // 'asc' | 'desc'
   includeTotal?: boolean; // par défaut true
   includeStock?: boolean; // pour peupler stock.produit au besoin
@@ -38,7 +38,7 @@ export interface FetchParams {
 
 interface PointVenteListResponse<T = PointVente> {
   data: T[];
-  meta?: PaginationMeta;
+  meta?: Partial<PaginationMeta>;
 }
 
 /* --------- Étend ton type si tu veux exploiter stockCount côté UI --------- */
@@ -82,11 +82,101 @@ const toQueryString = (params: Record<string, any>) => {
   return s ? `?${s}` : '';
 };
 
+/** Normalise n’importe quel shape de payload reçu en { list, meta } */
+function normalizeListPayload(
+  payload: unknown,
+  argPage?: number,
+  argLimit?: number
+): { list: PointVenteWithExtras[]; meta: PaginationMeta | null } {
+  // 1) Tableau brut
+  if (Array.isArray(payload)) {
+    const page = argPage ?? 1;
+    const limit = argLimit ?? (payload.length || 10);
+    const total = payload.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    return {
+      list: payload as PointVenteWithExtras[],
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasPrev: page > 1,
+        hasNext: page < totalPages,
+      },
+    };
+  }
+
+  // 2) { data, meta? }
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    const obj = payload as { data: unknown; meta?: Partial<PaginationMeta> };
+    const list = Array.isArray(obj.data) ? (obj.data as PointVenteWithExtras[]) : [];
+    const page = (obj.meta?.page ?? argPage ?? 1) as number;
+    const limit = (obj.meta?.limit ?? argLimit ?? (list.length || 10)) as number;
+    const total = (obj.meta?.total ?? list.length) as number;
+    const totalPages =
+      (obj.meta?.totalPages as number | undefined) ?? Math.max(1, Math.ceil(total / limit));
+    const hasPrev = (obj.meta?.hasPrev as boolean | undefined) ?? page > 1;
+    const hasNext = (obj.meta?.hasNext as boolean | undefined) ?? page < totalPages;
+    return {
+      list,
+      meta: { page, limit, total, totalPages, hasPrev, hasNext },
+    };
+  }
+
+  // 3) Mongoose paginate-like: { docs, totalDocs, page, limit, totalPages, hasPrevPage, hasNextPage }
+  if (payload && typeof payload === 'object' && 'docs' in payload) {
+    const p: any = payload;
+    const list: PointVenteWithExtras[] = Array.isArray(p.docs) ? p.docs : [];
+    const page = Number(p.page ?? argPage ?? 1);
+    const limit = Number(p.limit ?? argLimit ?? (list.length || 10));
+    const total = Number(p.totalDocs ?? p.total ?? list.length);
+    const totalPages = Number(p.totalPages ?? Math.max(1, Math.ceil(total / limit)));
+    const hasPrev = Boolean(p.hasPrevPage ?? page > 1);
+    const hasNext = Boolean(p.hasNextPage ?? page < totalPages);
+    return { list, meta: { page, limit, total, totalPages, hasPrev, hasNext } };
+  }
+
+  // 4) { items, total, page, limit } ou autres variantes
+  if (payload && typeof payload === 'object' && 'items' in payload) {
+    const p: any = payload;
+    const list: PointVenteWithExtras[] = Array.isArray(p.items) ? p.items : [];
+    const page = Number(p.page ?? argPage ?? 1);
+    const limit = Number(p.limit ?? argLimit ?? (list.length || 10));
+    const total = Number(p.total ?? list.length);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    return {
+      list,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasPrev: page > 1,
+        hasNext: page < totalPages,
+      },
+    };
+  }
+
+  // Fallback : rien d’exploitable → vide
+  return {
+    list: [],
+    meta: {
+      page: argPage ?? 1,
+      limit: argLimit ?? 10,
+      total: 0,
+      totalPages: 1,
+      hasPrev: false,
+      hasNext: false,
+    },
+  };
+}
+
 /* ---------------- Thunks ---------------- */
 
 // Liste paginée / triée / filtrée
 export const fetchPointVentes = createAsyncThunk<
-  PointVenteListResponse<PointVenteWithExtras>,
+  unknown, // ⬅️ on laisse "unknown" pour accepter tous les shapes; normalisation dans reducer
   FetchParams | undefined,
   { rejectValue: string }
 >('pointVentes/fetchPointVentes', async (params, { rejectWithValue }) => {
@@ -116,7 +206,7 @@ export const fetchPointVentes = createAsyncThunk<
     const res = await apiClient.get(`/pointventes${query}`, {
       headers: getAuthHeaders(),
     });
-    return res.data as PointVenteListResponse<PointVenteWithExtras>;
+    return res.data; // shape libre : [] | {data, meta} | {docs,...}
   } catch (err: unknown) {
     if (err instanceof Error) return rejectWithValue(err.message);
     return rejectWithValue('Erreur lors de la récupération des points de vente');
@@ -125,7 +215,7 @@ export const fetchPointVentes = createAsyncThunk<
 
 // Recherche paginée (mêmes params)
 export const searchPointVentes = createAsyncThunk<
-  PointVenteListResponse<PointVenteWithExtras>,
+  unknown,
   FetchParams & { q: string },
   { rejectValue: string }
 >('pointVentes/searchPointVentes', async (params, { rejectWithValue }) => {
@@ -155,52 +245,49 @@ export const searchPointVentes = createAsyncThunk<
     const res = await apiClient.get(`/pointventes/search${query}`, {
       headers: getAuthHeaders(),
     });
-    return res.data as PointVenteListResponse<PointVenteWithExtras>;
+    return res.data;
   } catch (err: unknown) {
     if (err instanceof Error) return rejectWithValue(err.message);
     return rejectWithValue('Erreur lors de la recherche des points de vente');
   }
 });
 
-// Liste par région (compat: /by-region/:regionId) — tu peux aussi utiliser fetchPointVentes({ region: id })
+// Liste par région
 export const fetchPointVentesByRegionId = createAsyncThunk<
-  PointVenteListResponse<PointVenteWithExtras>,
+  unknown,
   { regionId: string } & Omit<FetchParams, 'region'>,
   { rejectValue: string }
->(
-  'pointVentes/fetchPointVentesByRegionId',
-  async ({ regionId, ...params }, { rejectWithValue }) => {
-    try {
-      const {
-        page = 1,
-        limit = 10,
-        q,
-        sortBy = 'createdAt',
-        order = 'desc',
-        includeTotal = true,
-        includeStock = false,
-      } = params;
+>('pointVentes/fetchPointVentesByRegionId', async ({ regionId, ...params }, { rejectWithValue }) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      q,
+      sortBy = 'createdAt',
+      order = 'desc',
+      includeTotal = true,
+      includeStock = false,
+    } = params;
 
-      const query = toQueryString({
-        page,
-        limit,
-        q,
-        sortBy,
-        order,
-        includeTotal,
-        includeStock,
-      });
+    const query = toQueryString({
+      page,
+      limit,
+      q,
+      sortBy,
+      order,
+      includeTotal,
+      includeStock,
+    });
 
-      const res = await apiClient.get(`/pointventes/by-region/${regionId}${query}`, {
-        headers: getAuthHeaders(),
-      });
-      return res.data as PointVenteListResponse<PointVenteWithExtras>;
-    } catch (err: unknown) {
-      if (err instanceof Error) return rejectWithValue(err.message);
-      return rejectWithValue('Erreur lors du chargement par région');
-    }
+    const res = await apiClient.get(`/pointventes/region/${regionId}${query}`, {
+      headers: getAuthHeaders(),
+    });
+    return res.data;
+  } catch (err: unknown) {
+    if (err instanceof Error) return rejectWithValue(err.message);
+    return rejectWithValue('Erreur lors du chargement par région');
   }
-);
+});
 
 // Détail (includeStock optionnel)
 export const fetchPointVenteById = createAsyncThunk<
@@ -288,10 +375,15 @@ const pointVenteSlice = createSlice({
       })
       .addCase(fetchPointVentes.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { meta } = action.payload;
-        //@ts-ignore
-        pointVenteAdapter.setAll(state, action.payload ?? []);
-        state.meta = meta ?? null;
+        // Normalise le payload quel que soit son shape
+        const params = action.meta.arg ?? {};
+        const { list, meta } = normalizeListPayload(
+          action.payload,
+          params.page,
+          params.limit
+        );
+        pointVenteAdapter.setAll(state, list ?? []);
+        state.meta = meta;
       })
       .addCase(fetchPointVentes.rejected, (state, action) => {
         state.status = 'failed';
@@ -305,10 +397,14 @@ const pointVenteSlice = createSlice({
       })
       .addCase(searchPointVentes.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { meta } = action.payload;
-        //@ts-ignore
-        pointVenteAdapter.setAll(state, action.payload ?? []);
-        state.meta = meta ?? null;
+        const params = action.meta.arg ?? {};
+        const { list, meta } = normalizeListPayload(
+          action.payload,
+          params.page,
+          params.limit
+        );
+        pointVenteAdapter.setAll(state, list ?? []);
+        state.meta = meta;
       })
       .addCase(searchPointVentes.rejected, (state, action) => {
         state.status = 'failed';
@@ -322,10 +418,14 @@ const pointVenteSlice = createSlice({
       })
       .addCase(fetchPointVentesByRegionId.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { meta } = action.payload;
-        //@ts-ignore
-        pointVenteAdapter.setAll(state, action.payload ?? []);
-        state.meta = meta ?? null;
+        const params = action.meta.arg ?? {};
+        const { list, meta } = normalizeListPayload(
+          action.payload,
+          params.page,
+          params.limit
+        );
+        pointVenteAdapter.setAll(state, list ?? []);
+        state.meta = meta;
       })
       .addCase(fetchPointVentesByRegionId.rejected, (state, action) => {
         state.status = 'failed';
@@ -346,6 +446,7 @@ const pointVenteSlice = createSlice({
         if (state.meta) {
           state.meta.total += 1;
           state.meta.totalPages = Math.max(1, Math.ceil(state.meta.total / state.meta.limit));
+          // hasNext/hasPrev ne sont pas recalculés ici (ils dépendent de la page courante côté UI)
         }
       })
       .addCase(addPointVente.rejected, (state, action) => {

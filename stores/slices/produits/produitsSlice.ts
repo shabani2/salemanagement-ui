@@ -10,25 +10,19 @@ import {
   PayloadAction,
 } from '@reduxjs/toolkit';
 import { RootState } from '../../store';
-import { apiClient } from '../../../lib/apiConfig';
+  import { apiClient } from '../../../lib/apiConfig';
 import { Produit, ProduitModel } from '@/Models/produitsType';
 
 /** ---------- Types pagination & requêtes ---------- */
 type Status = 'idle' | 'loading' | 'succeeded' | 'failed';
 
-interface PaginationMeta {
+export interface PaginationMeta {
   page: number;
   limit: number;
   total: number;
   totalPages: number;
   hasPrev: boolean;
   hasNext: boolean;
-}
-
-interface ProduitListResponse {
-  data: Produit[];
-  // côté API, meta peut être { page, limit, total, pages } ou déjà notre shape normalisée
-  meta?: Partial<PaginationMeta> & { pages?: number };
 }
 
 export type Order = 'asc' | 'desc';
@@ -50,7 +44,7 @@ interface ProduitStateExtra {
   error: string | null;
   meta: PaginationMeta | null;
 
-  // statut dédié à la recherche pour ne pas "polluer" l'état global d'affichage
+  // état de recherche, séparé
   searchStatus: Status;
   searchError: string | null;
   searchMeta: PaginationMeta | null;
@@ -59,9 +53,9 @@ interface ProduitStateExtra {
 }
 
 const produitAdapter: EntityAdapter<Produit, string> = createEntityAdapter<Produit, string>({
-  // @ts-expect-error - compat: external lib types mismatch
+  // @ts-expect-error - compat: certains modèles externes typent _id différemment
   selectId: (produit) => produit?._id,
-  sortComparer: false, // on laisse le tri au backend
+  sortComparer: false, // tri délégué au backend
 });
 
 const initialState = produitAdapter.getInitialState<ProduitStateExtra>({
@@ -97,32 +91,86 @@ const toQueryString = (params: Record<string, any>) => {
   return s ? `?${s}` : '';
 };
 
-/** Normalise la meta quelle que soit la forme renvoyée par l’API */
-const normalizeMeta = (raw?: ProduitListResponse['meta']): PaginationMeta | null => {
-  if (!raw) return null;
-  const page = Math.max(1, Number(raw.page ?? 1));
-  const limit = Math.max(1, Number(raw.limit ?? 10));
-  const total = Math.max(0, Number(raw.total ?? 0));
-  const totalPages = Number.isFinite(Number(raw.totalPages))
-    ? Math.max(1, Number(raw.totalPages))
-    : Math.max(1, Math.ceil(total / limit || 1));
-  // compat: API peut envoyer "pages" au lieu de "totalPages"
-  const pagesFromRaw = Number.isFinite(Number((raw as any).pages))
-    ? Math.max(1, Number((raw as any).pages))
-    : null;
-  const finalTotalPages = pagesFromRaw ?? totalPages;
+/** Normalise n’importe quel payload liste en { list, meta } */
+function normalizeListPayload(
+  payload: unknown,
+  argPage?: number,
+  argLimit?: number
+): { list: Produit[]; meta: PaginationMeta | null } {
+  // 1) Tableau brut
+  if (Array.isArray(payload)) {
+    const page = argPage ?? 1;
+    const limit = argLimit ?? (payload.length || 10);
+    const total = payload.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    return {
+      list: payload as Produit[],
+      meta: { page, limit, total, totalPages, hasPrev: page > 1, hasNext: page < totalPages },
+    };
+  }
 
-  const hasPrev = page > 1;
-  const hasNext = page < finalTotalPages;
+  // 2) { data, meta? }
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    const obj = payload as { data: unknown; meta?: Partial<PaginationMeta> & { pages?: number } };
+    const list = Array.isArray(obj.data) ? (obj.data as Produit[]) : [];
+    const page = (obj.meta?.page ?? argPage ?? 1) as number;
+    const limit = (obj.meta?.limit ?? argLimit ?? (list.length || 10)) as number;
+    const total = (obj.meta?.total ?? list.length) as number;
 
-  return { page, limit, total, totalPages: finalTotalPages, hasPrev, hasNext };
-};
+    // compat: totalPages | pages
+    const totalPagesFromMeta =
+      (obj.meta?.totalPages as number | undefined) ??
+      (obj.meta?.pages as number | undefined) ??
+      Math.max(1, Math.ceil(total / limit));
+
+    const hasPrev = (obj.meta?.hasPrev as boolean | undefined) ?? page > 1;
+    const hasNext = (obj.meta?.hasNext as boolean | undefined) ?? page < totalPagesFromMeta;
+
+    return {
+      list,
+      meta: { page, limit, total, totalPages: totalPagesFromMeta, hasPrev, hasNext },
+    };
+  }
+
+  // 3) Mongoose paginate-like: { docs, totalDocs, page, limit, totalPages, hasPrevPage, hasNextPage }
+  if (payload && typeof payload === 'object' && 'docs' in payload) {
+    const p: any = payload;
+    const list: Produit[] = Array.isArray(p.docs) ? p.docs : [];
+    const page = Number(p.page ?? argPage ?? 1);
+    const limit = Number(p.limit ?? argLimit ?? (list.length || 10));
+    const total = Number(p.totalDocs ?? p.total ?? list.length);
+    const totalPages = Number(p.totalPages ?? Math.max(1, Math.ceil(total / limit)));
+    const hasPrev = Boolean(p.hasPrevPage ?? page > 1);
+    const hasNext = Boolean(p.hasNextPage ?? page < totalPages);
+    return { list, meta: { page, limit, total, totalPages, hasPrev, hasNext } };
+  }
+
+  // 4) { items, total, page, limit } ou autre variante
+  if (payload && typeof payload === 'object' && 'items' in payload) {
+    const p: any = payload;
+    const list: Produit[] = Array.isArray(p.items) ? p.items : [];
+    const page = Number(p.page ?? argPage ?? 1);
+    const limit = Number(p.limit ?? argLimit ?? (list.length || 10));
+    const total = Number(p.total ?? list.length);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    return {
+      list,
+      meta: { page, limit, total, totalPages, hasPrev: page > 1, hasNext: page < totalPages },
+    };
+  }
+
+  // Fallback
+  return {
+    list: [],
+    meta: { page: argPage ?? 1, limit: argLimit ?? 10, total: 0, totalPages: 1, hasPrev: false, hasNext: false },
+  };
+}
 
 /** ---------- Thunks ---------- */
 
 // Liste paginée / filtrée / triée
 export const fetchProduits = createAsyncThunk<
-  ProduitListResponse,
+  unknown, // shape libre; on normalise côté reducer
   FetchParams | undefined,
   { rejectValue: string }
 >('produits/fetchProduits', async (params, { rejectWithValue }) => {
@@ -155,7 +203,7 @@ export const fetchProduits = createAsyncThunk<
       headers: getAuthHeaders(),
     });
 
-    return response.data as ProduitListResponse;
+    return response.data; // [] | {data, meta} | {docs,...}
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
     return rejectWithValue('Erreur lors de la récupération des produits');
@@ -242,7 +290,7 @@ export const updateProduit = createAsyncThunk<
 
 // Recherche paginée (mêmes params + q obligatoire)
 export const searchProduits = createAsyncThunk<
-  ProduitListResponse,
+  unknown, // shape libre; normalisé au reducer
   FetchParams & { q: string },
   { rejectValue: string }
 >('produits/searchProduits', async (params, { rejectWithValue }) => {
@@ -275,7 +323,7 @@ export const searchProduits = createAsyncThunk<
       headers: getAuthHeaders(),
     });
 
-    return response.data as ProduitListResponse;
+    return response.data; // [] | {data, meta} | {docs,...}
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
     return rejectWithValue('Erreur lors de la recherche des produits');
@@ -300,10 +348,14 @@ const produitSlice = createSlice({
       })
       .addCase(fetchProduits.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        // const { data, meta } = action.payload;
-        //@ts-ignore
-        produitAdapter.setAll(state, action.payload);
-        // state.meta = normalizeMeta(meta);
+        // normalisation robuste
+        const params = action.meta.arg ?? {};
+        const { list, meta } = normalizeListPayload(action.payload, params.page, params.limit);
+        produitAdapter.setAll(state, list ?? []);
+        state.meta = meta;
+        // mémorise la dernière query (sans page/limit)
+        const { page, limit, ...rest } = params || {};
+        state.lastQuery = rest ?? null;
       })
       .addCase(fetchProduits.rejected, (state, action) => {
         state.status = 'failed';
@@ -352,8 +404,8 @@ const produitSlice = createSlice({
 
       /**
        * searchProduits
-       * ⚠️ On n'écrase PLUS la liste : on merge (upsertMany) pour que l'autocomplete
-       * n’efface pas la page actuelle et que le panier continue d’avoir ses références.
+       * On MERGE (upsertMany) la liste pour ne pas écraser l’affichage principal.
+       * La pagination des résultats de recherche est stockée dans searchMeta.
        */
       .addCase(searchProduits.pending, (state) => {
         state.searchStatus = 'loading';
@@ -361,10 +413,10 @@ const produitSlice = createSlice({
       })
       .addCase(searchProduits.fulfilled, (state, action) => {
         state.searchStatus = 'succeeded';
-        const { meta } = action.payload;
-        //@ts-ignore
-        produitAdapter.upsertMany(state, action.payload);
-        state.searchMeta = normalizeMeta(meta);
+        const params = action.meta.arg ?? {};
+        const { list, meta } = normalizeListPayload(action.payload, params.page, params.limit);
+        produitAdapter.upsertMany(state, list ?? []);
+        state.searchMeta = meta;
       })
       .addCase(searchProduits.rejected, (state, action) => {
         state.searchStatus = 'failed';
@@ -389,7 +441,6 @@ export const selectProduitStatus = (state: RootState) => state.produits.status;
 export const selectProduitError = (state: RootState) => state.produits.error;
 export const selectProduitMeta = (state: RootState) => state.produits.meta;
 
-// bonus: sélecteurs dédiés à la recherche (si tu en as besoin un jour)
 export const selectProduitSearchStatus = (state: RootState) => state.produits.searchStatus;
 export const selectProduitSearchError = (state: RootState) => state.produits.searchError;
 export const selectProduitSearchMeta = (state: RootState) => state.produits.searchMeta;

@@ -51,14 +51,11 @@ const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
 /* -------------------------------- Page -------------------------------- */
 const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-
   const toast = useRef<Toast | null>(null);
 
   const { user, isAdminPointVente, isAdminRegion } = useUserRole();
 
-  const mvtList = useSelector((s: RootState) =>
-    asArray<MouvementStock>(selectAllMouvementsStock(s))
-  );
+  const mvtList = useSelector((s: RootState) => asArray<MouvementStock>(selectAllMouvementsStock(s)));
   const meta = useSelector(selectMouvementStockMeta);
   const status = useSelector(selectMouvementStockStatus);
   const loading = status === 'loading';
@@ -66,31 +63,30 @@ const Page: React.FC = () => {
   const [selectedMvt, setSelectedMvt] = useState<MouvementStock | null>(null);
   const [isValidateMvt, setIsValidateMvt] = useState(false);
 
-  // pagination & tri (custom 1-based)
+  // UI (local) — la source de vérité pour page/limit reste le backend via meta, on se resynchronise
   const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
   const [sortBy, setSortBy] = useState<string>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
-
-  // recherche (texte uniquement)
   const [search, setSearch] = useState('');
 
-  // Menu actions (un seul menu global)
+  useEffect(() => {
+    if (meta?.limit && meta.limit !== rows) setRows(meta.limit);
+    if (meta?.page && meta.page !== page) setPage(meta.page);
+  }, [meta?.limit, meta?.page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Menu actions
   const actionsMenuRef = useRef<Menu | null>(null);
   const currentRowRef = useRef<MouvementStock | null>(null);
-
-  const openActionsMenu = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>, row: MouvementStock) => {
-      currentRowRef.current = row;
-      actionsMenuRef.current?.toggle(e);
-    },
-    []
-  );
-
+  const openActionsMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>, row: MouvementStock) => {
+    currentRowRef.current = row;
+    actionsMenuRef.current?.toggle(e);
+  }, []);
   const actionsModel = useMemo<MenuItem[]>(
     () => [
       {
         label: 'Valider',
+        disabled: !!currentRowRef.current?.statut,
         command: () => {
           if (currentRowRef.current) {
             setSelectedMvt(currentRowRef.current);
@@ -102,49 +98,59 @@ const Page: React.FC = () => {
     []
   );
 
-  /* ------------------- Paramètres serveur (query) ------------------ */
+  /* ------------------- Filtres de rôle → orientent la route serveur ------------------ */
+  const roleFilters = useMemo(() => {
+    const rf: Record<string, any> = {};
+    const role = (user as any)?.role as string | undefined;
+
+    // Priorité: Point de Vente → Région → Utilisateur (Vendeur/Logisticien) → aucun (SuperAdmin)
+    if (isAdminPointVente && isNonEmptyString((user as any)?.pointVente?._id)) {
+      rf.pointVente = (user as any).pointVente._id;
+    } else if (isAdminRegion && isNonEmptyString((user as any)?.region?._id)) {
+      rf.region = (user as any).region._id;
+    } else if (
+      (role === 'Vendeur' || role === 'Logisticien') &&
+      isNonEmptyString((user as any)?._id)
+    ) {
+      rf.user = (user as any)._id;
+    }
+    // SuperAdmin → pas de filtre : on tombera sur /mouvements/page
+    return rf;
+  }, [isAdminPointVente, isAdminRegion, user?.pointVente?._id, user?.region?._id, (user as any)?._id, (user as any)?.role]);
+
+  /* ------------------- Paramètres fetch (page/limit/tri/recherche) ------------------ */
   const serverParams = useMemo(
-    () => {
-      const roleFilters: Record<string, any> = {};
-      if (isAdminPointVente && isNonEmptyString((user as any)?.pointVente?._id)) {
-        roleFilters.pointVente = (user as any).pointVente._id;
-      } else if (isAdminRegion && isNonEmptyString((user as any)?.region?._id)) {
-        roleFilters.region = (user as any).region._id;
-      }
-      return {
-        page, // ✅ 1-based (évite les “sauts” d’offset)
-        limit: rows,
-        q: search || undefined,
-        sortBy,
-        order,
-        includeTotal: true,
-        includeRefs: true,
-        ...roleFilters,
-      };
-    },
-    //@ts-ignore
-    [
-      page,
-      rows,
-      search,
+    () => ({
+      page,                // 1-based
+      limit: rows,
+      q: search || undefined,
       sortBy,
       order,
-      isAdminPointVente,
-      isAdminRegion,
-      user?.region?._id,
-      user?.pointVente?._id,
-    ]
+      includeTotal: true,
+      includeRefs: true,
+      preferServerPage: true, // ✅ active la logique /mouvements/page | /by-point-vente/:id/page | /by-region/:id/page | /by-user/:id
+      ...roleFilters,
+    }),
+    [page, rows, search, sortBy, order, roleFilters]
   );
 
-  /* --------------------------- Chargement data --------------------------- */
-  useEffect(() => {
-    dispatch(fetchMouvementsStock(serverParams));
-  }, [dispatch, serverParams]);
+  const doFetch = useCallback(
+    (over?: Partial<typeof serverParams>) => {
+      dispatch(fetchMouvementsStock({ ...serverParams, ...over }));
+    },
+    [dispatch, serverParams]
+  );
 
-  /* ----------------------- Tri / Pagination custom ---------------------- */
+  // premier fetch + refetch à chaque changement contrôlé
+  useEffect(() => {
+    doFetch();
+  }, [doFetch]);
+
+  /* ----------------------- Tri / Pagination (pilotés par meta) ---------------------- */
+  const currentLimit = meta?.limit ?? rows;
   const total = meta?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / rows));
-  const firstIndex = (page - 1) * rows;
+  const totalPages = meta?.totalPages ?? meta?.pages ?? Math.max(1, Math.ceil(total / Math.max(1, currentLimit)));
+  const firstIndex = (meta?.skip ?? ((meta?.page ?? page) - 1) * currentLimit) | 0;
 
   const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
   const toggleSort = (field: string) => {
@@ -152,28 +158,42 @@ const Page: React.FC = () => {
       setSortBy(field);
       setOrder('asc');
       setPage(1);
+      doFetch({ sortBy: field, order: 'asc', page: 1 });
     } else {
-      setOrder(order === 'asc' ? 'desc' : 'asc');
+      const next = order === 'asc' ? 'desc' : 'asc';
+      setOrder(next);
       setPage(1);
+      doFetch({ order: next, page: 1 });
     }
   };
 
   const goTo = (p: number) => {
-    const next = Math.min(Math.max(1, p), totalPages);
-    if (next !== page) setPage(next);
+    const maxPage = totalPages;
+    const next = Math.min(Math.max(1, p), maxPage);
+    if (next !== (meta?.page ?? page)) {
+      setPage(next);
+      doFetch({ page: next });
+    }
   };
 
   const onChangeRows = (n: number) => {
-    setRows(n);
-    const newTotalPages = Math.max(1, Math.ceil(total / n));
-    const fixed = Math.min(page, newTotalPages);
+    const newRows = Number(n);
+    setRows(newRows);
+    const maxPage = Math.max(1, Math.ceil(total / Math.max(1, newRows)));
+    const fixed = Math.min(meta?.page ?? page, maxPage);
     setPage(fixed);
+    doFetch({ limit: newRows, page: fixed });
   };
+
+  const applyFilters = useCallback(() => {
+    setPage(1);
+    doFetch({ page: 1 });
+  }, [doFetch]);
 
   /* ---------------------------------- UI ---------------------------------- */
   return (
     <div className="min-h-screen">
-      <Toast ref={toast} />
+      <Toast ref={toast} position="top-right" />
 
       <div className="flex items-center justify-between mt-5 mb-5">
         <BreadCrumb
@@ -188,12 +208,32 @@ const Page: React.FC = () => {
         <div className="gap-4 mb-4 flex justify-between flex-wrap md:flex-nowrap">
           <div className="relative w-full md:w-4/5 flex flex-row gap-2 flex-wrap">
             <InputText
-              className="p-2 pl-10 border rounded w-full md:w-1/3"
-              placeholder="Rechercher..."
+              className="p-2 border rounded w-full md:w-1/3"
+              placeholder="Rechercher par produit, type, utilisateur…"
               value={search}
               onChange={(e) => setSearch(e.target.value ?? '')}
-              onKeyDown={(e) => e.key === 'Enter' && setPage(1)}
+              onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
             />
+
+            <Button
+              label="Filtrer"
+              icon="pi pi-search"
+              className="!bg-green-700 text-white"
+              onClick={applyFilters}
+            />
+
+            {isNonEmptyString(search) && (
+              <Button
+                label="Réinitialiser"
+                icon="pi pi-times"
+                className="!bg-gray-500 text-white"
+                onClick={() => {
+                  setSearch('');
+                  setPage(1);
+                  doFetch({ q: undefined, page: 1 });
+                }}
+              />
+            )}
           </div>
 
           <div className="w-full md:w-1/5 flex justify-end items-center gap-2">
@@ -217,7 +257,7 @@ const Page: React.FC = () => {
                     const r: any = await (dispatch as any)(
                       exportFile({
                         url: '/export/rapport-mouvement-stock',
-                        mouvements: mvtList, // exporte ce qui est dans la liste actuelle
+                        mouvements: mvtList, // exporte la liste actuelle (page affichée)
                         fileType,
                       })
                     );
@@ -253,12 +293,11 @@ const Page: React.FC = () => {
             <thead>
               <tr className="bg-green-800 text-white">
                 <th className="px-4 py-2 text-left">N°</th>
-
                 <th className="px-4 py-2 text-left"> </th>
 
                 <th
                   className="px-4 py-2 text-left cursor-pointer select-none"
-                  onClick={() => toggleSort('produit.nom')} // tri côté back si supporté
+                  onClick={() => toggleSort('produit.nom')}
                   title="Trier par produit"
                 >
                   Produit <SortIcon order={sortedOrderFor('produit.nom')} />
@@ -423,7 +462,7 @@ const Page: React.FC = () => {
                       <td className="px-4 py-2">
                         {(() => {
                           try {
-                            return new Date(row?.createdAt || '').toLocaleDateString();
+                            return new Date(row?.createdAt || '').toLocaleString();
                           } catch {
                             return '—';
                           }
@@ -450,7 +489,7 @@ const Page: React.FC = () => {
         {/* ---------- PAGINATION TAILWIND ----------- */}
         <div className="flex items-center justify-between mt-3">
           <div className="text-sm text-gray-700">
-            Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+            Page <span className="font-semibold">{meta?.page ?? page}</span> / {totalPages} —{' '}
             <span className="font-semibold">{total}</span> éléments
           </div>
 
@@ -458,7 +497,7 @@ const Page: React.FC = () => {
             <label className="text-sm text-gray-700 mr-2">Lignes:</label>
             <select
               className="border rounded px-2 py-1 text-sm"
-              value={rows}
+              value={currentLimit}
               onChange={(e) => onChangeRows(Number(e.target.value))}
             >
               {[10, 20, 30, 50, 100].map((n) => (
@@ -472,25 +511,25 @@ const Page: React.FC = () => {
               label="«"
               className="!bg-gray-200 !text-gray-800 px-2 py-1"
               onClick={() => goTo(1)}
-              disabled={page <= 1}
+              disabled={meta ? !meta.hasPrev && (meta.page ?? 1) <= 1 : page <= 1}
             />
             <Button
               label="‹"
               className="!bg-gray-200 !text-gray-800 px-2 py-1"
-              onClick={() => goTo(page - 1)}
-              disabled={page <= 1}
+              onClick={() => goTo((meta?.page ?? page) - 1)}
+              disabled={meta ? !meta.hasPrev && (meta.page ?? 1) <= 1 : page <= 1}
             />
             <Button
               label="›"
               className="!bg-gray-200 !text-gray-800 px-2 py-1"
-              onClick={() => goTo(page + 1)}
-              disabled={page >= totalPages}
+              onClick={() => goTo((meta?.page ?? page) + 1)}
+              disabled={meta ? !meta.hasNext && (meta.page ?? 1) >= totalPages : page >= totalPages}
             />
             <Button
               label="»"
               className="!bg-gray-200 !text-gray-800 px-2 py-1"
               onClick={() => goTo(totalPages)}
-              disabled={page >= totalPages}
+              disabled={meta ? !meta.hasNext && (meta.page ?? 1) >= totalPages : page >= totalPages}
             />
           </div>
         </div>
@@ -513,19 +552,14 @@ const Page: React.FC = () => {
           try {
             if (!item?._id) return;
             const r = await dispatch(validateMouvementStock(item._id as any));
-
-            if (
-              validateMouvementStock.fulfilled?.match?.(r) ||
-              r?.meta?.requestStatus === 'fulfilled'
-            ) {
+            if (validateMouvementStock.fulfilled?.match?.(r) || r?.meta?.requestStatus === 'fulfilled') {
               toast.current?.show({
                 severity: 'success',
                 summary: 'Validé',
                 detail: "L'opération a été validée.",
                 life: 2500,
               });
-              // refresh page courante
-              dispatch(fetchMouvementsStock(serverParams));
+              doFetch({ page });
               setIsValidateMvt(false);
             } else {
               throw new Error();

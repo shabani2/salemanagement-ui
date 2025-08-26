@@ -18,25 +18,26 @@ type Status = 'idle' | 'loading' | 'succeeded' | 'failed';
 export type Order = 'asc' | 'desc';
 
 export interface PaginationMeta {
-  page: number; // 1-based (avec page1=true côté back)
+  page: number;      // 1-based
   limit: number;
   total: number;
-  skip: number; // offset réel renvoyé par le back
+  skip: number;      // offset calculé (=(page-1)*limit si non fourni)
   totalPages: number;
   hasPrev: boolean;
   hasNext: boolean;
 }
 
 export interface FetchParams {
+  // pagination & tri
   page?: number; // 1-based
   limit?: number;
-  q?: string;
   sortBy?: string;
   order?: Order;
   includeTotal?: boolean;
   includeRefs?: boolean;
-  // astuce pour forcer le back à traiter page en 1-based
-  page1?: boolean;
+
+  // recherche texte (le back peut l’ignorer; on filtre alors côté client)
+  q?: string;
 
   // Filtres
   region?: string;
@@ -48,11 +49,13 @@ export interface FetchParams {
   depotCentral?: boolean;
   dateFrom?: string;
   dateTo?: string;
+
+  // 💡 Si vrai, on tente les routes paginées serveur (/mouvements/page, /by-.../page)
+  preferServerPage?: boolean;
 }
 
 interface MouvementListResponse<T = MouvementStock> {
   data: T[];
-  // meta du back: { page, limit, skip, total, sortBy, order, q }
   meta?:
     | (Partial<PaginationMeta> & {
         page?: number;
@@ -62,6 +65,8 @@ interface MouvementListResponse<T = MouvementStock> {
         sortBy?: string;
         order?: Order;
         q?: string;
+        totalPages?: number;
+        pages?: number; // compat
       })
     | null;
 }
@@ -85,7 +90,7 @@ const mouvementStockAdapter: EntityAdapter<MouvementStock, string> = createEntit
   string
 >({
   selectId: (mouvement) => mouvement._id,
-  sortComparer: false, // tri côté serveur
+  sortComparer: false,
 });
 
 const initialState = mouvementStockAdapter.getInitialState<MouvementStockStateExtra>({
@@ -115,11 +120,20 @@ const toQueryString = (params: Record<string, any>) => {
 
 const normalizeMeta = (raw?: MouvementListResponse['meta'] | null): PaginationMeta | null => {
   if (!raw) return null;
-  const page = Math.max(1, Number(raw.page || 1)); // 1-based (car page1=true côté client)
-  const limit = Math.max(1, Number(raw.limit || 10));
-  const total = Math.max(0, Number(raw.total || 0));
-  const skip = Math.max(0, Number(raw.skip || 0));
-  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const page = Math.max(1, Number(raw.page ?? 1));
+  const limit = Math.max(1, Number(raw.limit ?? 10));
+  const total = Math.max(0, Number(raw.total ?? 0));
+  const skip =
+    Number.isFinite(Number(raw?.skip))
+      ? Math.max(0, Number(raw?.skip))
+      : (page - 1) * limit;
+  const totalPages =
+    Number.isFinite(Number(raw?.totalPages))
+      ? Math.max(1, Number(raw?.totalPages))
+      : Number.isFinite(Number((raw as any)?.pages))
+        ? Math.max(1, Number((raw as any)?.pages))
+        : Math.max(1, Math.ceil(total / limit));
+
   return {
     page,
     limit,
@@ -131,48 +145,210 @@ const normalizeMeta = (raw?: MouvementListResponse['meta'] | null): PaginationMe
   };
 };
 
+/* ------------- Helpers pour fallback filtre/tri/pagination client ------------- */
+
+function getValByPath(obj: any, path: string) {
+  if (!obj || !path) return undefined;
+  return path.split('.').reduce((acc, k) => (acc ? acc[k] : undefined), obj);
+}
+
+function toStr(v: unknown) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+function applyClientFiltersSort(list: MouvementStock[], params: FetchParams) {
+  const { q, sortBy, order = 'desc' } = params;
+
+  // 1) filtre texte (produit.nom, type, user.nom, pointVente.nom, region.nom)
+  let filtered = list;
+  if (q && q.trim()) {
+    const needle = q.trim().toLowerCase();
+    filtered = list.filter((m) => {
+      const produitNom = getValByPath(m, 'produit.nom');
+      const type = getValByPath(m, 'type');
+      const userNom = getValByPath(m, 'user.nom');
+      const pvNom = getValByPath(m, 'pointVente.nom');
+      const regNom = getValByPath(m, 'region.nom');
+      return [produitNom, type, userNom, pvNom, regNom].some((v) =>
+        toStr(v).toLowerCase().includes(needle)
+      );
+    });
+  }
+
+  // 2) tri
+  if (sortBy) {
+    const desc = order === 'desc' ? -1 : 1;
+    filtered = [...filtered].sort((a, b) => {
+      const av = getValByPath(a, sortBy);
+      const bv = getValByPath(b, sortBy);
+
+      // dates
+      if (sortBy.toLowerCase().includes('date')) {
+        const ad = av ? new Date(av).getTime() : 0;
+        const bd = bv ? new Date(bv).getTime() : 0;
+        return (ad - bd) * desc;
+      }
+
+      // num
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return (av - bv) * desc;
+      }
+
+      // string/object -> string
+      return toStr(av).localeCompare(toStr(bv)) * desc;
+    });
+  }
+
+  return filtered;
+}
+
+/** Normalise n’importe quel payload liste en { list, meta } (1-based) */
+function normalizeListPayload(
+  payload: unknown,
+  argPage?: number,
+  argLimit?: number,
+  argParams?: FetchParams
+): { list: MouvementStock[]; meta: PaginationMeta } {
+  const page = Math.max(1, argPage ?? 1);
+  const limit = Math.max(1, argLimit ?? 10);
+
+  // 💚 Format paginé serveur: { total, page, pages, limit, mouvements }
+  if (payload && typeof payload === 'object' && 'mouvements' in payload) {
+    const p: any = payload;
+    const list: MouvementStock[] = Array.isArray(p.mouvements) ? p.mouvements : [];
+    const total = Number(p.total ?? list.length);
+    const totalPages = Number(p.pages ?? Math.max(1, Math.ceil(total / limit)));
+    const skip = (page - 1) * limit;
+    return {
+      list, // déjà découpé par le serveur
+      meta: { page, limit, total, totalPages, skip, hasPrev: page > 1, hasNext: page < totalPages },
+    };
+  }
+
+  // Tableau brut -> fallback client
+  if (Array.isArray(payload)) {
+    const raw = payload as MouvementStock[];
+    const filteredSorted = applyClientFiltersSort(raw, argParams ?? {});
+    const total = filteredSorted.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const skip = (page - 1) * limit;
+    const slice = filteredSorted.slice(skip, skip + limit);
+
+    return {
+      list: slice,
+      meta: { page, limit, total, totalPages, skip, hasPrev: page > 1, hasNext: page < totalPages },
+    };
+  }
+
+  // { data, meta? }
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    const obj = payload as MouvementListResponse<MouvementStock>;
+    const baseList = Array.isArray(obj.data) ? obj.data : [];
+    const filteredSorted = applyClientFiltersSort(baseList, argParams ?? {});
+    const m = normalizeMeta(obj.meta) ?? {
+      page,
+      limit,
+      total: filteredSorted.length,
+      totalPages: Math.max(1, Math.ceil(filteredSorted.length / limit)),
+      skip: (page - 1) * limit,
+      hasPrev: page > 1,
+      hasNext: page < Math.max(1, Math.ceil(filteredSorted.length / limit)),
+    };
+    const fixedSkip = Number.isFinite(m.skip) ? (m.skip as number) : (m.page - 1) * m.limit;
+    const slice = filteredSorted.slice(fixedSkip, fixedSkip + m.limit);
+    return { list: slice, meta: { ...m, skip: fixedSkip } };
+  }
+
+  // mongoose-paginate: { docs, totalDocs, page, limit, totalPages, ... }
+  if (payload && typeof payload === 'object' && 'docs' in payload) {
+    const p: any = payload;
+    const base = Array.isArray(p.docs) ? p.docs : [];
+    const filteredSorted = applyClientFiltersSort(base, argParams ?? {});
+    const pg = Number(p.page ?? page);
+    const lm = Number(p.limit ?? limit);
+    const total = Number(p.totalDocs ?? p.total ?? filteredSorted.length);
+    const totalPages = Number(p.totalPages ?? Math.max(1, Math.ceil(total / lm)));
+    const skip = Number.isFinite(Number(p.offset)) ? Number(p.offset) : (pg - 1) * lm;
+    const slice = filteredSorted.slice(skip, skip + lm);
+    return { list: slice, meta: { page: pg, limit: lm, total, totalPages, skip, hasPrev: pg > 1, hasNext: pg < totalPages } };
+  }
+
+  // { items, total, page/limit/skip }
+  if (payload && typeof payload === 'object' && 'items' in payload) {
+    const p: any = payload;
+    const base = Array.isArray(p.items) ? p.items : [];
+    const filteredSorted = applyClientFiltersSort(base, argParams ?? {});
+    const lm = Number(p.limit ?? limit);
+    const pg = Number(p.page ?? page);
+    const total = Number(p.total ?? filteredSorted.length);
+    const totalPages = Math.max(1, Math.ceil(total / lm));
+    const skip = Number.isFinite(Number(p.skip)) ? Number(p.skip) : (pg - 1) * lm;
+    const slice = filteredSorted.slice(skip, skip + lm);
+    return { list: slice, meta: { page: pg, limit: lm, total, totalPages, skip, hasPrev: pg > 1, hasNext: pg < totalPages } };
+  }
+
+  // Fallback
+  const skip = (page - 1) * limit;
+  return {
+    list: [],
+    meta: { page, limit, total: 0, totalPages: 1, skip, hasPrev: false, hasNext: false },
+  };
+}
+
 /* ---------------- Thunks (API /mouvements) ---------------- */
 
-// Liste paginée/triée/filtrée (1-based)
-export const fetchMouvementsStock = createAsyncThunk<
-  MouvementListResponse<MouvementStock>,
-  FetchParams | undefined,
-  { rejectValue: string }
->('mouvementStock/fetchAll', async (params, { rejectWithValue }) => {
-  try {
-    const {
-      page = 0,
-      limit = 10,
-      q,
-      sortBy = 'createdAt',
-      order = 'desc',
-      includeTotal = true,
-      includeRefs = true,
-      region,
-      pointVente,
-      user,
-      produit,
-      type,
-      statut,
-      depotCentral,
-      dateFrom,
-      dateTo,
-      // toujours vrai pour mode 1-based
-      page1 = true,
-    } = params || {};
+// Essaie d’utiliser les routes paginées serveur si preferServerPage=true, sinon /mouvements
+async function fetchMouvementsApi(params: FetchParams) {
+  const {
+    page = 1,
+    limit = 10,
+    q,
+    sortBy = 'createdAt',
+    order = 'desc',
+    includeTotal = true,
+    includeRefs = true,
+    region,
+    pointVente,
+    user,
+    produit,
+    type,
+    statut,
+    depotCentral,
+    dateFrom,
+    dateTo,
+    preferServerPage = true,
+  } = params;
+
+  // 1) tente une route paginée si demandée
+  if (preferServerPage) {
+    // on devine les routes côté serveur d’après le contrôleur fourni
+    let serverUrl: string | null = null;
+    if (pointVente) {
+      serverUrl = `/mouvements/by-point-vente/${pointVente}/page`;
+    } else if (region) {
+      // version optimisée paginée
+      serverUrl = `/mouvements/region/${region}/page`;
+    } else if (user) {
+      serverUrl = `/mouvements/byUser/${user}`;
+      // ce contrôleur est déjà paginé d’après le code fourni
+    } else {
+      serverUrl = `/mouvements/page`;
+    }
 
     const query = toQueryString({
       page,
-      page1,
       limit,
       q,
       sortBy,
       order,
       includeTotal,
       includeRefs,
-      region,
-      pointVente,
-      user,
       produit,
       type,
       statut,
@@ -181,67 +357,62 @@ export const fetchMouvementsStock = createAsyncThunk<
       dateTo,
     });
 
-    const response = await apiClient.get(`/mouvements${query}`, {
-      headers: getAuthHeaders(),
-    });
-    return response.data as MouvementListResponse<MouvementStock>;
+    try {
+      const res = await apiClient.get(`${serverUrl}${query}`, { headers: getAuthHeaders() });
+      return res.data; // { total, page, pages, limit, mouvements } attendu
+    } catch (e) {
+      // on tombera sur le fallback ci-dessous
+    }
+  }
+
+  // 2) fallback: route non paginée -> retourne un tableau complet
+  const query = toQueryString({
+    // le back ignorera la plupart de ces params; on les utilisera côté client
+    page,
+    limit,
+    q,
+    sortBy,
+    order,
+    includeTotal,
+    includeRefs,
+    region,
+    pointVente,
+    user,
+    produit,
+    type,
+    statut,
+    depotCentral,
+    dateFrom,
+    dateTo,
+  });
+
+  const res2 = await apiClient.get(`/mouvements${query}`, { headers: getAuthHeaders() });
+  return res2.data; // Array<MouvementStock> la plupart du temps
+}
+
+// Liste paginée/triée/filtrée
+export const fetchMouvementsStock = createAsyncThunk<
+  unknown, // shape libre (normalisé dans le reducer)
+  FetchParams | undefined,
+  { rejectValue: string }
+>('mouvementStock/fetchAll', async (params, { rejectWithValue }) => {
+  try {
+    return await fetchMouvementsApi(params ?? {});
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
     return rejectWithValue('Erreur lors de la récupération des mouvements de stock');
   }
 });
 
-// Recherche (mêmes params, 1-based)
+// Recherche (idem, on laisse le back répondre librement; fallback client si array)
 export const searchMouvementsStock = createAsyncThunk<
-  MouvementListResponse<MouvementStock>,
+  unknown,
   FetchParams & { q: string },
   { rejectValue: string }
 >('mouvementStock/search', async (params, { rejectWithValue }) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      q,
-      sortBy = 'createdAt',
-      order = 'desc',
-      includeTotal = true,
-      includeRefs = true,
-      region,
-      pointVente,
-      user,
-      produit,
-      type,
-      statut,
-      depotCentral,
-      dateFrom,
-      dateTo,
-      page1 = true,
-    } = params;
-
-    const query = toQueryString({
-      page,
-      page1,
-      limit,
-      q,
-      sortBy,
-      order,
-      includeTotal,
-      includeRefs,
-      region,
-      pointVente,
-      user,
-      produit,
-      type,
-      statut,
-      depotCentral,
-      dateFrom,
-      dateTo,
-    });
-
-    const response = await apiClient.get(`/mouvements/search${query}`, {
-      headers: getAuthHeaders(),
-    });
-    return response.data as MouvementListResponse<MouvementStock>;
+    // on tente aussi les routes paginées si preferServerPage
+    return await fetchMouvementsApi(params);
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
     return rejectWithValue('Erreur lors de la recherche des mouvements');
@@ -274,9 +445,7 @@ export const createMouvementStock = createAsyncThunk<
 >('mouvementStock/create', async (data, { rejectWithValue }) => {
   try {
     if (!data.user) return rejectWithValue("Le champ 'user' est obligatoire");
-    const response = await apiClient.post('/mouvements', data, {
-      headers: getAuthHeaders(),
-    });
+    const response = await apiClient.post('/mouvements', data, { headers: getAuthHeaders() });
     return response.data as MouvementStock;
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
@@ -292,9 +461,7 @@ export const updateMouvementStock = createAsyncThunk<
 >('mouvementStock/update', async ({ id, updateData }, { rejectWithValue }) => {
   try {
     if (!updateData.user) return rejectWithValue("Le champ 'user' est obligatoire");
-    const response = await apiClient.put(`/mouvements/${id}`, updateData, {
-      headers: getAuthHeaders(),
-    });
+    const response = await apiClient.put(`/mouvements/${id}`, updateData, { headers: getAuthHeaders() });
     return response.data as MouvementStock;
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
@@ -307,9 +474,7 @@ export const deleteMouvementStock = createAsyncThunk<string, string, { rejectVal
   'mouvementStock/delete',
   async (id, { rejectWithValue }) => {
     try {
-      await apiClient.delete(`/mouvements/${id}`, {
-        headers: getAuthHeaders(),
-      });
+      await apiClient.delete(`/mouvements/${id}`, { headers: getAuthHeaders() });
       return id;
     } catch (error: unknown) {
       if (error instanceof Error) return rejectWithValue(error.message);
@@ -325,13 +490,7 @@ export const validateMouvementStock = createAsyncThunk<
   { rejectValue: string }
 >('mouvementStock/validate', async (id, { rejectWithValue }) => {
   try {
-    const response = await apiClient.patch(
-      `/mouvements/${id}/validate`,
-      {},
-      {
-        headers: getAuthHeaders(),
-      }
-    );
+    const response = await apiClient.patch(`/mouvements/${id}/validate`, {}, { headers: getAuthHeaders() });
     return (response.data?.mouvement ?? response.data) as MouvementStock;
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
@@ -347,11 +506,10 @@ export const fetchMouvementsAggregate = createAsyncThunk<
 >('mouvementStock/aggregate', async (args, { rejectWithValue }) => {
   try {
     const { groupBy = 'produit', ...params } = args;
-    const query = toQueryString({ groupBy, ...params, page1: true });
+    const query = toQueryString({ groupBy, ...params });
     const response = await apiClient.get(`/mouvements/aggregate${query}`, {
       headers: getAuthHeaders(),
     });
-    // si le back renvoie page/limit/total/skip, on normalise pareil
     const meta = normalizeMeta(response.data?.meta) as PaginationMeta;
     return { data: response.data?.data ?? [], meta };
   } catch (error: unknown) {
@@ -359,30 +517,6 @@ export const fetchMouvementsAggregate = createAsyncThunk<
     return rejectWithValue("Erreur lors de l'agrégation des mouvements");
   }
 });
-
-// 2. Agrégation par point de vente (total par produit/type)
-export const fetchMouvementStockAggregatedByPointVente = createAsyncThunk(
-  'mouvementStock/fetchAggregatedByPointVente',
-  async (
-    { pointVenteId, page = 1 }: { pointVenteId: string; page?: number },
-    { rejectWithValue }
-  ) => {
-    try {
-      const response = await apiClient.get(
-        `/mouvementStock/by-point-vente/aggregate/${pointVenteId}?page=${page}`,
-        {
-          headers: getAuthHeaders(),
-        }
-      );
-      return response.data;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
-      return rejectWithValue("Erreur lors de l'agrégation des mouvements");
-    }
-  }
-);
 
 /* ---------------- Slice ---------------- */
 
@@ -406,10 +540,10 @@ const mouvementStockSlice = createSlice({
       })
       .addCase(fetchMouvementsStock.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { data, meta } = action.payload;
-        //@ts-ignore
-        mouvementStockAdapter.setAll(state, action.payload);
-        state.meta = normalizeMeta(meta);
+        const params = (action.meta.arg ?? {}) as FetchParams;
+        const { list, meta } = normalizeListPayload(action.payload, params.page, params.limit, params);
+        mouvementStockAdapter.setAll(state, list ?? []);
+        state.meta = meta;
       })
       .addCase(fetchMouvementsStock.rejected, (state, action) => {
         state.status = 'failed';
@@ -423,17 +557,18 @@ const mouvementStockSlice = createSlice({
       })
       .addCase(searchMouvementsStock.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { meta } = action.payload;
-        //@ts-ignore
-        mouvementStockAdapter.setAll(state, action.payload);
-        state.meta = normalizeMeta(meta);
+        const params = (action.meta.arg ?? {}) as FetchParams;
+        const { list, meta } = normalizeListPayload(action.payload, params.page, params.limit, params);
+        // on reflète la grille filtrée
+        mouvementStockAdapter.setAll(state, list ?? []);
+        state.meta = meta;
       })
       .addCase(searchMouvementsStock.rejected, (state, action) => {
         state.status = 'failed';
         state.error = (action.payload as string) ?? 'Erreur inconnue';
       })
 
-      /* Détail */
+      /* Détail / CRUD */
       .addCase(fetchMouvementStockById.fulfilled, (state, action) => {
         mouvementStockAdapter.upsertOne(state, action.payload);
       })
@@ -441,7 +576,6 @@ const mouvementStockSlice = createSlice({
         state.error = (action.payload as string) ?? 'Erreur inconnue';
       })
 
-      /* Create */
       .addCase(createMouvementStock.fulfilled, (state, action) => {
         mouvementStockAdapter.addOne(state, action.payload);
         if (state.meta) {
@@ -455,7 +589,6 @@ const mouvementStockSlice = createSlice({
         state.error = (action.payload as string) ?? 'Erreur lors de la création';
       })
 
-      /* Update */
       .addCase(updateMouvementStock.fulfilled, (state, action) => {
         mouvementStockAdapter.upsertOne(state, action.payload);
       })
@@ -463,7 +596,6 @@ const mouvementStockSlice = createSlice({
         state.error = (action.payload as string) ?? 'Erreur lors de la mise à jour';
       })
 
-      /* Validate */
       .addCase(validateMouvementStock.fulfilled, (state, action) => {
         mouvementStockAdapter.upsertOne(state, action.payload);
       })
@@ -471,7 +603,6 @@ const mouvementStockSlice = createSlice({
         state.error = (action.payload as string) ?? 'Erreur lors de la validation';
       })
 
-      /* Delete */
       .addCase(deleteMouvementStock.fulfilled, (state, action) => {
         mouvementStockAdapter.removeOne(state, action.payload);
         if (state.meta) {
