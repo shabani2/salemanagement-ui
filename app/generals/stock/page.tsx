@@ -82,7 +82,9 @@ const Page: React.FC = () => {
   const [selectedCategorie, setSelectedCategorie] = useState<Categorie | null>(null);
   const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(null);
 
-  /* --------------------------- Construction des filtres serveur ------------- */
+  /* --------------------------- Construction des filtres envoyés ------------- */
+  const first = useMemo(() => Math.max(0, (page - 1) * rows), [page, rows]);
+
   const serverFilters = useMemo(() => {
     const roleFilters: Record<string, any> = {};
     if (user?.role === 'AdminPointVente' && isNonEmptyString(user?.pointVente?._id)) {
@@ -90,23 +92,24 @@ const Page: React.FC = () => {
     } else if (user?.role === 'AdminRegion' && isNonEmptyString(user?.region?._id)) {
       roleFilters.region = user.region._id;
     }
+    // La sélection PV dans l'UI override le filtre rôle région
     if (selectedPointVente?._id) {
       roleFilters.pointVente = selectedPointVente._id;
       delete roleFilters.region;
     }
 
     return {
-      page, // ✅ page 1-based (plus de first/offset côté UI)
-      limit: rows,
+      first, // ✅ offset attendu par le slice
+      limit: rows, // ✅ taille de page côté client
       q: search || undefined,
-      sortBy, // ex: 'updatedAt' ou 'produit.nom' (supporté par ton contrôleur)
+      sortBy,
       order,
       includeTotal: true,
       includeRefs: true,
       ...roleFilters,
     };
   }, [
-    page,
+    first,
     rows,
     search,
     sortBy,
@@ -167,6 +170,7 @@ const Page: React.FC = () => {
     const fixed = Math.min(page, newTotalPages);
     setPage(fixed);
   };
+  console.log('data : ', stocks);
 
   /* ---------------------------------- UI ----------------------------------- */
   return (
@@ -363,7 +367,7 @@ const Page: React.FC = () => {
                       <td className="px-4 py-2">{row?.produit?.nom ?? '—'}</td>
 
                       <td className="px-4 py-2">
-                        {row?.region?.nom ?? row?.pointVente?.nom ?? 'Depot Central'}
+                        {row?.pointVente?.nom ?? row?.region?.nom ?? 'Depot Central'}
                       </td>
 
                       <td className="px-4 py-2">{q.toString()}</td>

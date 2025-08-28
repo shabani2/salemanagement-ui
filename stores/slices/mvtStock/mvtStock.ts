@@ -18,10 +18,10 @@ type Status = 'idle' | 'loading' | 'succeeded' | 'failed';
 export type Order = 'asc' | 'desc';
 
 export interface PaginationMeta {
-  page: number;      // 1-based
+  page: number; // 1-based
   limit: number;
   total: number;
-  skip: number;      // offset calculé (=(page-1)*limit si non fourni)
+  skip: number; // offset calculé (=(page-1)*limit si non fourni)
   totalPages: number;
   hasPrev: boolean;
   hasNext: boolean;
@@ -123,16 +123,14 @@ const normalizeMeta = (raw?: MouvementListResponse['meta'] | null): PaginationMe
   const page = Math.max(1, Number(raw.page ?? 1));
   const limit = Math.max(1, Number(raw.limit ?? 10));
   const total = Math.max(0, Number(raw.total ?? 0));
-  const skip =
-    Number.isFinite(Number(raw?.skip))
-      ? Math.max(0, Number(raw?.skip))
-      : (page - 1) * limit;
-  const totalPages =
-    Number.isFinite(Number(raw?.totalPages))
-      ? Math.max(1, Number(raw?.totalPages))
-      : Number.isFinite(Number((raw as any)?.pages))
-        ? Math.max(1, Number((raw as any)?.pages))
-        : Math.max(1, Math.ceil(total / limit));
+  const skip = Number.isFinite(Number(raw?.skip))
+    ? Math.max(0, Number(raw?.skip))
+    : (page - 1) * limit;
+  const totalPages = Number.isFinite(Number(raw?.totalPages))
+    ? Math.max(1, Number(raw?.totalPages))
+    : Number.isFinite(Number((raw as any)?.pages))
+      ? Math.max(1, Number((raw as any)?.pages))
+      : Math.max(1, Math.ceil(total / limit));
 
   return {
     page,
@@ -276,7 +274,18 @@ function normalizeListPayload(
     const totalPages = Number(p.totalPages ?? Math.max(1, Math.ceil(total / lm)));
     const skip = Number.isFinite(Number(p.offset)) ? Number(p.offset) : (pg - 1) * lm;
     const slice = filteredSorted.slice(skip, skip + lm);
-    return { list: slice, meta: { page: pg, limit: lm, total, totalPages, skip, hasPrev: pg > 1, hasNext: pg < totalPages } };
+    return {
+      list: slice,
+      meta: {
+        page: pg,
+        limit: lm,
+        total,
+        totalPages,
+        skip,
+        hasPrev: pg > 1,
+        hasNext: pg < totalPages,
+      },
+    };
   }
 
   // { items, total, page/limit/skip }
@@ -290,7 +299,18 @@ function normalizeListPayload(
     const totalPages = Math.max(1, Math.ceil(total / lm));
     const skip = Number.isFinite(Number(p.skip)) ? Number(p.skip) : (pg - 1) * lm;
     const slice = filteredSorted.slice(skip, skip + lm);
-    return { list: slice, meta: { page: pg, limit: lm, total, totalPages, skip, hasPrev: pg > 1, hasNext: pg < totalPages } };
+    return {
+      list: slice,
+      meta: {
+        page: pg,
+        limit: lm,
+        total,
+        totalPages,
+        skip,
+        hasPrev: pg > 1,
+        hasNext: pg < totalPages,
+      },
+    };
   }
 
   // Fallback
@@ -461,7 +481,9 @@ export const updateMouvementStock = createAsyncThunk<
 >('mouvementStock/update', async ({ id, updateData }, { rejectWithValue }) => {
   try {
     if (!updateData.user) return rejectWithValue("Le champ 'user' est obligatoire");
-    const response = await apiClient.put(`/mouvements/${id}`, updateData, { headers: getAuthHeaders() });
+    const response = await apiClient.put(`/mouvements/${id}`, updateData, {
+      headers: getAuthHeaders(),
+    });
     return response.data as MouvementStock;
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
@@ -490,7 +512,11 @@ export const validateMouvementStock = createAsyncThunk<
   { rejectValue: string }
 >('mouvementStock/validate', async (id, { rejectWithValue }) => {
   try {
-    const response = await apiClient.patch(`/mouvements/${id}/validate`, {}, { headers: getAuthHeaders() });
+    const response = await apiClient.put(
+      `/mouvements/validate/${id}`,
+      {},
+      { headers: getAuthHeaders() }
+    );
     return (response.data?.mouvement ?? response.data) as MouvementStock;
   } catch (error: unknown) {
     if (error instanceof Error) return rejectWithValue(error.message);
@@ -518,6 +544,36 @@ export const fetchMouvementsAggregate = createAsyncThunk<
   }
 });
 
+interface FetchMvtStockParams {
+  pointVenteId?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  order?: 'asc' | 'desc';
+}
+export const fetchMouvementStockAggregatedByPointVente = async ({
+  pointVenteId,
+  page = 1,
+  limit = 10,
+  sortBy = 'updatedAt',
+  order = 'desc',
+}: FetchMvtStockParams) => {
+  if (!pointVenteId) {
+    throw new Error('pointVenteId est requis');
+  }
+
+  const response = await apiClient.get(`/mvtstock/pointvente/${pointVenteId}`, {
+    params: {
+      page,
+      limit,
+      sortBy,
+      order,
+    },
+  });
+
+  return response.data;
+};
+
 /* ---------------- Slice ---------------- */
 
 const mouvementStockSlice = createSlice({
@@ -541,7 +597,12 @@ const mouvementStockSlice = createSlice({
       .addCase(fetchMouvementsStock.fulfilled, (state, action) => {
         state.status = 'succeeded';
         const params = (action.meta.arg ?? {}) as FetchParams;
-        const { list, meta } = normalizeListPayload(action.payload, params.page, params.limit, params);
+        const { list, meta } = normalizeListPayload(
+          action.payload,
+          params.page,
+          params.limit,
+          params
+        );
         mouvementStockAdapter.setAll(state, list ?? []);
         state.meta = meta;
       })
@@ -558,7 +619,12 @@ const mouvementStockSlice = createSlice({
       .addCase(searchMouvementsStock.fulfilled, (state, action) => {
         state.status = 'succeeded';
         const params = (action.meta.arg ?? {}) as FetchParams;
-        const { list, meta } = normalizeListPayload(action.payload, params.page, params.limit, params);
+        const { list, meta } = normalizeListPayload(
+          action.payload,
+          params.page,
+          params.limit,
+          params
+        );
         // on reflète la grille filtrée
         mouvementStockAdapter.setAll(state, list ?? []);
         state.meta = meta;

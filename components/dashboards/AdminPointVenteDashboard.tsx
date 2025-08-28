@@ -35,7 +35,9 @@ const AdminPVDashboard = () => {
 
     setLoading(true);
     try {
+      //@ts-expect-error --hello here
       const result = await dispatch(
+        //@ts-expect-error   --hello here
         fetchMouvementStockAggregatedByPointVente({
           pointVenteId: user?.pointVente?._id,
           page: currentPage,

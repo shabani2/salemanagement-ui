@@ -10,7 +10,7 @@ import {
   PayloadAction,
 } from '@reduxjs/toolkit';
 import { RootState } from '../../store';
-  import { apiClient } from '../../../lib/apiConfig';
+import { apiClient } from '../../../lib/apiConfig';
 import { Produit, ProduitModel } from '@/Models/produitsType';
 
 /** ---------- Types pagination & requêtes ---------- */
@@ -162,7 +162,14 @@ function normalizeListPayload(
   // Fallback
   return {
     list: [],
-    meta: { page: argPage ?? 1, limit: argLimit ?? 10, total: 0, totalPages: 1, hasPrev: false, hasNext: false },
+    meta: {
+      page: argPage ?? 1,
+      limit: argLimit ?? 10,
+      total: 0,
+      totalPages: 1,
+      hasPrev: false,
+      hasNext: false,
+    },
   };
 }
 

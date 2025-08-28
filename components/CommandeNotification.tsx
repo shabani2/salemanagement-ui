@@ -26,21 +26,13 @@ export const CommandeNotification: React.FC = () => {
     if (!user?.role) return;
     if (isSuperAdmin) {
       // @ts-expect-error - compat: external lib types mismatch
-      dispatch(fetchCommandes()).then((resp) => {
-        console.log('Commandes fetched:', resp.payload);
-      });
+      dispatch(fetchCommandes()).then((resp) => {});
     } else if (isAdminPointVente) {
-      dispatch(fetchCommandesByPointVente(user?.pointVente._id)).then((resp) => {
-        console.log('Commandes by point de vente:', resp.payload);
-      });
+      dispatch(fetchCommandesByPointVente(user?.pointVente._id)).then((resp) => {});
     } else if (isAdminRegion) {
-      dispatch(fetchCommandesByRegion(user?.region._id)).then((resp) => {
-        console.log('Commandes by region:', resp.payload);
-      });
+      dispatch(fetchCommandesByRegion(user?.region._id)).then((resp) => {});
     } else if (isLogisticien) {
-      dispatch(fetchCommandesByUser(user?.pointVente?._id)).then((resp) => {
-        console.log('Commandes by user:', resp.payload);
-      });
+      dispatch(fetchCommandesByUser(user?.pointVente?._id)).then((resp) => {});
     }
   }, [dispatch]);
 

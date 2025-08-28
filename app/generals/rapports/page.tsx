@@ -55,7 +55,9 @@ const Page: React.FC = () => {
 
   const { user, isAdminPointVente, isAdminRegion } = useUserRole();
 
-  const mvtList = useSelector((s: RootState) => asArray<MouvementStock>(selectAllMouvementsStock(s)));
+  const mvtList = useSelector((s: RootState) =>
+    asArray<MouvementStock>(selectAllMouvementsStock(s))
+  );
   const meta = useSelector(selectMouvementStockMeta);
   const status = useSelector(selectMouvementStockStatus);
   const loading = status === 'loading';
@@ -78,10 +80,13 @@ const Page: React.FC = () => {
   // Menu actions
   const actionsMenuRef = useRef<Menu | null>(null);
   const currentRowRef = useRef<MouvementStock | null>(null);
-  const openActionsMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>, row: MouvementStock) => {
-    currentRowRef.current = row;
-    actionsMenuRef.current?.toggle(e);
-  }, []);
+  const openActionsMenu = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>, row: MouvementStock) => {
+      currentRowRef.current = row;
+      actionsMenuRef.current?.toggle(e);
+    },
+    []
+  );
   const actionsModel = useMemo<MenuItem[]>(
     () => [
       {
@@ -116,12 +121,19 @@ const Page: React.FC = () => {
     }
     // SuperAdmin → pas de filtre : on tombera sur /mouvements/page
     return rf;
-  }, [isAdminPointVente, isAdminRegion, user?.pointVente?._id, user?.region?._id, (user as any)?._id, (user as any)?.role]);
+  }, [
+    isAdminPointVente,
+    isAdminRegion,
+    user?.pointVente?._id,
+    user?.region?._id,
+    (user as any)?._id,
+    (user as any)?.role,
+  ]);
 
   /* ------------------- Paramètres fetch (page/limit/tri/recherche) ------------------ */
   const serverParams = useMemo(
     () => ({
-      page,                // 1-based
+      page, // 1-based
       limit: rows,
       q: search || undefined,
       sortBy,
@@ -149,7 +161,9 @@ const Page: React.FC = () => {
   /* ----------------------- Tri / Pagination (pilotés par meta) ---------------------- */
   const currentLimit = meta?.limit ?? rows;
   const total = meta?.total ?? 0;
-  const totalPages = meta?.totalPages ?? meta?.pages ?? Math.max(1, Math.ceil(total / Math.max(1, currentLimit)));
+  //@ts-ignore
+  const totalPages =
+    meta?.totalPages ?? meta?.pages ?? Math.max(1, Math.ceil(total / Math.max(1, currentLimit)));
   const firstIndex = (meta?.skip ?? ((meta?.page ?? page) - 1) * currentLimit) | 0;
 
   const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
@@ -406,7 +420,7 @@ const Page: React.FC = () => {
                       <td className="px-4 py-2">{row?.type || '—'}</td>
 
                       <td className="px-4 py-2">
-                        {row?.region?.nom ?? row?.pointVente?.nom ?? 'Depot Central'}
+                        {row?.pointVente?.nom ?? row?.region?.nom ?? 'Depot Central'}
                       </td>
 
                       <td className="px-4 py-2">{q.toString()}</td>
@@ -552,7 +566,10 @@ const Page: React.FC = () => {
           try {
             if (!item?._id) return;
             const r = await dispatch(validateMouvementStock(item._id as any));
-            if (validateMouvementStock.fulfilled?.match?.(r) || r?.meta?.requestStatus === 'fulfilled') {
+            if (
+              validateMouvementStock.fulfilled?.match?.(r) ||
+              r?.meta?.requestStatus === 'fulfilled'
+            ) {
               toast.current?.show({
                 severity: 'success',
                 summary: 'Validé',

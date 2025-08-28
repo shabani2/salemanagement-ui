@@ -30,7 +30,10 @@ import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSl
 
 import { PointVente } from '@/Models/pointVenteType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { downloadExportedFile, exportFile } from '@/stores/slices/document/importDocuments/exportDoc';
+import {
+  downloadExportedFile,
+  exportFile,
+} from '@/stores/slices/document/importDocuments/exportDoc';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
 /* ----------------------------- Helpers ----------------------------- */
@@ -52,7 +55,9 @@ export default function PointVenteManagement() {
   const toast = useRef<Toast>(null);
 
   // Store
-  const pointsVente = useSelector((state: RootState) => asArray<PointVente>(selectAllPointVentes(state)));
+  const pointsVente = useSelector((state: RootState) =>
+    asArray<PointVente>(selectAllPointVentes(state))
+  );
   const regions = useSelector((state: RootState) => asArray<RegionLite>(selectAllRegions(state)));
   const meta = useSelector(selectPointVenteMeta);
   const status = useSelector(selectPointVenteStatus);
@@ -89,9 +94,21 @@ export default function PointVenteManagement() {
   }, []);
   const menuModel = useMemo(
     () => [
-      { label: 'Détails', command: () => selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current) },
-      { label: 'Modifier', command: () => selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current) },
-      { label: 'Supprimer', command: () => selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current) },
+      {
+        label: 'Détails',
+        command: () =>
+          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
+      },
+      {
+        label: 'Modifier',
+        command: () =>
+          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
+      },
+      {
+        label: 'Supprimer',
+        command: () =>
+          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
+      },
     ],
     [handleAction]
   );
@@ -223,7 +240,11 @@ export default function PointVenteManagement() {
         region: regionId,
       });
     } else if (dialogType === 'create') {
-      setForm({ nom: '', adresse: '', region: isAdminRegion ? forcedRegionId || '' : regionFilter || '' });
+      setForm({
+        nom: '',
+        adresse: '',
+        region: isAdminRegion ? forcedRegionId || '' : regionFilter || '',
+      });
     }
   }, [dialogType, selectedPV, regionFilter, isAdminRegion, forcedRegionId]);
 
@@ -236,7 +257,11 @@ export default function PointVenteManagement() {
   /* ------------------------------ CRUD Handlers ----------------------------- */
   const handleCreate = useCallback(async () => {
     setLoading1(true);
-    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.adresse) || !isNonEmptyString(form.region)) {
+    if (
+      !isNonEmptyString(form.nom) ||
+      !isNonEmptyString(form.adresse) ||
+      !isNonEmptyString(form.region)
+    ) {
       toast.current?.show({
         severity: 'warn',
         summary: 'Champs requis',
@@ -248,12 +273,22 @@ export default function PointVenteManagement() {
     }
     const r = await dispatch(addPointVente(form as any) as any);
     if ((addPointVente as any).fulfilled.match(r)) {
-      toast.current?.show({ severity: 'success', summary: 'Ajouté', detail: 'Point de vente créé', life: 2000 });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Ajouté',
+        detail: 'Point de vente créé',
+        life: 2000,
+      });
       setLoading1(false);
       resetForm();
       fetchServer();
     } else {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: "Échec de l'ajout", life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: "Échec de l'ajout",
+        life: 3000,
+      });
       setLoading1(false);
     }
   }, [dispatch, form, fetchServer, resetForm]);
@@ -264,7 +299,11 @@ export default function PointVenteManagement() {
       setLoading1(false);
       return;
     }
-    if (!isNonEmptyString(form.nom) || !isNonEmptyString(form.adresse) || !isNonEmptyString(form.region)) {
+    if (
+      !isNonEmptyString(form.nom) ||
+      !isNonEmptyString(form.adresse) ||
+      !isNonEmptyString(form.region)
+    ) {
       toast.current?.show({
         severity: 'warn',
         summary: 'Champs requis',
@@ -285,12 +324,22 @@ export default function PointVenteManagement() {
       }) as any
     );
     if ((updatePointVenteThunk as any).fulfilled.match(r)) {
-      toast.current?.show({ severity: 'success', summary: 'Modifié', detail: 'Point de vente mis à jour', life: 2000 });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Modifié',
+        detail: 'Point de vente mis à jour',
+        life: 2000,
+      });
       resetForm();
       fetchServer();
       setLoading1(false);
     } else {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la modification', life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la modification',
+        life: 3000,
+      });
       setLoading1(false);
     }
   }, [dispatch, selectedPV, form, fetchServer, resetForm]);
@@ -299,19 +348,38 @@ export default function PointVenteManagement() {
     if (!selectedPV?._id) return;
     const r = await dispatch(deletePointVenteThunk(selectedPV._id) as any);
     if ((deletePointVenteThunk as any).fulfilled.match(r)) {
-      toast.current?.show({ severity: 'success', summary: 'Supprimé', detail: 'Point de vente supprimé', life: 2000 });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Supprimé',
+        detail: 'Point de vente supprimé',
+        life: 2000,
+      });
       // reculer si la page devient vide
-      const nextPage = pointsVente.length === 1 && (meta?.page ?? 1) > 1 ? (meta!.page - 1) : (meta?.page ?? page);
+      const nextPage =
+        pointsVente.length === 1 && (meta?.page ?? 1) > 1 ? meta!.page - 1 : (meta?.page ?? page);
       setPage(nextPage);
       fetchAtPage(nextPage);
     } else {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la suppression', life: 3000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la suppression',
+        life: 3000,
+      });
     }
   }, [dispatch, selectedPV, pointsVente.length, meta, page, fetchAtPage]);
 
   /* ----------------------------- Import / Export ---------------------------- */
   const handleFileManagement = useCallback(
-    async ({ type, format, file }: { type: 'import' | 'export'; format: 'csv' | 'pdf' | 'excel'; file?: File }) => {
+    async ({
+      type,
+      format,
+      file,
+    }: {
+      type: 'import' | 'export';
+      format: 'csv' | 'pdf' | 'excel';
+      file?: File;
+    }) => {
       if (type === 'export') {
         if (format === 'pdf') {
           toast.current?.show({
@@ -594,7 +662,10 @@ export default function PointVenteManagement() {
               <label className="block mb-1 text-sm font-medium">Région*</label>
               <Dropdown
                 value={form.region}
-                options={[{ label: 'Sélectionner...', value: '' }, ...regions.map((r) => ({ label: r.nom, value: r._id }))]}
+                options={[
+                  { label: 'Sélectionner...', value: '' },
+                  ...regions.map((r) => ({ label: r.nom, value: r._id })),
+                ]}
                 onChange={(e) => setForm((p) => ({ ...p, region: e.value ?? '' }))}
                 className="w-full border rounded"
                 disabled={!!isAdminRegion} // ⬅️ AdminRegion : région imposée

@@ -36,7 +36,7 @@ import { User } from '@/Models/UserType';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { downloadPdfFile, generateStockPdf } from '@/stores/slices/document/pdfGenerator';
 import { destinateur, organisation, serie } from '@/lib/Constants';
-import { getOptionsByRole } from '@/lib/utils';
+import { getOptionsByRole, getRegionId } from '@/lib/utils';
 import { Divider } from 'primereact/divider';
 import { fetchOrganisations, Organisation } from '@/stores/slices/organisation/organisationSlice';
 import { Region } from '@/Models/regionTypes';
@@ -44,6 +44,7 @@ import { Badge } from 'primereact/badge';
 import { Card } from 'primereact/card';
 import { Tag } from 'primereact/tag';
 import { AutoComplete, AutoCompleteCompleteEvent } from 'primereact/autocomplete';
+import { Console } from 'console';
 
 /* ----------------------------- Helpers ----------------------------- */
 
@@ -155,25 +156,16 @@ const Page = () => {
   const montantFranc = useMemo(() => montantDollar * tauxFranc, [montantDollar, tauxFranc]);
 
   /* ------------------------- Chargements initiaux -------------------------- */
+  const regionId = getRegionId((user as User)?.region);
+  // 1. chargement de base
   useEffect(() => {
-    let isActive = true;
     (async () => {
       try {
-        const [orgRes] = await Promise.all([
-          (await dispatch(fetchOrganisations()).then((res) =>
-            setOrg(res.payload)
-          )) as Organisation[],
+        await Promise.all([
+          dispatch(fetchOrganisations()).then((res) => setOrg(res.payload)),
           dispatch(fetchCategories()),
           dispatch(fetchProduits()),
         ]);
-
-        if (!isActive) return;
-
-        if (user?.role === 'SuperAdmin') {
-          await dispatch(fetchPointVentes());
-        } else if (isNonEmptyString((user as any)?.region?._id)) {
-          await dispatch(fetchPointVentesByRegionId((user as any).region._id));
-        }
       } catch (e) {
         toast.current?.show({
           severity: 'error',
@@ -182,25 +174,24 @@ const Page = () => {
           life: 4000,
         });
       }
-
-      try {
-        const savedTauxDollar =
-          typeof window !== 'undefined' ? localStorage.getItem('tauxDollar') : null;
-        const savedTauxFranc =
-          typeof window !== 'undefined' ? localStorage.getItem('tauxFranc') : null;
-        if (isNonEmptyString(savedTauxDollar)) setValue('tauxDollar', Number(savedTauxDollar));
-        if (isNonEmptyString(savedTauxFranc)) setValue('tauxFranc', Number(savedTauxFranc));
-      } catch {}
     })();
+  }, [dispatch]);
 
-    return () => {
-      isActive = false;
-    };
-    //@ts-ignore
-  }, [dispatch, user?.role, (user as any)?.region?._id, setValue]);
+  // 2. chargement des points de vente
+  useEffect(() => {
+    if (!user?.role) return;
+
+    (async () => {
+      if (user.role === 'SuperAdmin') {
+        await dispatch(fetchPointVentes());
+      } else if (isNonEmptyString(regionId)) {
+        await dispatch(fetchPointVentesByRegionId({ regionId })).then((resp) => {});
+      }
+    })();
+  }, [dispatch, user?.role, regionId]);
 
   /* -------------------------- Point de vente lock -------------------------- */
-  const rolesWithFixedPointVente = ['AdminRegion', 'AdminPointVente', 'Vendeur', 'Logisticien'];
+  const rolesWithFixedPointVente = ['AdminPointVente', 'Vendeur', 'Logisticien'];
   const isPointVenteLocked = !!(user && rolesWithFixedPointVente.includes(user.role as any));
 
   useEffect(() => {
@@ -261,6 +252,7 @@ const Page = () => {
     async (value: number) => {
       const produitId = getValues('formulaire.produit');
       if (!isNonEmptyString(produitId) || !value || value <= 0) return 'Quantité invalide';
+
       const op = getValues('type');
       if (op === 'Entrée' || op === 'Commande') return true;
 
@@ -270,10 +262,16 @@ const Page = () => {
           : (selectedPointVente as any)?._id;
 
       try {
-        const result = await dispatch(
-          checkStock({ type: op, produitId, quantite: value, pointVenteId: pvId })
-        ).unwrap();
+        console.log('validate regionId ', regionId);
 
+        const result = await dispatch(
+          checkStock(
+            isNonEmptyString(regionId)
+              ? { type: op, produitId, quantite: value, regionId }
+              : { type: op, produitId, quantite: value, pointVenteId: pvId }
+          )
+        ).unwrap();
+        console.log('result ', result);
         if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
           return `Stock disponible : ${safeNumber(result?.quantiteDisponible, 0)}`;
         }
@@ -282,7 +280,7 @@ const Page = () => {
         return 'Vérification de stock indisponible';
       }
     },
-    [dispatch, selectedPointVente, getValues]
+    [dispatch, selectedPointVente, getValues, regionId]
   );
 
   /* --------------------------- Autocomplete produits ----------------------- */

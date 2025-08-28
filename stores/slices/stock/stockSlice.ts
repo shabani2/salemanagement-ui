@@ -13,6 +13,11 @@ import type { Stock } from '@/Models/stock';
 import type { PointVente } from '@/Models/pointVenteType';
 
 /* ----------------------------- Types état/meta ----------------------------- */
+export interface CheckStockResponse {
+  success: boolean;
+  quantiteDisponible: number;
+  suffisant: boolean;
+}
 
 export interface ListMeta {
   total: number; // total d'items
@@ -28,31 +33,26 @@ interface StockState {
 }
 
 export type FetchStocksParams = {
-  /** Offset-based côté UI (first/limit). On convertit en page 1-based côté serveur si besoin. */
+  /** Offset-based côté UI (first/limit). */
   first?: number; // offset (skip)
   limit?: number;
 
-  /** Recherche & tri */
+  /** Recherche & tri (appliqués côté client) */
   q?: string;
   sortBy?: string; // ex: "updatedAt" | "produit.nom" | "region.nom" | "pointVente.nom" | "quantite"
   order?: 'asc' | 'desc';
 
-  /** Filtres */
+  /** Filtres (côté client si route = /stocks) ; côté serveur si route dédiée) */
   pointVente?: string;
   region?: string;
   produit?: string;
   depotCentral?: boolean;
 
-  /** Flags back */
-  includeTotal?: boolean; // par défaut true
-  includeRefs?: boolean;  // par défaut true
-
-  /** Si true, on tente d'utiliser une route paginée côté serveur; sinon fallback /stocks (non paginée). */
+  /** Conservé pour compatibilité, ignoré (pas de pagination serveur dans tes routes) */
   preferServerPage?: boolean;
 };
 
 /* -------------------------------- Adapter --------------------------------- */
-
 const stockAdapter: EntityAdapter<Stock, string> = createEntityAdapter<Stock, string>({
   selectId: (stock) => stock._id,
   sortComparer: false,
@@ -65,21 +65,9 @@ const initialState = stockAdapter.getInitialState<StockState>({
 });
 
 /* ------------------------------- Helpers ---------------------------------- */
-
 const getAuthHeaders = () => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token-agricap') : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
-const toQueryString = (obj: Record<string, any>) => {
-  const search = new URLSearchParams();
-  Object.entries(obj).forEach(([k, v]) => {
-    if (v === undefined || v === null || v === '') return;
-    if (typeof v === 'boolean') search.append(k, v ? 'true' : 'false');
-    else search.append(k, String(v));
-  });
-  const s = search.toString();
-  return s ? `?${s}` : '';
 };
 
 const getValByPath = (obj: any, path?: string) => {
@@ -103,10 +91,20 @@ function applyClientFiltersSort(list: Stock[], params: FetchStocksParams): Stock
   let filtered = list;
 
   // filtres structurés
-  if (pointVente) filtered = filtered.filter((s) => toStr((s as any)?.pointVente?._id ?? (s as any)?.pointVente) === pointVente);
-  if (region)     filtered = filtered.filter((s) => toStr((s as any)?.region?._id ?? (s as any)?.region) === region);
-  if (produit)    filtered = filtered.filter((s) => toStr((s as any)?.produit?._id ?? (s as any)?.produit) === produit);
-  if (typeof depotCentral === 'boolean') filtered = filtered.filter((s) => (s as any)?.depotCentral === depotCentral);
+  if (pointVente)
+    filtered = filtered.filter(
+      (s) => toStr((s as any)?.pointVente?._id ?? (s as any)?.pointVente) === pointVente
+    );
+  if (region)
+    filtered = filtered.filter(
+      (s) => toStr((s as any)?.region?._id ?? (s as any)?.region) === region
+    );
+  if (produit)
+    filtered = filtered.filter(
+      (s) => toStr((s as any)?.produit?._id ?? (s as any)?.produit) === produit
+    );
+  if (typeof depotCentral === 'boolean')
+    filtered = filtered.filter((s) => (s as any)?.depotCentral === depotCentral);
 
   // recherche texte (produit.nom, pointVente.nom, region.nom)
   if (q && q.trim()) {
@@ -127,7 +125,11 @@ function applyClientFiltersSort(list: Stock[], params: FetchStocksParams): Stock
       const bv = getValByPath(b, sortBy);
 
       // date
-      if (sortBy.toLowerCase().includes('date') || sortBy.toLowerCase().includes('updatedat') || sortBy.toLowerCase().includes('createdat')) {
+      if (
+        sortBy.toLowerCase().includes('date') ||
+        sortBy.toLowerCase().includes('updatedat') ||
+        sortBy.toLowerCase().includes('createdat')
+      ) {
         const ad = av ? new Date(av as any).getTime() : 0;
         const bd = bv ? new Date(bv as any).getTime() : 0;
         return (ad - bd) * desc;
@@ -152,21 +154,6 @@ function normalizeListPayload(
   const first = Math.max(0, argFirst ?? 0);
   const limit = Math.max(1, argLimit ?? 10);
 
-  // ✅ Format paginé serveur: { total, page, pages, limit, stocks }
-  if (payload && typeof payload === 'object' && 'stocks' in payload) {
-    const p: any = payload;
-    const list: Stock[] = Array.isArray(p.stocks) ? p.stocks : [];
-    const total = Number(p.total ?? list.length);
-    const page = Number(p.page ?? Math.floor(first / limit) + 1);
-    const pages = Number(p.pages ?? Math.max(1, Math.ceil(total / limit)));
-    const _first = (page - 1) * limit;
-
-    return {
-      list, // déjà découpé par le serveur
-      meta: { total, first: _first, pages, limit },
-    };
-  }
-
   // 1) Tableau brut -> filtre/tri/pagination côté client
   if (Array.isArray(payload)) {
     const raw = payload as Stock[];
@@ -177,144 +164,44 @@ function normalizeListPayload(
     return { list: slice, meta: { total, first, pages, limit } };
   }
 
-  // 2) { data, meta? } (meta peut être offset-based OU page-based)
+  // 2) Formats alternatifs (non utilisés par tes routes actuelles) — fallback
   if (payload && typeof payload === 'object' && 'data' in payload) {
     const obj = payload as { data: unknown; meta?: any };
     const base = Array.isArray(obj.data) ? (obj.data as Stock[]) : [];
     const filteredSorted = applyClientFiltersSort(base, argParams ?? {});
-
-    // si meta donne page/limit/total
-    const m = obj.meta ?? {};
-    const fromMetaLimit = Number(m.limit ?? limit);
-    const fromMetaTotal = Number(m.total ?? filteredSorted.length);
-    let _first =
-      Number.isFinite(Number(m.first ?? m.offset))
-        ? Number(m.first ?? m.offset)
-        : Number.isFinite(Number(m.page))
-          ? (Number(m.page) - 1) * fromMetaLimit
-          : first;
-
-    const pages =
-      Number(m.pages ?? m.totalPages) ||
-      Math.max(1, Math.ceil(fromMetaTotal / fromMetaLimit));
-
-    const slice = filteredSorted.slice(_first, _first + fromMetaLimit);
-    return {
-      list: slice,
-      meta: {
-        total: fromMetaTotal,
-        first: Math.max(0, _first),
-        pages,
-        limit: fromMetaLimit,
-      },
-    };
+    const total = filteredSorted.length;
+    const pages = Math.max(1, Math.ceil(total / limit));
+    const slice = filteredSorted.slice(first, first + limit);
+    return { list: slice, meta: { total, first, pages, limit } };
   }
 
-  // 3) Mongoose paginate-like: { docs, totalDocs, page, limit, totalPages, ... }
-  if (payload && typeof payload === 'object' && 'docs' in payload) {
-    const p: any = payload;
-    const base: Stock[] = Array.isArray(p.docs) ? p.docs : [];
-    const total = Number(p.totalDocs ?? p.total ?? base.length);
-    const page = Number(p.page ?? Math.floor(first / limit) + 1);
-    const lm = Number(p.limit ?? limit);
-    const pages = Number(p.totalPages ?? Math.max(1, Math.ceil(total / lm)));
-    const _first = (page - 1) * lm;
-    return { list: base, meta: { total, first: _first, pages, limit: lm } };
-  }
-
-  // 4) { items, total, page/first, limit }
-  if (payload && typeof payload === 'object' && 'items' in payload) {
-    const p: any = payload;
-    const base: Stock[] = Array.isArray(p.items) ? p.items : [];
-    const lm = Number(p.limit ?? limit);
-    const total = Number(p.total ?? base.length);
-    const pg = Number(p.page ?? Math.floor(first / lm) + 1);
-    const _first = Number.isFinite(Number(p.first ?? p.offset)) ? Number(p.first ?? p.offset) : (pg - 1) * lm;
-    const pages = Math.max(1, Math.ceil(total / lm));
-    return { list: base, meta: { total, first: _first, pages, limit: lm } };
-  }
-
-  // Fallback
   return { list: [], meta: { total: 0, first, pages: 1, limit } };
 }
 
-/* --------------------------- API helper (serveur/client) --------------------------- */
-
+/* --------------------------- API helper --------------------------- */
+/**
+ * Choisit la route en fonction des params:
+ * - region -> GET /stocks/region/:regionId
+ * - pointVente -> GET /stocks/stock-by-pv/:pointVenteId
+ * - default -> GET /stocks
+ * Les filtres/tri recherchés non supportés par l'API sont appliqués côté client.
+ */
 async function fetchStocksApi(params: FetchStocksParams) {
-  const {
-    first = 0,
-    limit = 10,
-    q,
-    sortBy = 'updatedAt',
-    order = 'desc',
-    includeTotal = true,
-    includeRefs = true,
-    pointVente,
-    region,
-    produit,
-    depotCentral,
-    preferServerPage = true,
-  } = params;
+  const { region, pointVente } = params;
 
-  // conversion offset -> page (1-based) pour routes paginées
-  const page = Math.floor(first / limit) + 1;
+  let url = '/stocks';
+  if (pointVente) url = `/stocks/stock-by-pv/${pointVente}`;
+  else if (region) url = `/stocks/region/${region}`;
 
-  // 1) tenter une route paginée serveur si demandé
-  if (preferServerPage) {
-    let serverUrl: string | null = null;
-    if (pointVente) {
-      serverUrl = `/stocks/by-point-vente/${pointVente}/page`;
-    } else if (region) {
-      serverUrl = `/stocks/by-region/${region}/page`;
-    } else {
-      serverUrl = `/stocks/page`;
-    }
-
-    const qs = toQueryString({
-      page,
-      limit,
-      q,
-      sortBy,
-      order,
-      includeTotal,
-      includeRefs,
-      produit,
-      depotCentral,
-    });
-
-    try {
-      const r = await apiClient.get(`${serverUrl}${qs}`, { headers: getAuthHeaders() });
-      return r.data; // attendu: { total, page, pages, limit, stocks }
-    } catch {
-      // on tombera sur le fallback non paginé ci-dessous
-    }
-  }
-
-  // 2) route non paginée -> tableau complet, on pagine côté client
-  const fallbackQs = toQueryString({
-    // le back peut ignorer ces params, on les utilisera côté client
-    first,
-    limit,
-    q,
-    sortBy,
-    order,
-    includeTotal,
-    includeRefs,
-    pointVente,
-    region,
-    produit,
-    depotCentral,
-  });
-
-  const r2 = await apiClient.get(`/stocks${fallbackQs}`, { headers: getAuthHeaders() });
-  return r2.data; // Array<Stock> | {data,meta}…
+  const r = await apiClient.get(url, { headers: getAuthHeaders() });
+  return r.data; // Array<Stock>
 }
 
 /* -------------------------------- Thunks ---------------------------------- */
 
 // Liste principale
 export const fetchStocks = createAsyncThunk<
-  unknown, // shape libre : [] | {data, meta} | {docs,...} | {stocks,...}
+  unknown, // [] | {data, meta}…
   FetchStocksParams | undefined,
   { rejectValue: string }
 >('stocks/fetchAll', async (params, { rejectWithValue }) => {
@@ -327,48 +214,40 @@ export const fetchStocks = createAsyncThunk<
 });
 
 // Wrapper par région (réutilise fetchStocks)
-export const fetchStockByRegionId = createAsyncThunk<
-  unknown,
-  string,
-  { rejectValue: string }
->('stocks/fetchByRegionId', async (regionId, { rejectWithValue, dispatch }) => {
-  try {
-    const res = await dispatch(
-      fetchStocks({
-        region: regionId,
-        includeTotal: true,
-        includeRefs: true,
-        preferServerPage: true,
-      }) as any
-    );
-    return (res as any).payload;
-  } catch (error: unknown) {
-    if (error instanceof Error) return rejectWithValue(error.message);
-    return rejectWithValue('Erreur lors de la récupération des stocks par région');
+export const fetchStockByRegionId = createAsyncThunk<unknown, string, { rejectValue: string }>(
+  'stocks/fetchByRegionId',
+  async (regionId, { rejectWithValue, dispatch }) => {
+    try {
+      const res = await dispatch(
+        fetchStocks({
+          region: regionId,
+        }) as any
+      );
+      return (res as any).payload;
+    } catch (error: unknown) {
+      if (error instanceof Error) return rejectWithValue(error.message);
+      return rejectWithValue('Erreur lors de la récupération des stocks par région');
+    }
   }
-});
+);
 
 // Wrapper par point de vente (réutilise fetchStocks)
-export const fetchStockByPointVenteId = createAsyncThunk<
-  unknown,
-  string,
-  { rejectValue: string }
->('stocks/fetchByPointVenteId', async (pointVenteId, { rejectWithValue, dispatch }) => {
-  try {
-    const res = await dispatch(
-      fetchStocks({
-        pointVente: pointVenteId,
-        includeTotal: true,
-        includeRefs: true,
-        preferServerPage: true,
-      }) as any
-    );
-    return (res as any).payload;
-  } catch (error: unknown) {
-    if (error instanceof Error) return rejectWithValue(error.message);
-    return rejectWithValue('Erreur lors de la récupération des stocks par point de vente');
+export const fetchStockByPointVenteId = createAsyncThunk<unknown, string, { rejectValue: string }>(
+  'stocks/fetchByPointVenteId',
+  async (pointVenteId, { rejectWithValue, dispatch }) => {
+    try {
+      const res = await dispatch(
+        fetchStocks({
+          pointVente: pointVenteId,
+        }) as any
+      );
+      return (res as any).payload;
+    } catch (error: unknown) {
+      if (error instanceof Error) return rejectWithValue(error.message);
+      return rejectWithValue('Erreur lors de la récupération des stocks par point de vente');
+    }
   }
-});
+);
 
 export const fetchStockById = createAsyncThunk<Stock, string, { rejectValue: string }>(
   'stocks/fetchById',
@@ -430,21 +309,36 @@ export const deleteStock = createAsyncThunk<string, string, { rejectValue: strin
 );
 
 // Vérification de stock (pas stocké dans l'entity adapter)
+export interface CheckStockParams {
+  type: string;
+  produitId: string;
+  quantite: number;
+  pointVenteId?: string | PointVente;
+  regionId?: string;
+}
+
 export const checkStock = createAsyncThunk<
-  unknown,
-  {
-    type: string;
-    produitId: string;
-    quantite: number;
-    pointVenteId?: string | undefined | PointVente;
-  },
+  CheckStockResponse,
+  CheckStockParams,
   { rejectValue: string }
 >('stocks/checkStock', async (params, { rejectWithValue }) => {
   try {
-    const response = await apiClient.post('/stocks/check', { ...params }, { headers: getAuthHeaders() });
-    return response.data;
+    // 🔁 normaliser pointVenteId éventuel en string
+    const payload = {
+      ...params,
+      pointVenteId:
+        typeof params.pointVenteId === 'string'
+          ? params.pointVenteId
+          : (params.pointVenteId as PointVente | undefined)?._id,
+    };
+    const response = await apiClient.post('/stocks/check', payload, {
+      headers: getAuthHeaders(),
+    });
+    return response.data as CheckStockResponse;
   } catch (error: unknown) {
-    if (error instanceof Error) return rejectWithValue(error.message);
+    if (error instanceof Error) {
+      return rejectWithValue(error.message);
+    }
     return rejectWithValue('Erreur lors de la vérification du stock');
   }
 });
@@ -483,7 +377,13 @@ const stockSlice = createSlice({
       })
       .addCase(fetchStockByRegionId.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { list, meta } = normalizeListPayload(action.payload, state.meta.first, state.meta.limit);
+        const params = { region: 'X' } as FetchStocksParams; // dummy pour garder la même pagination locale
+        const { list, meta } = normalizeListPayload(
+          action.payload,
+          state.meta.first,
+          state.meta.limit,
+          params
+        );
         stockAdapter.setAll(state, list ?? []);
         state.meta = meta;
       })
@@ -499,7 +399,13 @@ const stockSlice = createSlice({
       })
       .addCase(fetchStockByPointVenteId.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const { list, meta } = normalizeListPayload(action.payload, state.meta.first, state.meta.limit);
+        const params = { pointVente: 'X' } as FetchStocksParams;
+        const { list, meta } = normalizeListPayload(
+          action.payload,
+          state.meta.first,
+          state.meta.limit,
+          params
+        );
         stockAdapter.setAll(state, list ?? []);
         state.meta = meta;
       })
@@ -533,7 +439,6 @@ const stockSlice = createSlice({
 });
 
 /* ------------------------------- Exports ---------------------------------- */
-
 export const stockReducer = stockSlice.reducer;
 
 export const {

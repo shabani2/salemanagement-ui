@@ -257,37 +257,40 @@ export const fetchPointVentesByRegionId = createAsyncThunk<
   unknown,
   { regionId: string } & Omit<FetchParams, 'region'>,
   { rejectValue: string }
->('pointVentes/fetchPointVentesByRegionId', async ({ regionId, ...params }, { rejectWithValue }) => {
-  try {
-    const {
-      page = 1,
-      limit = 10,
-      q,
-      sortBy = 'createdAt',
-      order = 'desc',
-      includeTotal = true,
-      includeStock = false,
-    } = params;
+>(
+  'pointVentes/fetchPointVentesByRegionId',
+  async ({ regionId, ...params }, { rejectWithValue }) => {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        q,
+        sortBy = 'createdAt',
+        order = 'desc',
+        includeTotal = true,
+        includeStock = false,
+      } = params;
 
-    const query = toQueryString({
-      page,
-      limit,
-      q,
-      sortBy,
-      order,
-      includeTotal,
-      includeStock,
-    });
+      const query = toQueryString({
+        page,
+        limit,
+        q,
+        sortBy,
+        order,
+        includeTotal,
+        includeStock,
+      });
 
-    const res = await apiClient.get(`/pointventes/region/${regionId}${query}`, {
-      headers: getAuthHeaders(),
-    });
-    return res.data;
-  } catch (err: unknown) {
-    if (err instanceof Error) return rejectWithValue(err.message);
-    return rejectWithValue('Erreur lors du chargement par région');
+      const res = await apiClient.get(`/pointventes/region/${regionId}${query}`, {
+        headers: getAuthHeaders(),
+      });
+      return res.data;
+    } catch (err: unknown) {
+      if (err instanceof Error) return rejectWithValue(err.message);
+      return rejectWithValue('Erreur lors du chargement par région');
+    }
   }
-});
+);
 
 // Détail (includeStock optionnel)
 export const fetchPointVenteById = createAsyncThunk<
@@ -377,11 +380,7 @@ const pointVenteSlice = createSlice({
         state.status = 'succeeded';
         // Normalise le payload quel que soit son shape
         const params = action.meta.arg ?? {};
-        const { list, meta } = normalizeListPayload(
-          action.payload,
-          params.page,
-          params.limit
-        );
+        const { list, meta } = normalizeListPayload(action.payload, params.page, params.limit);
         pointVenteAdapter.setAll(state, list ?? []);
         state.meta = meta;
       })
@@ -398,11 +397,7 @@ const pointVenteSlice = createSlice({
       .addCase(searchPointVentes.fulfilled, (state, action) => {
         state.status = 'succeeded';
         const params = action.meta.arg ?? {};
-        const { list, meta } = normalizeListPayload(
-          action.payload,
-          params.page,
-          params.limit
-        );
+        const { list, meta } = normalizeListPayload(action.payload, params.page, params.limit);
         pointVenteAdapter.setAll(state, list ?? []);
         state.meta = meta;
       })
@@ -419,11 +414,7 @@ const pointVenteSlice = createSlice({
       .addCase(fetchPointVentesByRegionId.fulfilled, (state, action) => {
         state.status = 'succeeded';
         const params = action.meta.arg ?? {};
-        const { list, meta } = normalizeListPayload(
-          action.payload,
-          params.page,
-          params.limit
-        );
+        const { list, meta } = normalizeListPayload(action.payload, params.page, params.limit);
         pointVenteAdapter.setAll(state, list ?? []);
         state.meta = meta;
       })
