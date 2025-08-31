@@ -15,11 +15,14 @@ import { Menu } from 'primereact/menu';
 import { Toast } from 'primereact/toast';
 
 import {
-  deleteUser,
+  deleteUser as deleteUserThunk,
   fetchUsers,
   fetchUsersByPointVenteId,
   fetchUsersByRegionId,
-  updateUser,
+  updateUser as updateUserThunk,
+  selectAllUsers,
+  selectUserMeta,
+  selectUserStatus,
 } from '@/stores/slices/users/userSlice';
 
 import { registerUser } from '@/stores/slices/auth/authSlice';
@@ -46,15 +49,7 @@ const breadcrumbItems = [{ label: 'Accueil', url: '/' }, { label: 'Gestion des u
 const home = { icon: 'pi pi-home', url: '/' };
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
-const normalize = (s: unknown) =>
-  (typeof s === 'string' ? s : '')
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .trim();
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
-
-type MenuMap = Record<string, import('primereact/menu').Menu | null>;
 
 const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
   <span className="inline-block align-middle ml-1">
@@ -67,29 +62,36 @@ const Page: React.FC = () => {
   const toast = useRef<import('primereact/toast').Toast | null>(null);
 
   /* store data */
-  const pointsVente = useSelector((s: RootState) => selectAllPointVentes(s));
-  const regions = useSelector((s: RootState) => selectAllRegions(s));
+  const pointsVente = useSelector((s: RootState) => asArray(selectAllPointVentes(s)));
+  const regions = useSelector((s: RootState) => asArray(selectAllRegions(s)));
+  const users = useSelector((s: RootState) => asArray<User>(selectAllUsers(s)));
+  const meta = useSelector(selectUserMeta);
+  const status = useSelector(selectUserStatus);
+  const loading = status === 'loading';
 
   /* user local (rôle / scope) */
   const user =
     typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
+  const isAdminRegion = user?.role === 'AdminRegion' && user?.region?._id;
+  const isAdminPV = user?.role === 'AdminPointVente' && user?.pointVente?._id;
+  const forcedRegionId: string | null = isAdminRegion ? user?.region?._id : null;
+  const forcedPVId: string | null = isAdminPV ? user?.pointVente?._id : null;
 
   /* ui state */
-  const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // pagination + tri (client, 1-based)
+  // params serveur (1-based)
   const [rows, setRows] = useState(10);
   const [page, setPage] = useState(1);
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [sortBy, setSortBy] = useState<
     'nom' | 'prenom' | 'email' | 'telephone' | 'region' | 'pointVente' | 'role' | 'createdAt'
   >('createdAt');
+  const [pvFilterId, setPvFilterId] = useState<string>(forcedPVId ?? '');
 
-  const [loading, setLoading] = useState(false);
   const [loadingCreateOrUpdate, setLoadingCreateOrUpdate] = useState(false);
 
   /* création / édition */
@@ -109,52 +111,125 @@ const Page: React.FC = () => {
   const [errors, setErrors] = useState<Partial<Record<keyof UserModel, string>>>({});
   const [previewUrl, setPreviewUrl] = useState<string>('');
 
-  /* Menus par ligne */
-  const menuRefs = useRef<MenuMap>({});
-  const setMenuRef = useCallback((id: string, el: import('primereact/menu').Menu | null) => {
-    if (!id) return;
-    menuRefs.current[id] = el;
+  /* --------- Menu contextuel global (corrige le bug de sélection) --------- */
+  const menuRef = useRef<Menu>(null);
+  const selectedRowDataRef = useRef<User | null>(null);
+  const handleAction = useCallback((action: 'details' | 'edit' | 'delete', row: User) => {
+    setSelectedUser(row ?? null);
+    if (action === 'delete') {
+      setDeleteDialogOpen(true);
+      setDialogType(null);
+    } else {
+      setDialogType(action);
+    }
   }, []);
-  const showMenu = useCallback((e: React.MouseEvent, id: string, row: User) => {
-    setSelectedUser(row);
-    menuRefs.current[id]?.toggle(e);
-  }, []);
+  const menuModel = useMemo(
+    () => [
+      {
+        label: 'Détails',
+        command: () =>
+          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
+      },
+      {
+        label: 'Modifier',
+        command: () =>
+          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
+      },
+      {
+        label: 'Supprimer',
+        command: () =>
+          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
+      },
+    ],
+    [handleAction]
+  );
 
   /* ------------------------------ chargement data ------------------------------ */
   useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        setLoading(true);
-        await Promise.all([dispatch(fetchPointVentes()), dispatch(fetchRegions())]);
+    dispatch(fetchPointVentes());
+    dispatch(fetchRegions());
+  }, [dispatch]);
 
-        let resp: any = null;
-        if (user?.role === 'SuperAdmin') {
-          resp = await dispatch(fetchUsers()).unwrap();
-        } else if (user?.role === 'AdminRegion') {
-          resp = await dispatch(fetchUsersByRegionId(user?.region?._id)).unwrap();
-        } else {
-          resp = await dispatch(fetchUsersByPointVenteId(user?.pointVente?._id)).unwrap();
-        }
-        if (!active) return;
-        setUsers(asArray<User>(resp));
-      } catch {
-        if (!active) return;
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Erreur',
-          detail: 'Échec du chargement des utilisateurs.',
-          life: 3000,
-        });
-      } finally {
-        if (!active) return;
-        setLoading(false);
+  // Si AdminPV, impose le filtre PV
+  useEffect(() => {
+    if (forcedPVId) setPvFilterId(forcedPVId);
+  }, [forcedPVId]);
+
+  // mapping champ tri -> backend
+  const mapSortByToServer = (f: typeof sortBy) => {
+    if (f === 'region') return 'region.nom';
+    if (f === 'pointVente') return 'pointVente.nom';
+    return f;
+  };
+
+  const fetchAtPage = useCallback(
+    (targetPage: number) => {
+      const common = {
+        page: targetPage,
+        limit: rows,
+        q: search || undefined,
+        sortBy: mapSortByToServer(sortBy),
+        order,
+        includeTotal: true,
+      } as const;
+
+      if (user?.role === 'SuperAdmin') {
+        // filtre PV optionnel
+        dispatch(
+          fetchUsers({
+            ...common,
+            pointVente: pvFilterId || undefined,
+          }) as any
+        );
+      } else if (isAdminRegion && forcedRegionId) {
+        // on peut aussi filtrer par PV en plus
+        dispatch(
+          fetchUsersByRegionId({
+            regionId: forcedRegionId,
+            ...common,
+            // @ts-ignore - l’endpoint côté controller accepte d’autres query
+            pointVente: pvFilterId || undefined,
+          }) as any
+        );
+      } else if (isAdminPV && forcedPVId) {
+        dispatch(
+          fetchUsersByPointVenteId({
+            pointVenteId: forcedPVId,
+            ...common,
+          }) as any
+        );
+      } else {
+        // fallback: scope PV si pvFilterId choisi
+        dispatch(
+          fetchUsers({
+            ...common,
+            pointVente: pvFilterId || undefined,
+          }) as any
+        );
       }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
+    },
+    [
+      dispatch,
+      rows,
+      search,
+      sortBy,
+      order,
+      user?.role,
+      isAdminRegion,
+      isAdminPV,
+      forcedRegionId,
+      forcedPVId,
+      pvFilterId,
+    ]
+  );
+
+  const fetchServer = useCallback(() => {
+    fetchAtPage(page);
+  }, [fetchAtPage, page]);
+
+  useEffect(() => {
+    fetchServer();
+  }, [fetchServer]);
 
   /* preview image */
   useEffect(() => {
@@ -180,7 +255,7 @@ const Page: React.FC = () => {
         email: selectedUser.email ?? '',
         telephone: selectedUser.telephone ?? '',
         adresse: selectedUser.adresse ?? '',
-        password: '', // jamais pré-remplir
+        password: '',
         role: selectedUser.role ?? '',
         region:
           typeof selectedUser.region === 'object' && selectedUser.region
@@ -195,92 +270,47 @@ const Page: React.FC = () => {
     }
   }, [dialogType, selectedUser]);
 
-  /* ------------------------------ recherche / filtre ------------------------------ */
-  const [pvFilter, setPvFilter] = useState<PointVente | null>(null);
+  /* ------------------------------ filtre PV ------------------------------ */
+  const handlePointVenteSelect = (pointVente: PointVente | null) => {
+    const id = pointVente?._id ?? '';
+    setPvFilterId(id);
+  };
 
-  const filteredUsers = useMemo(() => {
-    const q = normalize(search);
-
-    const base = users.filter((u) => {
-      const fields = [
-        normalize(u.nom),
-        normalize(u.prenom),
-        normalize(u.email),
-        normalize(u.telephone),
-        normalize(
-          typeof u?.region === 'object' && u?.region ? u.region.nom : (u?.region as string)
-        ),
-        normalize(
-          typeof u?.pointVente === 'object' && u?.pointVente
-            ? u.pointVente.nom
-            : (u?.pointVente as string)
-        ),
-        normalize(u.role),
-      ];
-      return !q || fields.some((f) => f.includes(q));
-    });
-
-    if (!pvFilter) return base;
-    return base.filter(
-      (u) =>
-        typeof u?.pointVente === 'object' &&
-        u?.pointVente &&
-        '_id' in u.pointVente &&
-        u.pointVente._id === pvFilter._id
-    );
-  }, [search, users, pvFilter]);
-
-  /* ------------------------------ tri + pagination (client) ------------------------------ */
+  /* ------------------------------ tri (serveur) ------------------------------ */
   const toggleSort = (field: typeof sortBy) => {
     if (sortBy !== field) {
       setSortBy(field);
       setOrder('asc');
       setPage(1);
+      fetchAtPage(1);
     } else {
-      setOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+      const next = order === 'asc' ? 'desc' : 'asc';
+      setOrder(next);
       setPage(1);
+      fetchAtPage(1);
     }
   };
 
-  const sortedUsers = useMemo(() => {
-    const arr = [...filteredUsers];
-    const dir = order === 'asc' ? 1 : -1;
-    arr.sort((a, b) => {
-      const rn = (a: any) => (a ?? '').toString();
-      if (sortBy === 'nom') return rn(a.nom).localeCompare(rn(b.nom)) * dir;
-      if (sortBy === 'prenom') return rn(a.prenom).localeCompare(rn(b.prenom)) * dir;
-      if (sortBy === 'email') return rn(a.email).localeCompare(rn(b.email)) * dir;
-      if (sortBy === 'telephone') return rn(a.telephone).localeCompare(rn(b.telephone)) * dir;
-      if (sortBy === 'role') return rn(a.role).localeCompare(rn(b.role)) * dir;
-      if (sortBy === 'region')
-        return (
-          rn((a as any)?.region?.nom ?? '').localeCompare(rn((b as any)?.region?.nom ?? '')) * dir
-        );
-      if (sortBy === 'pointVente')
-        return (
-          rn((a as any)?.pointVente?.nom ?? '').localeCompare(
-            rn((b as any)?.pointVente?.nom ?? '')
-          ) * dir
-        );
-      // createdAt par défaut
-      const ta = a?.createdAt ? new Date(a.createdAt as any).getTime() : 0;
-      const tb = b?.createdAt ? new Date(b.createdAt as any).getTime() : 0;
-      return (ta - tb) * dir;
-    });
-    return arr;
-  }, [filteredUsers, sortBy, order]);
-
-  const total = sortedUsers.length;
+  /* ------------------------------ pagination (serveur) ------------------------------ */
+  const total = meta?.total ?? users.length;
   const totalPages = Math.max(1, Math.ceil(total / rows));
   const firstIndex = (page - 1) * rows;
-  const paged = useMemo(
-    () => sortedUsers.slice(firstIndex, firstIndex + rows),
-    [sortedUsers, firstIndex, rows]
-  );
 
   const goTo = (p: number) => {
     const next = Math.min(Math.max(1, p), totalPages);
-    if (next !== page) setPage(next);
+    if (next !== page) {
+      setPage(next);
+      fetchAtPage(next);
+    }
+  };
+
+  const onChangeRows = (n: number) => {
+    const newRows = Number(n);
+    setRows(newRows);
+    const newTotalPages = Math.max(1, Math.ceil(total / newRows));
+    const fixedPage = Math.min(page, newTotalPages);
+    setPage(fixedPage);
+    fetchAtPage(fixedPage);
   };
 
   /* ------------------------------- import/export ------------------------------ */
@@ -319,7 +349,7 @@ const Page: React.FC = () => {
           const r = await dispatch(
             exportFile({
               url: '/export/users',
-              mouvements: sortedUsers, // exporte la vue triée/filtrée
+              mouvements: users, // exporte la page affichée
               fileType,
             }) as any
           );
@@ -345,7 +375,7 @@ const Page: React.FC = () => {
         }
       }
     },
-    [dispatch, sortedUsers]
+    [dispatch, users]
   );
 
   /* ------------------------------- rendu image ------------------------------- */
@@ -375,45 +405,28 @@ const Page: React.FC = () => {
     );
   };
 
-  /* ------------------------------ actions menu ------------------------------ */
-  const handleAction = (action: 'details' | 'edit' | 'delete', row: User) => {
-    setSelectedUser(row);
-    if (action === 'delete') {
-      setDeleteDialogOpen(true);
-      return;
-    }
-    setDialogType(action);
-  };
-
   /* ---------------------------------- CRUD ---------------------------------- */
-  const refetchUsers = useCallback(async () => {
-    try {
-      let resp: any = null;
-      if (user?.role === 'SuperAdmin') {
-        resp = await dispatch(fetchUsers()).unwrap();
-      } else if (user?.role === 'AdminRegion') {
-        resp = await dispatch(fetchUsersByRegionId(user?.region?._id)).unwrap();
-      } else {
-        resp = await dispatch(fetchUsersByPointVenteId(user?.pointVente?._id)).unwrap();
-      }
-      setUsers(asArray<User>(resp));
-    } catch {
-      /* noop */
-    }
-  }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
+  const refetchCurrent = useCallback(() => {
+    fetchAtPage(page);
+  }, [fetchAtPage, page]);
 
   const handleDeleteUser = useCallback(async () => {
     if (!selectedUser?._id) return;
     try {
-      setLoading(true);
-      await dispatch(deleteUser(selectedUser._id)).unwrap();
+      await dispatch(deleteUserThunk(selectedUser._id) as any);
       toast.current?.show({
         severity: 'success',
         summary: 'Supprimé',
         detail: 'Utilisateur supprimé.',
         life: 2000,
       });
-      await refetchUsers();
+      // reculer si la page devient vide
+      const totalBefore = meta?.total ?? users.length;
+      const countAfter = Math.max(0, totalBefore - 1);
+      const lastPage = Math.max(1, Math.ceil(countAfter / rows));
+      const nextPage = Math.min(page, lastPage);
+      setPage(nextPage);
+      fetchAtPage(nextPage);
     } catch {
       toast.current?.show({
         severity: 'error',
@@ -421,10 +434,8 @@ const Page: React.FC = () => {
         detail: 'Échec de la suppression.',
         life: 3000,
       });
-    } finally {
-      setLoading(false);
     }
-  }, [dispatch, selectedUser?._id, refetchUsers]);
+  }, [dispatch, selectedUser?._id, meta?.total, users.length, rows, page, fetchAtPage]);
 
   const validateUserPayload = (payload: UserModel, isEdit: boolean) => {
     const errs: Partial<Record<keyof UserModel, string>> = {};
@@ -452,7 +463,7 @@ const Page: React.FC = () => {
     try {
       setLoadingCreateOrUpdate(true);
 
-      // UTILISE FORMDATA POUR LES DEUX CAS (création ET édition)
+      // Toujours FormData (image possible)
       const fd = new FormData();
 
       if (isEditMode && newUser._id) {
@@ -465,7 +476,6 @@ const Page: React.FC = () => {
       fd.append('email', newUser.email);
       fd.append('adresse', newUser.adresse ?? '');
 
-      // Pour l'édition, pas besoin de password s'il est vide
       if (!isEditMode || newUser.password) {
         fd.append('password', newUser.password);
       }
@@ -486,18 +496,12 @@ const Page: React.FC = () => {
         if (pvValue) fd.append('pointVente', String(pvValue));
       }
 
-      // GESTION DE L'IMAGE - IMPORTANT
       if (newUser.image instanceof File) {
         fd.append('image', newUser.image);
-      } else if (isEditMode && typeof newUser.image === 'string') {
-        // Pour l'édition, si c'est une string (chemin existant), on ne l'envoie pas
-        // Le serveur gardera l'image existante
       }
 
       if (isEditMode) {
-        // POUR L'ÉDITION AUSSI
-        //@ts-ignore
-        await dispatch(updateUser(fd)).unwrap();
+        await dispatch(updateUserThunk(fd) as any);
         toast.current?.show({
           severity: 'success',
           summary: 'Modifié',
@@ -505,7 +509,7 @@ const Page: React.FC = () => {
           life: 2000,
         });
       } else {
-        await dispatch(registerUser(fd)).unwrap();
+        await dispatch(registerUser(fd) as any);
         toast.current?.show({
           severity: 'success',
           summary: 'Créé',
@@ -516,7 +520,7 @@ const Page: React.FC = () => {
       }
 
       setDialogType(null);
-      await refetchUsers();
+      refetchCurrent();
     } catch (err: any) {
       toast.current?.show({
         severity: 'error',
@@ -527,15 +531,14 @@ const Page: React.FC = () => {
     } finally {
       setLoadingCreateOrUpdate(false);
     }
-  }, [dispatch, newUser, refetchUsers]);
-
-  /* ------------------------------- handlers UI ------------------------------- */
-  const handlePointVenteSelect = (pointVente: PointVente | null) => setPvFilter(pointVente);
+  }, [dispatch, newUser, refetchCurrent]);
 
   /* ---------------------------------- UI ---------------------------------- */
   return (
     <div className="min-h-screen">
       <Toast ref={toast} />
+      {/* Menu global */}
+      <Menu model={menuModel} popup ref={menuRef} />
 
       <div className="flex items-center justify-between mt-5 mb-5">
         <BreadCrumb model={breadcrumbItems} home={home} className="bg-none" />
@@ -549,15 +552,32 @@ const Page: React.FC = () => {
               className="p-2 pl-10 border rounded w-full md:w-1/3"
               placeholder="Rechercher..."
               value={search}
-              onChange={(e) => {
-                setPage(1);
-                setSearch(e.target.value ?? '');
-              }}
+              onChange={(e) => setSearch(e.target.value ?? '')}
+              onKeyDown={(e) =>
+                e.key === 'Enter' &&
+                (() => {
+                  setPage(1);
+                  fetchAtPage(1);
+                })()
+              }
             />
-            <DropdownPointVenteFilter
-              onSelect={(pv) => {
+            {/* Filtre PV masqué si AdminPV (car imposé) */}
+            {!isAdminPV && (
+              <DropdownPointVenteFilter
+                onSelect={(pv) => {
+                  setPage(1);
+                  handlePointVenteSelect(pv);
+                  fetchAtPage(1);
+                }}
+              />
+            )}
+            <Button
+              label="Filtrer"
+              icon="pi pi-search"
+              className="!bg-green-700 text-white"
+              onClick={() => {
                 setPage(1);
-                handlePointVenteSelect(pv);
+                fetchAtPage(1);
               }}
             />
           </div>
@@ -578,7 +598,7 @@ const Page: React.FC = () => {
           </div>
         </div>
 
-        {/* ----------- TABLE TAILWIND (style DataTable) ----------- */}
+        {/* ----------- TABLE TAILWIND ----------- */}
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="min-w-[70rem] w-full text-sm">
             <thead>
@@ -653,14 +673,14 @@ const Page: React.FC = () => {
                     Chargement...
                   </td>
                 </tr>
-              ) : paged.length === 0 ? (
+              ) : users.length === 0 ? (
                 <tr>
                   <td className="px-4 py-6 text-center text-gray-500" colSpan={11}>
                     Aucun utilisateur trouvé.
                   </td>
                 </tr>
               ) : (
-                paged.map((row, idx) => {
+                users.map((row, idx) => {
                   const idxGlobal = firstIndex + idx + 1;
                   const regionNom =
                     typeof row?.region === 'object' && row?.region
@@ -690,36 +710,15 @@ const Page: React.FC = () => {
                       <td className="px-4 py-2">{row?.role ?? '—'}</td>
                       <td className="px-4 py-2">{created}</td>
                       <td className="px-4 py-2">
-                        <>
-                          <Button
-                            icon="pi pi-bars"
-                            className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-                            onClick={(e) => showMenu(e, row?._id ?? '', row)}
-                            disabled={!isNonEmptyString(row?._id)}
-                            aria-haspopup
-                          />
-                          <Menu
-                            popup
-                            ref={(el) => setMenuRef(row?._id ?? '', el)}
-                            model={[
-                              {
-                                label: 'Détails',
-                                icon: 'pi pi-eye',
-                                command: () => handleAction('details', row),
-                              },
-                              {
-                                label: 'Modifier',
-                                icon: 'pi pi-pencil',
-                                command: () => handleAction('edit', row),
-                              },
-                              {
-                                label: 'Supprimer',
-                                icon: 'pi pi-trash',
-                                command: () => handleAction('delete', row),
-                              },
-                            ]}
-                          />
-                        </>
+                        <Button
+                          icon="pi pi-bars"
+                          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                          onClick={(event) => {
+                            selectedRowDataRef.current = row ?? null;
+                            menuRef.current?.toggle(event);
+                          }}
+                          aria-haspopup
+                        />
                       </td>
                     </tr>
                   );
@@ -741,12 +740,7 @@ const Page: React.FC = () => {
             <select
               className="border rounded px-2 py-1 text-sm"
               value={rows}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                setRows(n);
-                const newTotalPages = Math.max(1, Math.ceil(total / n));
-                setPage((p) => Math.min(p, newTotalPages));
-              }}
+              onChange={(e) => onChangeRows(Number(e.target.value))}
             >
               {[10, 20, 30, 50, 100].map((n) => (
                 <option key={n} value={n}>
@@ -799,7 +793,8 @@ const Page: React.FC = () => {
         UserRoleModel={['Admin', 'Manager', 'Vendeur']}
         // @ts-expect-error - compat: external lib types mismatch
         regions={regions}
-        pointsVente={pointsVente}
+        // @ts-expect-error - compat: external lib types mismatch
+        pointsVente={pointsVente ?? null}
         previewUrl={previewUrl}
         handleCreateOrUpdate={handleCreateOrUpdate}
         loadingCreateOrUpdate={loadingCreateOrUpdate}
@@ -810,8 +805,8 @@ const Page: React.FC = () => {
         visible={deleteDialogOpen}
         onHide={() => setDeleteDialogOpen(false)}
         onConfirm={() => {
-          handleDeleteUser();
           setDeleteDialogOpen(false);
+          handleDeleteUser();
         }}
         item={selectedUser ?? { _id: '', nom: '' }}
         objectLabel="l'utilisateur"

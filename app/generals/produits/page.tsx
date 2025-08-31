@@ -14,8 +14,10 @@ import {
   addProduit,
   deleteProduit as deleteProduitThunk,
   fetchProduits,
+  searchProduits, // 👈 import
   selectAllProduits,
   selectProduitMeta,
+  selectProduitSearchMeta, // 👈 import
   selectProduitStatus,
   updateProduit as updateProduitThunk,
 } from '@/stores/slices/produits/produitsSlice';
@@ -124,7 +126,7 @@ const Page: React.FC = () => {
   const toast = useRef<Toast>(null);
   const [loading1, setLoading1] = useState(false);
 
-  // Menu actions (un seul menu global)
+  // Menu actions
   const menuRef = useRef<Menu>(null);
   const selectedRowDataRef = useRef<Produit | null>(null);
   const menuModel = useMemo(
@@ -145,13 +147,13 @@ const Page: React.FC = () => {
           selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
   // Store
   const produits = useSelector((state: RootState) => asArray<Produit>(selectAllProduits(state)));
-  const meta = useSelector(selectProduitMeta); // attend { total, page, limit, ... }
+  const meta = useSelector(selectProduitMeta);
+  const searchMeta = useSelector(selectProduitSearchMeta); // 👈 meta de la recherche
   const status = useSelector(selectProduitStatus);
   const categories = useSelector((state: RootState) =>
     asArray<Categorie>(selectAllCategories(state))
@@ -161,10 +163,14 @@ const Page: React.FC = () => {
   // États serveur : page/rows/tri/filtres
   const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
-  const [sortBy, setSortBy] = useState<string>('updatedAt'); // 👈 tri par updatedAt demandé
+  const [sortBy, setSortBy] = useState<string>('updatedAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [searchText, setSearchText] = useState('');
   const [categorieFilter, setCategorieFilter] = useState<Categorie | null>(null);
+
+  // Meta effective selon mode recherche ou non
+  const inSearch = isNonEmptyString(searchText);
+  const effectiveMeta = inSearch ? searchMeta : meta;
 
   // Modals
   const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
@@ -178,20 +184,30 @@ const Page: React.FC = () => {
     dispatch(fetchCategories());
   }, [dispatch]);
 
+  // ---- FETCH unique (liste ou recherche) ----
   const fetchServer = useCallback(() => {
-    dispatch(
-      fetchProduits({
-        page,
-        limit: rows,
-        q: searchText || undefined,
-        categorie: categorieFilter?._id || undefined,
-        sortBy,
-        order,
-        includeTotal: true,
-      })
-    );
-  }, [dispatch, page, rows, searchText, categorieFilter, sortBy, order]);
+    const base = {
+      page,
+      limit: rows,
+      categorie: categorieFilter?._id || undefined,
+      sortBy,
+      order,
+      includeTotal: true,
+    } as const;
 
+    if (inSearch) {
+      dispatch(
+        searchProduits({
+          ...base,
+          q: searchText,
+        })
+      );
+    } else {
+      dispatch(fetchProduits(base));
+    }
+  }, [dispatch, page, rows, categorieFilter, sortBy, order, inSearch, searchText]);
+
+  // Refetch quand page/rows/sort/order changent
   useEffect(() => {
     fetchServer();
   }, [fetchServer]);
@@ -261,11 +277,10 @@ const Page: React.FC = () => {
       let r;
       if (selectedProduit?._id) {
         r = await dispatch(updateProduitThunk({ _id: selectedProduit._id, ...form }));
-        setLoading1(false);
       } else {
         r = await dispatch(addProduit(form));
-        setLoading1(false);
       }
+      setLoading1(false);
       if (addProduit.fulfilled.match(r) || updateProduitThunk.fulfilled.match(r)) {
         fetchServer();
         toast.current?.show({
@@ -284,6 +299,7 @@ const Page: React.FC = () => {
         });
       }
     } catch {
+      setLoading1(false);
       toast.current?.show({
         severity: 'error',
         summary: 'Erreur',
@@ -309,22 +325,12 @@ const Page: React.FC = () => {
           detail: 'Produit supprimé',
           life: 3000,
         });
-        const total = meta?.total ?? 0;
+        const total = effectiveMeta?.total ?? 0; // 👈 meta effective
         const countAfter = total - 1;
         const lastPage = Math.max(1, Math.ceil(countAfter / rows));
         const nextPage = Math.min(page, lastPage);
         setPage(nextPage);
-        dispatch(
-          fetchProduits({
-            page: nextPage,
-            limit: rows,
-            q: searchText || undefined,
-            categorie: categorieFilter?._id || undefined,
-            sortBy,
-            order,
-            includeTotal: true,
-          })
-        );
+        // l'effet fetchServer() repartira avec la bonne page
       } else {
         toast.current?.show({
           severity: 'error',
@@ -337,17 +343,7 @@ const Page: React.FC = () => {
       setIsDeleteProduit(false);
       setSelectedProduit(null);
     }
-  }, [
-    dispatch,
-    selectedProduit,
-    meta?.total,
-    rows,
-    page,
-    searchText,
-    categorieFilter,
-    sortBy,
-    order,
-  ]);
+  }, [dispatch, selectedProduit, effectiveMeta?.total, rows, page]);
 
   // Export
   const handleFileManagement = useCallback(
@@ -375,7 +371,7 @@ const Page: React.FC = () => {
           const r = await dispatch(
             exportFile({
               url: '/export/produits',
-              mouvements: produits, // exporter ce qui est affiché (ou refais une route d’export serveur)
+              mouvements: produits,
               fileType: exportFileType,
             })
           );
@@ -446,8 +442,11 @@ const Page: React.FC = () => {
   };
 
   /* --------------------------- Pagination custom -------------------------- */
-  const total = meta?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const total = effectiveMeta?.total ?? 0; // 👈 meta effective
+  const totalPages = effectiveMeta?.totalPages ?? Math.max(1, Math.ceil(total / rows));
+  const currentPage = effectiveMeta?.page ?? page;
+  const canPrev = Boolean(effectiveMeta?.hasPrev ?? currentPage > 1);
+  const canNext = Boolean(effectiveMeta?.hasNext ?? currentPage < totalPages);
   const firstIndex = (page - 1) * rows;
 
   const goTo = (p: number) => {
@@ -456,42 +455,15 @@ const Page: React.FC = () => {
   };
   const onChangeRows = (n: number) => {
     setRows(n);
-    // recalcule la page pour rester aligné avec l’offset
     const newTotalPages = Math.max(1, Math.ceil(total / n));
     const fixedPage = Math.min(page, newTotalPages);
     setPage(fixedPage);
   };
 
-  // refetch quand page/rows/sort changent via contrôles
-  useEffect(() => {
-    dispatch(
-      fetchProduits({
-        page,
-        limit: rows,
-        q: searchText || undefined,
-        categorie: categorieFilter?._id || undefined,
-        sortBy,
-        order,
-        includeTotal: true,
-      })
-    );
-    //@ts-ignore
-  }, [dispatch, page, rows, sortBy, order]); // filtres text/cat -> via bouton Filtrer
-
+  // Appliquer filtres (remet à 1 et laisse l'effet refetch)
   const applyFilters = useCallback(() => {
     setPage(1);
-    dispatch(
-      fetchProduits({
-        page: 1,
-        limit: rows,
-        q: searchText || undefined,
-        categorie: categorieFilter?._id || undefined,
-        sortBy,
-        order,
-        includeTotal: true,
-      })
-    );
-  }, [dispatch, rows, searchText, categorieFilter, sortBy, order]);
+  }, []);
 
   /* ---------------------------------- UI ----------------------------------- */
   return (
@@ -540,7 +512,7 @@ const Page: React.FC = () => {
             />
           </div>
 
-          {/* ---------- TABLE TAILWIND (remplace DataTable) ----------- */}
+          {/* ---------- TABLE TAILWIND ----------- */}
           <div className="overflow-x-auto rounded-lg border border-gray-200">
             <table className="min-w-[70rem] w-full text-sm">
               <thead>
@@ -633,7 +605,7 @@ const Page: React.FC = () => {
                       key={r._id}
                       className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
                     >
-                      <td className="px-4 py-2">{firstIndex + idx + 1}</td>
+                      <td className="px-4 py-2">{(currentPage - 1) * rows + idx + 1}</td>
 
                       <td className="px-4 py-2">{renderCategoryImage(r)}</td>
 
@@ -682,7 +654,7 @@ const Page: React.FC = () => {
           {/* ---------- PAGINATION TAILWIND ----------- */}
           <div className="flex items-center justify-between mt-3">
             <div className="text-sm text-gray-700">
-              Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+              Page <span className="font-semibold">{currentPage}</span> / {totalPages} —{' '}
               <span className="font-semibold">{total}</span> éléments
             </div>
 
@@ -704,25 +676,25 @@ const Page: React.FC = () => {
                 label="«"
                 className="!bg-gray-200 !text-gray-800 px-2 py-1"
                 onClick={() => goTo(1)}
-                disabled={page <= 1}
+                disabled={!canPrev}
               />
               <Button
                 label="‹"
                 className="!bg-gray-200 !text-gray-800 px-2 py-1"
-                onClick={() => goTo(page - 1)}
-                disabled={page <= 1}
+                onClick={() => goTo(currentPage - 1)}
+                disabled={!canPrev}
               />
               <Button
                 label="›"
                 className="!bg-gray-200 !text-gray-800 px-2 py-1"
-                onClick={() => goTo(page + 1)}
-                disabled={page >= totalPages}
+                onClick={() => goTo(currentPage + 1)}
+                disabled={!canNext}
               />
               <Button
                 label="»"
                 className="!bg-gray-200 !text-gray-800 px-2 py-1"
                 onClick={() => goTo(totalPages)}
-                disabled={page >= totalPages}
+                disabled={!canNext}
               />
             </div>
           </div>
@@ -852,20 +824,10 @@ const Page: React.FC = () => {
 
           <div className="flex justify-end gap-2">
             <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
+
             <Button
-              //@ts-ignore
-              label={
-                loading1 ? (
-                  <div className="flex items-center gap-2">
-                    <i className="pi pi-spinner pi-spin"></i>
-                    {dialogType === 'edit' ? 'Modifier' : 'Créer'}
-                  </div>
-                ) : dialogType === 'edit' ? (
-                  'Modifier'
-                ) : (
-                  'Créer'
-                )
-              }
+              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              icon={loading1 ? 'pi pi-spinner pi-spin' : undefined}
               disabled={loading1}
               className="!bg-green-700 text-white"
               onClick={handleSubmitProduit}

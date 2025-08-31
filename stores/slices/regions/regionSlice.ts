@@ -31,13 +31,13 @@ export interface FetchParams {
   limit?: number;
   q?: string;
   ville?: string;
-  sortBy?: string; // ex: 'createdAt' | 'nom' | 'ville' | 'pointVenteCount'
-  order?: Order; // 'asc' | 'desc'
-  includeTotal?: boolean; // par défaut true
+  sortBy?: string;
+  order?: Order;
+  includeTotal?: boolean;
 }
 
 interface RegionListResponse {
-  data: Region[]; // le contrôleur renvoie { nom, ville, pointVenteCount?, _id }
+  data: Region[]; // <— le contrôleur renvoie { data, meta }
   meta?: PaginationMeta;
 }
 
@@ -57,7 +57,7 @@ const regionAdapter: EntityAdapter<RegionWithCount, string> = createEntityAdapte
 >({
   // @ts-expect-error - compat: external lib types mismatch
   selectId: (region) => region._id,
-  sortComparer: false, // tri géré côté serveur
+  sortComparer: false,
 });
 
 const initialState = regionAdapter.getInitialState<RegionStateExtra>({
@@ -86,7 +86,6 @@ const toQueryString = (params: Record<string, any>) => {
 
 /** ---------------- Thunks ---------------- */
 
-// Liste paginée / triée / filtrée
 export const fetchRegions = createAsyncThunk<
   RegionListResponse,
   FetchParams | undefined,
@@ -124,7 +123,6 @@ export const fetchRegions = createAsyncThunk<
   }
 });
 
-// Recherche paginée (mêmes params)
 export const searchRegions = createAsyncThunk<
   RegionListResponse,
   FetchParams & { q: string },
@@ -162,7 +160,6 @@ export const searchRegions = createAsyncThunk<
   }
 });
 
-// Création
 export const addRegion = createAsyncThunk<
   RegionWithCount,
   Omit<Region, '_id'>,
@@ -179,7 +176,6 @@ export const addRegion = createAsyncThunk<
   }
 });
 
-// Mise à jour
 export const updateRegion = createAsyncThunk<
   RegionWithCount,
   Region & { pointVenteCount?: number },
@@ -196,7 +192,6 @@ export const updateRegion = createAsyncThunk<
   }
 });
 
-// Suppression
 export const deleteRegion = createAsyncThunk<string, string, { rejectValue: string }>(
   'regions/deleteRegion',
   async (regionId, { rejectWithValue }) => {
@@ -230,10 +225,16 @@ const regionSlice = createSlice({
       })
       .addCase(fetchRegions.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        // const { data, meta } = action.payload;
-        //@ts-ignore
-        regionAdapter.setAll(state, action.payload);
-        // state.meta = meta ?? null;
+        const data = action.payload?.data ?? [];
+        const meta = action.payload?.meta ?? null;
+
+        regionAdapter.setAll(state, data as RegionWithCount[]);
+        state.meta = meta;
+
+        // mémorise la dernière query sans page/limit
+        const params = action.meta.arg ?? {};
+        const { page, limit, ...rest } = params;
+        state.lastQuery = rest ?? null;
       })
       .addCase(fetchRegions.rejected, (state, action) => {
         state.status = 'failed';
@@ -247,10 +248,16 @@ const regionSlice = createSlice({
       })
       .addCase(searchRegions.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        // const { data, meta } = action.payload;
-        //@ts-ignore
-        regionAdapter.setAll(state, action.payload);
-        // state.meta = meta ?? null;
+        const data = action.payload?.data ?? [];
+        const meta = action.payload?.meta ?? null;
+
+        // on remplace la liste affichée par les résultats de recherche (même stratégie que produits)
+        regionAdapter.setAll(state, data as RegionWithCount[]);
+        state.meta = meta;
+
+        const params = action.meta.arg ?? {};
+        const { page, limit, ...rest } = params;
+        state.lastQuery = rest ?? null;
       })
       .addCase(searchRegions.rejected, (state, action) => {
         state.status = 'failed';

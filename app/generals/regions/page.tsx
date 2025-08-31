@@ -602,19 +602,8 @@ export default function RegionManagement() {
           <div className="flex justify-end gap-2">
             <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
             <Button
-              //@ts-ignore
-              label={
-                loading ? (
-                  <div className="flex items-center gap-2">
-                    <i className="pi pi-spinner pi-spin"></i>
-                    {dialogType === 'edit' ? 'Modifier' : 'Créer'}
-                  </div>
-                ) : dialogType === 'edit' ? (
-                  'Modifier'
-                ) : (
-                  'Créer'
-                )
-              }
+              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              icon={loading1 ? 'pi pi-spinner pi-spin' : undefined}
               disabled={loading1}
               className="!bg-green-700 text-white"
               onClick={dialogType === 'edit' ? handleUpdate : handleCreate}
