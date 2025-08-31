@@ -39,6 +39,17 @@ import { CommandeNotification } from '../CommandeNotification';
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 
+/** Décode tous les formats possibles renvoyés par l’API pour la recherche produits */
+const extractProduitList = (payload: any): Produit[] => {
+  if (Array.isArray(payload)) return payload as Produit[];
+  if (payload && typeof payload === 'object') {
+    if (Array.isArray(payload.data)) return payload.data as Produit[];
+    if (Array.isArray(payload.docs)) return payload.docs as Produit[];
+    if (Array.isArray(payload.items)) return payload.items as Produit[];
+  }
+  return [];
+};
+
 /* ============================== Component ============================== */
 const CommandeForm = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -123,9 +134,9 @@ const CommandeForm = () => {
           }) as any
         );
 
-        // si fulfilled, on prend action.payload.data
         if ((searchProduits as any).fulfilled.match(action)) {
-          const list = asArray<Produit>(action.payload);
+          // action.payload peut être [], {data}, {docs}, {items}
+          const list = extractProduitList(action.payload);
           setSuggestions(list);
         } else {
           setSuggestions([]);
@@ -185,6 +196,7 @@ const CommandeForm = () => {
     setSelectedProduit(null);
     setSearchTerm('');
     setQuantite(1);
+    setSuggestions([]); // ferme le panel
   }, [selectedProduit, quantite, commandeProduits]);
 
   const handleRemoveProduit = useCallback((produitId: string) => {
@@ -202,79 +214,6 @@ const CommandeForm = () => {
     const hasLocation = !!selectedRegion || !!selectedPointVente || false; // depotCentral géré à false ici
     return hasItems && hasLocation && status !== 'loading';
   }, [commandeProduits.length, selectedRegion, selectedPointVente, status]);
-
-  // const handleSubmit = useCallback(async () => {
-  //   if (commandeProduits.length === 0) {
-  //     toast.current?.show({
-  //       severity: 'warn',
-  //       summary: 'Commande vide',
-  //       detail: 'Veuillez ajouter au moins un produit',
-  //       life: 3000,
-  //     });
-  //     return;
-  //   }
-
-  //   if (!selectedRegion && !selectedPointVente) {
-  //     toast.current?.show({
-  //       severity: 'warn',
-  //       summary: 'Localisation requise',
-  //       detail: 'Choisissez une région ou un point de vente.',
-  //       life: 3000,
-  //     });
-  //     return;
-  //   }
-
-  //   setStatus('loading');
-
-  //   const produitsPourAPI = commandeProduits.map((item) => ({
-  //     produit: typeof item.produit === 'object' ? item.produit._id : item.produit,
-  //     quantite: item.quantite,
-  //     // uniteMesure?: si tu l’utilises un jour
-  //   }));
-
-  //   const payload = {
-  //     user: user?._id,
-  //     region: selectedRegion?._id || undefined,
-  //     pointVente: selectedPointVente?._id || undefined,
-  //     depotCentral: false,
-  //     produits: produitsPourAPI,
-  //   };
-
-  //   try {
-  //     // @ts-expect-error - compat: external lib types mismatch
-  //     const resultAction = await dispatch(createCommande(payload));
-  //     if (createCommande.fulfilled.match(resultAction)) {
-  //       toast.current?.show({
-  //         severity: 'success',
-  //         summary: 'Succès',
-  //         detail: 'Commande créée avec succès',
-  //         life: 3000,
-  //       });
-  //       // reset “soft”
-  //       setCommandeProduits([]);
-  //       // garde tes sélections si tu veux, sinon :
-  //       setSelectedRegion(null);
-  //       setSelectedPointVente(null);
-  //     } else {
-  //       toast.current?.show({
-  //         severity: 'error',
-  //         summary: 'Erreur',
-  //         // @ts-expect-error - compat: external lib types mismatch
-  //         detail: resultAction.payload || 'Erreur lors de la création de la commande',
-  //         life: 5000,
-  //       });
-  //     }
-  //   } catch (err) {
-  //     toast.current?.show({
-  //       severity: 'error',
-  //       summary: 'Erreur',
-  //       detail: (err as Error).message || 'Erreur inconnue',
-  //       life: 5000,
-  //     });
-  //   } finally {
-  //     setStatus('idle');
-  //   }
-  // }, [commandeProduits, selectedRegion, selectedPointVente, dispatch, user?._id]);
 
   const totalCommande = useMemo(
     () =>
@@ -323,8 +262,8 @@ const CommandeForm = () => {
       pointVente: selectedPointVente?._id || undefined,
       depotCentral: false,
       produits: produitsPourAPI,
-      print: true, // ← AJOUTE ÇA pour demander l'impression
-      format: 'pos80', // ← Optionnel : format par défaut
+      print: true, // ← Demande d'impression
+      format: 'pos80', // ← Optionnel
     };
 
     try {
@@ -465,19 +404,24 @@ const CommandeForm = () => {
                   suggestions={suggestions}
                   completeMethod={completeProduits}
                   field="nom"
+                  delay={200}
                   dropdown
-                  forceSelection={false} // on autorise la frappe libre; l'id sera fixé au onSelect
+                  forceSelection={false} // saisie libre autorisée
                   itemTemplate={suggestionItemTemplate}
                   placeholder="Rechercher un produit..."
+                  className="w-full shadow-sm border border-gray-300 rounded-md"
+                  appendTo={typeof window !== 'undefined' ? document.body : undefined}
+                  panelClassName="z-50"
                   onChange={(e) => {
-                    // e.value peut être string (saisie) ou Produit (si selection)
+                    // e.value peut être string (saisie) ou Produit (si set programmatique)
                     if (typeof e.value === 'string') {
                       setSearchTerm(e.value);
                       setSelectedProduit(null);
+                      if (!e.value) setSuggestions([]);
                     } else {
-                      // cas rare via set programmatique
-                      setSelectedProduit(e.value as Produit);
-                      setSearchTerm((e.value as Produit)?.nom ?? '');
+                      const p = e.value as Produit;
+                      setSelectedProduit(p);
+                      setSearchTerm(p?.nom ?? '');
                     }
                   }}
                   onSelect={(e) => {
@@ -485,7 +429,6 @@ const CommandeForm = () => {
                     setSelectedProduit(p);
                     setSearchTerm(p?.nom ?? '');
                   }}
-                  className="w-full shadow-sm border border-gray-300 rounded-md"
                 />
               </div>
 
@@ -603,7 +546,7 @@ const CommandeForm = () => {
                 </DataTable>
 
                 <div className="mt-6 border-t border-gray-200 pt-5 flex justify-end">
-                  <div className="w-full max-w-md bg-green-50 rounded-lg p-4 shadow-inner text-gray-800">
+                  <div className="w-full max-w-md bg-green-50 rounded-lg p-4 shadow-inner text-gray-8 00">
                     <div className="flex justify-between mb-2">
                       <span>Total produits:</span>
                       <span className="font-semibold">

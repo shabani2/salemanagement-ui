@@ -309,13 +309,47 @@ export const deleteStock = createAsyncThunk<string, string, { rejectValue: strin
 );
 
 // Vérification de stock (pas stocké dans l'entity adapter)
+// ➜ Ajoute le flag depotCentral
 export interface CheckStockParams {
   type: string;
   produitId: string;
   quantite: number;
-  pointVenteId?: string | PointVente;
+  pointVenteId?: string | PointVente; // on accepte aussi l’objet pour commodité
   regionId?: string;
+  depotCentral?: boolean; // ✅ nouveau
 }
+
+// (facultatif) Typage de la réponse si tu ne l’as pas déjà
+export interface CheckStockResponse {
+  success: boolean;
+  quantiteDisponible: number;
+  suffisant: boolean;
+  message?: string;
+}
+
+// petit util pour normaliser le payload envoyé à l’API
+const buildCheckStockPayload = (params: CheckStockParams) => {
+  const pointVenteId =
+    typeof params.pointVenteId === 'string'
+      ? params.pointVenteId
+      : (params.pointVenteId as PointVente | undefined)?._id;
+
+  const payload: any = {
+    type: params.type,
+    produitId: params.produitId,
+    quantite: params.quantite,
+  };
+
+  // ✅ exclusivité : si depotCentral === true, on n’envoie ni regionId ni pointVenteId
+  if (params.depotCentral) {
+    payload.depotCentral = true;
+  } else {
+    if (params.regionId) payload.regionId = params.regionId;
+    if (pointVenteId) payload.pointVenteId = pointVenteId;
+  }
+
+  return payload;
+};
 
 export const checkStock = createAsyncThunk<
   CheckStockResponse,
@@ -323,17 +357,12 @@ export const checkStock = createAsyncThunk<
   { rejectValue: string }
 >('stocks/checkStock', async (params, { rejectWithValue }) => {
   try {
-    // 🔁 normaliser pointVenteId éventuel en string
-    const payload = {
-      ...params,
-      pointVenteId:
-        typeof params.pointVenteId === 'string'
-          ? params.pointVenteId
-          : (params.pointVenteId as PointVente | undefined)?._id,
-    };
+    const payload = buildCheckStockPayload(params);
+
     const response = await apiClient.post('/stocks/check', payload, {
       headers: getAuthHeaders(),
     });
+
     return response.data as CheckStockResponse;
   } catch (error: unknown) {
     if (error instanceof Error) {

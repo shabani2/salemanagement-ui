@@ -31,6 +31,8 @@ import {
   selectAllPointVentes,
 } from '@/stores/slices/pointvente/pointventeSlice';
 
+import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
+
 import { checkStock } from '@/stores/slices/stock/stockSlice';
 import { User } from '@/Models/UserType';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
@@ -44,7 +46,6 @@ import { Badge } from 'primereact/badge';
 import { Card } from 'primereact/card';
 import { Tag } from 'primereact/tag';
 import { AutoComplete, AutoCompleteCompleteEvent } from 'primereact/autocomplete';
-import { Console } from 'console';
 
 /* ----------------------------- Helpers ----------------------------- */
 
@@ -53,6 +54,19 @@ const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v
 const safeNumber = (v: unknown, fallback = 0) => {
   const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
   return Number.isFinite(n) ? n : fallback;
+};
+const getId = (v: string | { _id?: string } | null | undefined) =>
+  (typeof v === 'string' ? v : v?._id) ?? undefined;
+
+/** Décode tous les formats possibles renvoyés par l’API pour la recherche produits */
+const extractProduitList = (payload: any): Produit[] => {
+  if (Array.isArray(payload)) return payload as Produit[];
+  if (payload && typeof payload === 'object') {
+    if (Array.isArray(payload.data)) return payload.data as Produit[];
+    if (Array.isArray(payload.docs)) return payload.docs as Produit[];
+    if (Array.isArray(payload.items)) return payload.items as Produit[];
+  }
+  return [];
 };
 
 /* ----------------------------- Types ------------------------------- */
@@ -67,9 +81,9 @@ type FormValues = {
   formulaire: { produit: string; quantite: number };
   remise?: number;
   rabais?: number;
-  montantRecu?: number;
-  montantDollar?: number;
-  montantFranc?: number;
+  montantRecu?: number; // en FC
+  montantDollar?: number; // en $
+  montantFranc?: number; // calculé à l’écran seulement
   tauxFranc?: number;
   tauxDollar?: number;
 };
@@ -83,12 +97,15 @@ const Page = () => {
   const categories = useSelector((s: RootState) => asArray<Categorie>(selectAllCategories(s)));
   const pointsVente = useSelector((s: RootState) => asArray<PointVente>(selectAllPointVentes(s)));
   const allProduits = useSelector((s: RootState) => asArray<Produit>(selectAllProduits(s)));
+  const regions = useSelector((s: RootState) => asArray<Region>(selectAllRegions(s)));
 
   const [org, setOrg] = useState<Organisation[]>([]);
-  const [selectedType, setSelectedType] = useState<string>('');
+  // Livraison (SuperAdmin) : cible = pointVente | region
+  const [livraisonCible, setLivraisonCible] = useState<'pointVente' | 'region'>('pointVente');
+  const [selectedRegionLivraison, setSelectedRegionLivraison] = useState<string | null>(null);
 
-  // Autocomplete: texte affiché et suggestions
-  const [searchText, setSearchText] = useState<string>(''); // <- ce qu’on voit dans l’input
+  // Autocomplete PrimeReact: texte affiché et suggestions
+  const [searchText, setSearchText] = useState<string>(''); // ce qu’on voit dans l’input
   const [productSuggestions, setProductSuggestions] = useState<Produit[]>([]);
   const productCacheRef = useRef<Record<string, Produit>>({});
 
@@ -141,10 +158,14 @@ const Page = () => {
   } = useForm<FormValues>({ defaultValues, mode: 'onChange' });
 
   const { fields, append, remove, update } = useFieldArray({ control, name: 'produits' });
-  //@ts-ignore
   const watchProduits = watch('produits') ?? [];
   const selectedPointVente = watch('pointVente');
   const type = watch('type');
+
+  const isSuperAdmin = user?.role === 'SuperAdmin';
+  const isAdminRegion = user?.role === 'AdminRegion';
+  const isVenteOrSortie = ['Vente', 'Sortie'].includes(type || '');
+  const isLivraison = type === 'Livraison';
 
   const tauxFranc = safeNumber(watch('tauxFranc'), 0);
   const tauxDollar = safeNumber(watch('tauxDollar'), 0);
@@ -157,7 +178,7 @@ const Page = () => {
 
   /* ------------------------- Chargements initiaux -------------------------- */
   const regionId = getRegionId((user as User)?.region);
-  // 1. chargement de base
+
   useEffect(() => {
     (async () => {
       try {
@@ -177,7 +198,7 @@ const Page = () => {
     })();
   }, [dispatch]);
 
-  // 2. chargement des points de vente
+  // Charger PV selon rôle courant
   useEffect(() => {
     if (!user?.role) return;
 
@@ -185,26 +206,45 @@ const Page = () => {
       if (user.role === 'SuperAdmin') {
         await dispatch(fetchPointVentes());
       } else if (isNonEmptyString(regionId)) {
-        await dispatch(fetchPointVentesByRegionId({ regionId })).then((resp) => {});
+        await dispatch(fetchPointVentesByRegionId({ regionId }));
       }
     })();
   }, [dispatch, user?.role, regionId]);
 
-  /* -------------------------- Point de vente lock -------------------------- */
+  // Charger régions quand SuperAdmin choisit Livraison
+  useEffect(() => {
+    if (isSuperAdmin && isLivraison) {
+      dispatch(fetchRegions());
+    }
+  }, [dispatch, isSuperAdmin, isLivraison]);
+
+  // Lock PV pour AdminPV/Vendeur/Logisticien.
   const rolesWithFixedPointVente = ['AdminPointVente', 'Vendeur', 'Logisticien'];
   const isPointVenteLocked = !!(user && rolesWithFixedPointVente.includes(user.role as any));
 
   useEffect(() => {
+    // aligne PV si verrouillé
     if (isPointVenteLocked && user?.pointVente && pointsVente.length > 0) {
       const targetId = typeof user.pointVente === 'string' ? user.pointVente : user.pointVente?._id;
       if (targetId && getValues('pointVente') !== targetId) setValue('pointVente', targetId);
     }
+    // aligne région
     const regionVal = getValues('region');
     const userRegionId =
       typeof user?.region === 'string' ? user?.region : (user as any)?.region?._id;
-    //@ts-ignore
+    // @ts-ignore
     if (userRegionId && regionVal !== userRegionId) setValue('region', userRegionId);
   }, [isPointVenteLocked, pointsVente, user?.pointVente, user?.region, getValues, setValue]);
+
+  // Lire taux depuis localStorage au mount
+  useEffect(() => {
+    try {
+      const td = Number(localStorage.getItem('tauxDollar') ?? '');
+      const tf = Number(localStorage.getItem('tauxFranc') ?? '');
+      if (Number.isFinite(td) && td > 0) setValue('tauxDollar', td);
+      if (Number.isFinite(tf) && tf > 0) setValue('tauxFranc', tf);
+    } catch {}
+  }, [setValue]);
 
   /* ------------------------------ UI helpers ------------------------------- */
   const filteredTypeOptions = useMemo(
@@ -213,28 +253,36 @@ const Page = () => {
   );
 
   /* ----------------------------- Calculs panier ---------------------------- */
+  const computeLine = useCallback((p: Produit, qte: number, currentType: string) => {
+    const prixBase =
+      currentType === 'Vente'
+        ? safeNumber((p as any).prixVente, safeNumber(p.prix))
+        : safeNumber(p.prix);
+    const montant = prixBase * qte;
+
+    if (currentType === 'Vente') {
+      const marge = (montant * safeNumber(p.marge, 0)) / 100;
+      const net = montant + marge;
+      const tva = (net * safeNumber(p.tva, 0)) / 100;
+      return { unit: prixBase, totalTtc: net + tva };
+    }
+    return { unit: prixBase, totalTtc: montant };
+  }, []);
+
   const totalMontant = useMemo(() => {
+    const currentType = type || '';
     const t = asArray<{ produit: string; quantite: number }>(watchProduits).reduce((acc, item) => {
       const produit =
         asArray<Produit>(allProduits).find((p) => p?._id === item.produit) ||
         productCacheRef.current[item.produit];
       if (!produit) return acc;
 
-      const quantite = safeNumber(item.quantite, 0);
-      const prix = safeNumber(produit.prix, 0);
-      const marge = safeNumber(produit.marge, 0);
-      const tva = safeNumber(produit.tva, 0);
-
-      const montant = quantite * prix;
-      const margeVal = (montant * marge) / 100;
-      const netTopay = montant + margeVal;
-      const tvaValeur = (netTopay * tva) / 100;
-      const ttc = selectedType === 'Vente' ? netTopay + tvaValeur : montant;
-
-      return acc + ttc;
+      const qte = safeNumber(item.quantite, 0);
+      const { totalTtc } = computeLine(produit, qte, currentType);
+      return acc + totalTtc;
     }, 0);
     return Number.isFinite(t) ? t : 0;
-  }, [watchProduits, allProduits, selectedType]);
+  }, [watchProduits, allProduits, type, computeLine]);
 
   const valeurRabais = useMemo(() => (totalMontant * rabais) / 100, [totalMontant, rabais]);
   const valeurRemise = useMemo(
@@ -245,7 +293,10 @@ const Page = () => {
     () => totalMontant - valeurRabais - valeurRemise,
     [totalMontant, valeurRabais, valeurRemise]
   );
-  const reste = useMemo(() => montantRecu - netAPayer, [montantRecu, netAPayer]);
+  const reste = useMemo(() => {
+    const totalRecuFC = montantRecu + montantFranc;
+    return totalRecuFC - netAPayer;
+  }, [montantRecu, montantFranc, netAPayer]);
 
   /* --------------------------- Validation de stock ------------------------- */
   const validateStock = useCallback(
@@ -261,17 +312,78 @@ const Page = () => {
           ? selectedPointVente
           : (selectedPointVente as any)?._id;
 
+      // --- VENTE / SORTIE ---
+      if (['Vente', 'Sortie'].includes(op)) {
+        try {
+          // base commun
+          const base = { type: op, produitId, quantite: value };
+
+          // SuperAdmin : stock central
+          if (isSuperAdmin) {
+            const result = await dispatch(checkStock({ ...base, depotCentral: true })).unwrap();
+            if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
+              return `Stock insuffisant (central). Disponible: ${safeNumber(result?.quantiteDisponible, 0)}`;
+            }
+            return true;
+          }
+
+          // AdminRegion : stock de la région
+          if (isAdminRegion && isNonEmptyString(regionId)) {
+            const result = await dispatch(checkStock({ ...base, regionId })).unwrap();
+            if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
+              return `Stock insuffisant (région). Disponible: ${safeNumber(result?.quantiteDisponible, 0)}`;
+            }
+            return true;
+          }
+
+          // Autres rôles : stock du point de vente
+          if (pvId) {
+            const result = await dispatch(checkStock({ ...base, pointVenteId: pvId })).unwrap();
+            if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
+              return `Stock insuffisant (point de vente). Disponible: ${safeNumber(result?.quantiteDisponible, 0)}`;
+            }
+            return true;
+          }
+
+          return 'Périmètre de stock introuvable';
+        } catch {
+          return 'Vérification de stock indisponible';
+        }
+      }
+
+      // --- LIVRAISON (SuperAdmin -> région) : source = dépôt central ---
+      if (op === 'Livraison' && isSuperAdmin && livraisonCible === 'region') {
+        if (!isNonEmptyString(selectedRegionLivraison || '')) {
+          return 'Sélectionnez une région de livraison';
+        }
+        try {
+          const result = await dispatch(
+            checkStock({
+              type: op,
+              produitId,
+              quantite: value,
+              depotCentral: true, // on vérifie la source centrale
+            })
+          ).unwrap();
+          if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
+            return `Stock central insuffisant. Disponible: ${safeNumber(result?.quantiteDisponible, 0)}`;
+          }
+          return true;
+        } catch {
+          return 'Vérification de stock indisponible';
+        }
+      }
+
+      // --- CAS PAR DÉFAUT (Livraison -> PV / rôles PV, etc.) ---
       try {
-        console.log('validate regionId ', regionId);
+        if (!regionId && !pvId) return 'Aucun périmètre de stock (région/point de vente).';
 
         const result = await dispatch(
-          checkStock(
-            isNonEmptyString(regionId)
-              ? { type: op, produitId, quantite: value, regionId }
-              : { type: op, produitId, quantite: value, pointVenteId: pvId }
-          )
+          isNonEmptyString(regionId)
+            ? checkStock({ type: op, produitId, quantite: value, regionId })
+            : checkStock({ type: op, produitId, quantite: value, pointVenteId: pvId })
         ).unwrap();
-        console.log('result ', result);
+
         if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
           return `Stock disponible : ${safeNumber(result?.quantiteDisponible, 0)}`;
         }
@@ -280,26 +392,38 @@ const Page = () => {
         return 'Vérification de stock indisponible';
       }
     },
-    [dispatch, selectedPointVente, getValues, regionId]
+    [
+      dispatch,
+      selectedPointVente,
+      getValues,
+      regionId,
+      isSuperAdmin,
+      isAdminRegion,
+      livraisonCible,
+      selectedRegionLivraison,
+    ]
   );
 
   /* --------------------------- Autocomplete produits ----------------------- */
 
-  const suggestionItemTemplate = (item: Produit) => {
-    const catName =
-      typeof item.categorie === 'object' && item.categorie
-        ? (item.categorie as any)?.nom
-        : categories.find((c) => c._id === (item.categorie as any))?.nom;
+  const suggestionItemTemplate = useCallback(
+    (item: Produit) => {
+      const catName =
+        typeof item.categorie === 'object' && item.categorie
+          ? (item.categorie as any)?.nom
+          : categories.find((c) => c._id === (item.categorie as any))?.nom;
 
-    return (
-      <div className="flex flex-col">
-        <div className="font-medium text-gray-800">{item.nom}</div>
-        <div className="text-xs text-gray-500">
-          {catName ? `${catName} • ` : ''}Prix: {safeNumber(item.prix).toLocaleString()} FC
+      return (
+        <div className="flex flex-col">
+          <div className="font-medium text-gray-800">{item.nom}</div>
+          <div className="text-xs text-gray-500">
+            {catName ? `${catName} • ` : ''}Prix: {safeNumber(item.prix).toLocaleString()} FC
+          </div>
         </div>
-      </div>
-    );
-  };
+      );
+    },
+    [categories]
+  );
 
   const completeProduits = async (e: AutoCompleteCompleteEvent) => {
     const q = String(e.query || '').trim();
@@ -312,7 +436,7 @@ const Page = () => {
         searchProduits({ q, page: 1, limit: 10, includeTotal: false }) as any
       );
       if ((searchProduits as any).fulfilled.match(action)) {
-        const list = asArray<Produit>(action.payload);
+        const list = extractProduitList(action.payload);
         list.forEach((p) => {
           if (p?._id) productCacheRef.current[p._id] = p;
         });
@@ -338,6 +462,35 @@ const Page = () => {
         return;
       }
 
+      // garde-fous de périmètre
+      if (['Vente', 'Sortie'].includes(data.type)) {
+        if (isSuperAdmin) {
+          // OK central
+        } else if (isAdminRegion) {
+          if (!isNonEmptyString(regionId)) {
+            toast.current?.show({
+              severity: 'error',
+              summary: 'Erreur',
+              detail: 'Région introuvable pour AdminRegion.',
+              life: 4000,
+            });
+            return;
+          }
+        }
+      }
+
+      if (data.type === 'Livraison' && isSuperAdmin && livraisonCible === 'region') {
+        if (!isNonEmptyString(selectedRegionLivraison || '')) {
+          toast.current?.show({
+            severity: 'warn',
+            summary: 'Information',
+            detail: 'Sélectionnez une région de livraison.',
+            life: 3000,
+          });
+          return;
+        }
+      }
+
       try {
         const mouvements = data.produits.map((item) => {
           const produitObj =
@@ -345,34 +498,91 @@ const Page = () => {
             productCacheRef.current[item.produit];
           if (!produitObj) throw new Error('Produit introuvable');
 
-          const prix =
-            ['Entrée', 'Livraison', 'Sortie'].includes(data.type) &&
-            Number.isFinite(produitObj.prix)
-              ? safeNumber(produitObj.prix)
-              : safeNumber(produitObj.prixVente, safeNumber(produitObj.prix));
+          const prix = ['Entrée', 'Livraison', 'Sortie'].includes(data.type)
+            ? safeNumber(produitObj.prix)
+            : safeNumber((produitObj as any).prixVente, safeNumber(produitObj.prix));
 
-          const pointVenteId =
-            typeof data.pointVente === 'string'
-              ? data.pointVente
-              : ((data.pointVente as any)?._id ?? null);
-          const regionId =
-            typeof data.region === 'string' ? data.region : ((data.region as any)?._id ?? null);
-          const userId =
-            typeof data.user === 'string' ? data.user : ((data.user as any)?._id ?? null);
+          // Ids
+          const pvId = getId(data.pointVente as any) ?? null;
+          const regId = getId(data.region as any) ?? null;
+          const userId = getId(data.user as any) ?? null;
+
+          // périmètre final selon rôle/type
+          let depotCentral = !!data.depotCentral;
+          let pointVente: string | null = pvId;
+          let region: string | null = regId;
+
+          if (['Vente', 'Sortie'].includes(data.type)) {
+            if (isSuperAdmin) {
+              depotCentral = true;
+              pointVente = null; // interdit PV
+            }
+            if (isAdminRegion) {
+              depotCentral = false;
+              pointVente = null;
+              // region = regId (déjà défini)
+            }
+          }
+
+          if (data.type === 'Livraison' && isSuperAdmin) {
+            if (livraisonCible === 'region') {
+              depotCentral = true; // on sort du central
+              pointVente = null;
+              region = selectedRegionLivraison || null; // destination région
+            } else {
+              // livraison vers PV : garder pointVente
+            }
+          }
 
           return {
-            produit: produitObj._id,
+            produit: (produitObj as any)._id,
             produitNom: produitObj.nom,
             quantite: safeNumber(item.quantite, 0),
             montant: prix * safeNumber(item.quantite, 0),
             type: data.type,
-            depotCentral: !!data.depotCentral,
-            pointVente: pointVenteId,
-            region: regionId,
+            depotCentral,
+            pointVente,
+            region,
             user: userId,
             statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type),
           };
         });
+
+        // Validation de stock au submit
+        for (const m of mouvements) {
+          if (['Entrée', 'Commande'].includes(m.type)) continue;
+
+          const payload: any = {
+            type: m.type,
+            produitId: m.produit,
+            quantite: m.quantite,
+          };
+
+          if (m.depotCentral) payload.depotCentral = true;
+          if (m.region) payload.regionId = m.region;
+          if (m.pointVente) payload.pointVenteId = m.pointVente;
+
+          try {
+            const result = await dispatch(checkStock(payload)).unwrap();
+            if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < m.quantite) {
+              toast.current?.show({
+                severity: 'error',
+                summary: `Stock insuffisant`,
+                detail: `${m.produitNom} — dispo: ${safeNumber(result?.quantiteDisponible, 0)}`,
+                life: 5000,
+              });
+              return;
+            }
+          } catch {
+            toast.current?.show({
+              severity: 'error',
+              summary: 'Erreur',
+              detail: `Vérification de stock indisponible pour ${m.produitNom}`,
+              life: 4000,
+            });
+            return;
+          }
+        }
 
         const results = await Promise.allSettled(
           mouvements.map((m) => dispatch(createMouvementStock(m as any)))
@@ -430,9 +640,11 @@ const Page = () => {
           });
 
           reset(defaultValues);
-          setSearchText(''); // clear input
+          setSearchText('');
           setProductSuggestions([]);
           productCacheRef.current = {};
+          setLivraisonCible('pointVente');
+          setSelectedRegionLivraison(null);
         }
       } catch (err) {
         toast.current?.show({
@@ -443,11 +655,22 @@ const Page = () => {
         });
       }
     },
-    [dispatch, allProduits, org, user, reset]
+    [
+      dispatch,
+      allProduits,
+      org,
+      user,
+      reset,
+      isSuperAdmin,
+      isAdminRegion,
+      regionId,
+      livraisonCible,
+      selectedRegionLivraison,
+    ]
   );
 
   /* ------------------------------- UI -------------------------------------- */
-  console.log('org : ', searchProduits);
+
   return (
     <div className="min-h-screen p-4 text-xs">
       <Toast ref={toast} />
@@ -490,10 +713,24 @@ const Page = () => {
                         options={filteredTypeOptions}
                         onChange={(e) => {
                           field.onChange(e.value);
-                          setSelectedType(e.value);
+                          // reset quick form
                           setValue('formulaire', { produit: '', quantite: 0 } as any);
                           setSearchText('');
                           clearErrors('formulaire.quantite');
+
+                          // Interdire PV pour Vente/Sortie SA/AR
+                          const newType = e.value as string;
+                          if (
+                            (isSuperAdmin || isAdminRegion) &&
+                            ['Vente', 'Sortie'].includes(newType)
+                          ) {
+                            setValue('pointVente', null);
+                          }
+                          // Reset livraison UI
+                          if (newType !== 'Livraison') {
+                            setLivraisonCible('pointVente');
+                            setSelectedRegionLivraison(null);
+                          }
                         }}
                         placeholder="Sélectionner une operation"
                         className={classNames('w-full border-gray-300 rounded-xl', {
@@ -510,23 +747,23 @@ const Page = () => {
                   )}
                 </div>
 
-                {/* Dépôt central si Entrée */}
-                {watch('type') === 'Entrée' && (
+                {/* Entrée : SuperAdmin/AR comme avant */}
+                {type === 'Entrée' && (
                   <div className="mt-4">
-                    {user && user?.role === 'SuperAdmin' ? (
+                    {isSuperAdmin ? (
                       <div className="bg-blue-50 p-4 rounded-xl border-l-4 border-blue-500">
                         <label className="flex items-center gap-2 font-medium text-gray-800">
                           <input
                             type="checkbox"
                             {...register('depotCentral')}
-                            disabled={!watch('type')}
+                            disabled={!type}
                             className="h-4 w-4 text-blue-600 rounded"
                           />
                           <i className="pi pi-building text-blue-600"></i>
                           Dépôt central
                         </label>
                       </div>
-                    ) : user && user?.role === 'AdminRegion' ? (
+                    ) : isAdminRegion ? (
                       <div className="flex items-center gap-3 font-bold text-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border-l-4 border-blue-500">
                         <i className="pi pi-building text-blue-600 text-xl"></i>
                         <div>
@@ -543,112 +780,205 @@ const Page = () => {
                   </div>
                 )}
 
-                {/* Point de vente pour autres opérations */}
-                {watch('type') && watch('type') !== 'Entrée' && (
+                {/* Vente/Sortie : SA/AR -> central/région affichage */}
+                {isVenteOrSortie && (
                   <div className="mt-4">
-                    <label className="font-medium mb-2 text-gray-700 flex items-center gap-2">
-                      <i className="pi pi-store text-blue-500"></i>
-                      Point de vente
-                    </label>
-                    {user && ['SuperAdmin', 'AdminRegion'].includes(user?.role as any) ? (
-                      <Controller
-                        name="pointVente"
-                        control={control}
-                        rules={{ required: 'Point de vente est requis' }}
-                        render={({ field }) => (
-                          <Dropdown
-                            value={
-                              typeof field.value === 'string'
-                                ? field.value
-                                : (field.value as any)?._id
-                            }
-                            options={pointsVente}
-                            optionLabel="nom"
-                            optionValue="_id"
-                            onChange={(e) => field.onChange(e.value)}
-                            placeholder="Sélectionner un point de vente"
-                            className="w-full border-gray-300 rounded-xl"
-                            disabled={!watch('type') || isPointVenteLocked}
+                    {isSuperAdmin && (
+                      <div className="bg-blue-50 p-4 rounded-xl border-l-4 border-blue-500">
+                        <label className="flex items-center gap-2 font-medium text-gray-800">
+                          <input
+                            type="checkbox"
+                            {...register('depotCentral')}
+                            checked
+                            onChange={() => {}}
+                            className="h-4 w-4 text-blue-600 rounded"
                           />
-                        )}
-                      />
-                    ) : (
-                      <Controller
-                        name="pointVente"
-                        control={control}
-                        render={({ field }) => (
-                          <Dropdown
-                            value={
-                              typeof (user as any)?.pointVente === 'string'
-                                ? (user as any).pointVente
-                                : (user as any)?.pointVente?._id
-                            }
-                            options={
-                              (user as any)?.pointVente
-                                ? [
-                                    {
-                                      ...(typeof (user as any).pointVente === 'object'
-                                        ? (user as any).pointVente
-                                        : {}),
-                                      _id:
-                                        typeof (user as any).pointVente === 'string'
-                                          ? (user as any).pointVente
-                                          : (user as any).pointVente?._id,
-                                    },
-                                  ]
-                                : []
-                            }
-                            optionLabel="nom"
-                            optionValue="_id"
-                            placeholder="Votre point de vente"
-                            className="w-full border-gray-300 rounded-xl"
-                            disabled
-                            onChange={(e) => field.onChange(e.value)}
-                          />
-                        )}
-                      />
+                          <i className="pi pi-building text-blue-600"></i>
+                          Dépôt central (verrouillé)
+                        </label>
+                      </div>
                     )}
-                    {errors.pointVente && (
-                      <small className="text-red-600 mt-1 flex items-center gap-1">
-                        <i className="pi pi-exclamation-circle"></i>
-                        {errors.pointVente.message || 'Champ requis'}
-                      </small>
+
+                    {isAdminRegion && (
+                      <div className="flex items-center gap-3 font-bold text-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border-l-4 border-blue-500">
+                        <i className="pi pi-map text-blue-600 text-xl"></i>
+                        <div>
+                          <div className="font-bold">Région</div>
+                          <div className="text-sm font-normal">
+                            {/* @ts-expect-error: compat */}
+                            {user?.region?.nom || 'Région non définie'}
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
 
+                {/* Livraison : SuperAdmin choisit la cible */}
+                {isSuperAdmin && isLivraison && (
+                  <div className="mt-4 space-y-3 bg-indigo-50 p-4 rounded-xl">
+                    <div className="font-medium text-gray-700 flex items-center gap-2">
+                      <i className="pi pi-send text-indigo-600"></i>
+                      Cible de la livraison
+                    </div>
+
+                    <div className="flex items-center gap-6">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="livraisonCible"
+                          checked={livraisonCible === 'pointVente'}
+                          onChange={() => {
+                            setLivraisonCible('pointVente');
+                          }}
+                        />
+                        Auprès de point de vente
+                      </label>
+
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="livraisonCible"
+                          checked={livraisonCible === 'region'}
+                          onChange={() => {
+                            setLivraisonCible('region');
+                            setValue('pointVente', null);
+                          }}
+                        />
+                        Auprès de région
+                      </label>
+                    </div>
+
+                    {livraisonCible === 'region' && (
+                      <Dropdown
+                        value={selectedRegionLivraison || ''}
+                        options={regions}
+                        optionLabel="nom"
+                        optionValue="_id"
+                        onChange={(e) => setSelectedRegionLivraison(e.value)}
+                        placeholder="Sélectionner une région"
+                        className="w-full border-gray-300 rounded-xl"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Point de vente pour autres opérations (sauf Vente/Sortie SA/AR et Livraison->région) */}
+                {type &&
+                  type !== 'Entrée' &&
+                  !(
+                    (isVenteOrSortie && (isSuperAdmin || isAdminRegion)) ||
+                    (isLivraison && isSuperAdmin && livraisonCible === 'region')
+                  ) && (
+                    <div className="mt-4">
+                      <label className="font-medium mb-2 text-gray-700 flex items-center gap-2">
+                        <i className="pi pi-store text-blue-500"></i>
+                        Point de vente
+                      </label>
+                      {user && ['SuperAdmin', 'AdminRegion'].includes(user?.role as any) ? (
+                        <Controller
+                          name="pointVente"
+                          control={control}
+                          rules={{ required: 'Point de vente est requis' }}
+                          render={({ field }) => (
+                            <Dropdown
+                              value={
+                                typeof field.value === 'string'
+                                  ? field.value
+                                  : (field.value as any)?._id
+                              }
+                              options={pointsVente}
+                              optionLabel="nom"
+                              optionValue="_id"
+                              onChange={(e) => field.onChange(e.value)}
+                              placeholder="Sélectionner un point de vente"
+                              className="w-full border-gray-300 rounded-xl"
+                              disabled={!type || isPointVenteLocked}
+                            />
+                          )}
+                        />
+                      ) : (
+                        <Controller
+                          name="pointVente"
+                          control={control}
+                          render={({ field }) => (
+                            <Dropdown
+                              value={
+                                typeof (user as any)?.pointVente === 'string'
+                                  ? (user as any).pointVente
+                                  : (user as any)?.pointVente?._id
+                              }
+                              options={
+                                (user as any)?.pointVente
+                                  ? [
+                                      {
+                                        ...(typeof (user as any).pointVente === 'object'
+                                          ? (user as any).pointVente
+                                          : {}),
+                                        _id:
+                                          typeof (user as any).pointVente === 'string'
+                                            ? (user as any).pointVente
+                                            : (user as any).pointVente?._id,
+                                      },
+                                    ]
+                                  : []
+                              }
+                              optionLabel="nom"
+                              optionValue="_id"
+                              placeholder="Votre point de vente"
+                              className="w-full border-gray-300 rounded-xl"
+                              disabled
+                              onChange={(e) => field.onChange(e.value)}
+                            />
+                          )}
+                        />
+                      )}
+                      {errors.pointVente && (
+                        <small className="text-red-600 mt-1 flex items-center gap-1">
+                          <i className="pi pi-exclamation-circle"></i>
+                          {errors.pointVente.message || 'Champ requis'}
+                        </small>
+                      )}
+                    </div>
+                  )}
+
                 {/* Recherche Produit + Quantité */}
                 <div className="space-y-6 mt-6">
                   <div className="grid grid-cols-1 gap-4">
-                    {/* Recherche Produit */}
+                    {/* Recherche Produit (PrimeReact AutoComplete) */}
                     <div>
                       <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
                         <i className="pi pi-search text-blue-500"></i>
                         Rechercher un produit
                       </label>
+
                       <Controller
                         name="formulaire.produit"
                         control={control}
                         render={({ field }) => (
                           <AutoComplete
-                            value={searchText} // <- on contrôle le texte affiché
-                            suggestions={productSuggestions}
-                            completeMethod={completeProduits}
-                            delay={250}
+                            value={searchText} // texte affiché (nom)
+                            suggestions={productSuggestions} // objets Produit
+                            completeMethod={completeProduits} // appelé à chaque frappe
+                            delay={200}
                             field="nom"
                             dropdown
                             placeholder="Tape le nom du produit"
                             itemTemplate={suggestionItemTemplate}
                             className="w-full"
+                            appendTo={typeof window !== 'undefined' ? document.body : undefined}
+                            panelClassName="z-50"
                             onChange={(e) => {
                               setSearchText(String(e.value ?? '')); // tape libre
+                              // ne pas toucher field.onChange ici (on stocke l'id seulement au select)
+                              if (!e.value) setProductSuggestions([]);
                             }}
                             onSelect={(e) => {
                               const p: Produit = e.value;
                               if (p && p._id) {
                                 productCacheRef.current[p._id] = p;
-                                field.onChange(p._id); // on stocke l’id dans le form
-                                setSearchText(p.nom); // on affiche le nom
+                                field.onChange(p._id); // <-- on stocke l’ID dans le form
+                                setSearchText(p.nom); // <-- on affiche le nom
                                 clearErrors('formulaire.produit');
                               }
                             }}
@@ -694,7 +1024,6 @@ const Page = () => {
                       icon={null}
                       label="Ajouter Produit"
                       onClick={async () => {
-                        // On valide seulement les champs rapides pour l’ajout
                         const produitId = getValues('formulaire.produit');
                         const qte = safeNumber(getValues('formulaire.quantite'), 0);
 
@@ -722,7 +1051,6 @@ const Page = () => {
                           return;
                         }
 
-                        // Merge si déjà présent
                         const idx = (watchProduits || []).findIndex(
                           (it) => it.produit === produitId
                         );
@@ -735,7 +1063,6 @@ const Page = () => {
                           append({ produit: produitId, quantite: qte });
                         }
 
-                        // reset champ rapide
                         resetField('formulaire');
                         setSearchText('');
                         setProductSuggestions([]);
@@ -758,32 +1085,39 @@ const Page = () => {
                   </h2>
                 </div>
 
-                {type && type !== 'Entrée' && selectedPointVente && (
-                  <div className="border border-gray-200 p-5 rounded-2xl bg-gradient-to-r from-gray-50 to-blue-50 shadow-sm m-3">
-                    <div className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      <i className="pi pi-map-marker text-blue-500"></i>
-                      Point de vente sélectionné
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-sm text-gray-500">Nom</div>
-                        <div className="font-medium">
-                          {(typeof selectedPointVente === 'string'
-                            ? pointsVente.find((pv) => pv._id === selectedPointVente)?.nom
-                            : (selectedPointVente as any)?.nom) ?? '-'}
+                {/* Carte PV sélectionné (masquée quand Vente/Sortie SA/AR ou Livraison->région) */}
+                {type &&
+                  type !== 'Entrée' &&
+                  !(
+                    (isVenteOrSortie && (isSuperAdmin || isAdminRegion)) ||
+                    (isLivraison && isSuperAdmin && livraisonCible === 'region')
+                  ) &&
+                  selectedPointVente && (
+                    <div className="border border-gray-200 p-5 rounded-2xl bg-gradient-to-r from-gray-50 to-blue-50 shadow-sm m-3">
+                      <div className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                        <i className="pi pi-map-marker text-blue-500"></i>
+                        Point de vente sélectionné
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-sm text-gray-500">Nom</div>
+                          <div className="font-medium">
+                            {(typeof selectedPointVente === 'string'
+                              ? pointsVente.find((pv) => pv._id === selectedPointVente)?.nom
+                              : (selectedPointVente as any)?.nom) ?? '-'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-500">Adresse</div>
+                          <div className="font-medium">
+                            {(typeof selectedPointVente === 'string'
+                              ? pointsVente.find((pv) => pv._id === selectedPointVente)?.adresse
+                              : (selectedPointVente as any)?.adresse) ?? '-'}
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <div className="text-sm text-gray-500">Adresse</div>
-                        <div className="font-medium">
-                          {(typeof selectedPointVente === 'string'
-                            ? pointsVente.find((pv) => pv._id === selectedPointVente)?.adresse
-                            : (selectedPointVente as any)?.adresse) ?? '-'}
-                        </div>
-                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 <div className="flex items-center gap-2 mb-6">
                   <div className="bg-primary-50 p-2 rounded-lg">
@@ -801,7 +1135,7 @@ const Page = () => {
                           <tr>
                             <th className="px-4 py-3">Produit</th>
                             <th className="px-4 py-3">Quantité</th>
-                            <th className="px-4 py-3">Prix</th>
+                            <th className="px-4 py-3">Prix unitaire</th>
                             <th className="px-4 py-3">Total</th>
                             <th className="px-4 py-3"></th>
                           </tr>
@@ -811,26 +1145,21 @@ const Page = () => {
                             const produit =
                               asArray<Produit>(allProduits).find((p) => p?._id === item.produit) ||
                               productCacheRef.current[item.produit];
+                            const qte = safeNumber(item.quantite);
+                            const { unit, totalTtc } = produit
+                              ? computeLine(produit, qte, type || '')
+                              : { unit: 0, totalTtc: 0 };
                             return (
                               <tr key={index} className="bg-white border-b hover:bg-gray-50">
                                 <td className="px-4 py-3 font-medium text-gray-900">
                                   {produit?.nom ?? 'Produit inconnu'}
                                 </td>
                                 <td className="px-4 py-3">
-                                  <Tag
-                                    value={safeNumber(item.quantite).toString()}
-                                    severity="info"
-                                    rounded
-                                  />
+                                  <Tag value={qte.toString()} severity="info" rounded />
                                 </td>
-                                <td className="px-4 py-3">
-                                  {safeNumber(produit?.prix).toFixed(2)} FC
-                                </td>
+                                <td className="px-4 py-3">{unit.toFixed(2)} FC</td>
                                 <td className="px-4 py-3 font-semibold">
-                                  {(safeNumber(item.quantite) * safeNumber(produit?.prix)).toFixed(
-                                    2
-                                  )}{' '}
-                                  FC
+                                  {totalTtc.toFixed(2)} FC
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <div className="flex gap-2">
@@ -913,7 +1242,7 @@ const Page = () => {
                 {type && !['Livraison', 'Entrée', 'Commande'].includes(type) && (
                   <>
                     <div className="text-right text-xl font-bold text-green-600 bg-green-50 p-4 rounded-xl">
-                      {selectedType === 'Vente' &&
+                      {type === 'Vente' &&
                         `Montant à payer: ${totalMontant.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC`}
                     </div>
                     <div className="flex gap-4">
