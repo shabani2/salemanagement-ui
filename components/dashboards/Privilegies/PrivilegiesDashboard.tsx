@@ -171,6 +171,7 @@ export default function PrivilegiesDashboard() {
 
   // Commandes (pour KPI "en attente")
   useEffect(() => {
+    //@ts-expect-error -- compat
     dispatch(fetchCommandes({ includeTotal: true }) as any);
   }, [dispatch]);
 
@@ -316,87 +317,92 @@ export default function PrivilegiesDashboard() {
 
       <div className="p-4 space-y-4">
         {/* --- Filtre de temps --- */}
-        <div className="flex flex-wrap items-center gap-3 justify-between rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 justify-between rounded-xl border border-gray-200 bg-white p-3 shadow-sm bg-gradient-to-br from-green-50 to-white">
           {/* Contrôles gauche */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-100">
-              <i className="pi pi-calendar-clock text-[12px]" />
-              Filtre temporel
-            </span>
+          <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-lg shadow-md border border-gray-200 bg-gradient-to-br from-green-50 to-white">
+  <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1.5 text-sm font-semibold text-green-800 ring-1 ring-inset ring-green-200">
+    <i className="pi pi-calendar-clock text-base" aria-hidden="true" />
+    Filtre
+  </span>
 
-            {/* Sélecteur période */}
-            <div className="relative">
-              <select
-                className="appearance-none border border-gray-300 rounded-lg px-3 py-2 text-sm pr-9 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600/20 focus:border-green-600 transition"
-                value={period}
-                onChange={(e) => {
-                  const p = e.target.value as Period;
-                  setPeriod(p);
-                  if (p === 'mois') {
-                    if (month < 0 || month > 11) setMonth(new Date().getMonth());
-                    if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
-                  }
-                  if (p === 'annee') {
-                    if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
-                  }
-                }}
-              >
-                <option value="tout">Tout</option>
-                <option value="jour">Jour</option>
-                <option value="semaine">Semaine</option>
-                <option value="mois">Mois</option>
-                <option value="annee">Année</option>
-              </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                <i className="pi pi-chevron-down text-xs" />
-              </span>
-            </div>
+  {/* Sélecteur période */}
+  <div className="relative w-40">
+    <select
+      className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
+      value={period}
+      onChange={(e) => {
+        const p = e.target.value as Period;
+        setPeriod(p);
+        if (p === 'mois') {
+          if (month < 0 || month > 11) setMonth(new Date().getMonth());
+          if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
+        }
+        if (p === 'annee') {
+          if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
+        }
+      }}
+      aria-label="Sélecteur période"
+    >
+      <option value="tout">Tout</option>
+      <option value="jour">Jour</option>
+      <option value="semaine">Semaine</option>
+      <option value="mois">Mois</option>
+      <option value="annee">Année</option>
+    </select>
+    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+      <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
+    </span>
+  </div>
 
-            {/* Sélecteur mois + année quand period = mois */}
-            {period === 'mois' && (
-              <>
-                <div className="relative">
-                  <select
-                    className="appearance-none border border-gray-300 rounded-lg px-3 py-2 text-sm pr-9 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600/20 focus:border-green-600 transition"
-                    value={month}
-                    onChange={(e) => setMonth(Number(e.target.value))}
-                  >
-                    {MONTHS_SHORT.map((m, i) => (
-                      <option key={m} value={i}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <i className="pi pi-chevron-down text-xs" />
-                  </span>
-                </div>
+  {/* Sélecteur mois + année quand period = mois */}
+  {period === 'mois' && (
+    <>
+      <div className="relative w-28">
+        <select
+          className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
+          value={month}
+          onChange={(e) => setMonth(Number(e.target.value))}
+          aria-label="Sélecteur mois"
+        >
+          {MONTHS_SHORT.map((m, i) => (
+            <option key={m} value={i}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+          <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
+        </span>
+      </div>
 
-                <input
-                  type="number"
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-24 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600/20 focus:border-green-600 transition"
-                  value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                  placeholder="Année"
-                  min={2000}
-                  max={2100}
-                />
-              </>
-            )}
+      <input
+        type="number"
+        className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
+        value={year}
+        onChange={(e) => setYear(Number(e.target.value))}
+        placeholder="Année"
+        min={2000}
+        max={2100}
+        aria-label="Sélecteur année"
+      />
+    </>
+  )}
 
-            {/* Sélecteur année quand period = annee */}
-            {period === 'annee' && (
-              <input
-                type="number"
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-24 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600/20 focus:border-green-600 transition"
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                placeholder="Année"
-                min={2000}
-                max={2100}
-              />
-            )}
-          </div>
+  {/* Sélecteur année quand period = annee */}
+  {period === 'annee' && (
+    <input
+      type="number"
+      className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
+      value={year}
+      onChange={(e) => setYear(Number(e.target.value))}
+      placeholder="Année"
+      min={2000}
+      max={2100}
+      aria-label="Sélecteur année"
+    />
+  )}
+</div>
+
 
           {/* Résumé sélection à droite */}
           <div className="flex items-center gap-2">
