@@ -638,15 +638,10 @@ const Page: React.FC = () => {
                   className="px-4 py-2 text-left cursor-pointer select-none"
                   onClick={() => toggleSort('region')}
                 >
-                  Région <SortIcon order={sortBy === 'region' ? order : null} />
+                  stock <SortIcon order={sortBy === 'region' ? order : null} />
                 </th>
 
-                <th
-                  className="px-4 py-2 text-left cursor-pointer select-none"
-                  onClick={() => toggleSort('pointVente')}
-                >
-                  Point de vente <SortIcon order={sortBy === 'pointVente' ? order : null} />
-                </th>
+                
 
                 <th
                   className="px-4 py-2 text-left cursor-pointer select-none"
@@ -705,8 +700,15 @@ const Page: React.FC = () => {
                       <td className="px-4 py-2">{row?.prenom ?? '—'}</td>
                       <td className="px-4 py-2">{row?.email ?? '—'}</td>
                       <td className="px-4 py-2">{row?.telephone ?? '—'}</td>
-                      <td className="px-4 py-2">{regionNom}</td>
-                      <td className="px-4 py-2">{pvNom}</td>
+                     <td className="px-4 py-2">
+  {typeof row?.pointVente === "object" && row?.pointVente
+    ? row.pointVente.nom
+    : typeof row?.region === "object" && row?.region
+    ? row.region.nom
+    : "Depot Central"}
+</td>
+
+                      {/* <td className="px-4 py-2">{pvNom}</td> */}
                       <td className="px-4 py-2">{row?.role ?? '—'}</td>
                       <td className="px-4 py-2">{created}</td>
                       <td className="px-4 py-2">
