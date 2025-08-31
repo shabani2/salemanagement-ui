@@ -52,7 +52,20 @@ import {
 
 /* ----------------------------- Utils ----------------------------- */
 type Period = 'tout' | 'jour' | 'semaine' | 'mois' | 'annee';
-const MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+const MONTHS_SHORT = [
+  'Jan',
+  'Fév',
+  'Mar',
+  'Avr',
+  'Mai',
+  'Juin',
+  'Juil',
+  'Aoû',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Déc',
+];
 const PERIOD_LABELS: Record<Period, string> = {
   tout: 'Tout',
   jour: 'Jour',
@@ -156,7 +169,15 @@ const GerantDashboard: React.FC = () => {
     } else {
       dispatch(fetchStocks({}));
     }
-  }, [dispatch, user?.role, user?.pointVente?._id, user?.region?._id, isSuperAdmin, isAdminPointVente, isAdminRegion]);
+  }, [
+    dispatch,
+    user?.role,
+    user?.pointVente?._id,
+    user?.region?._id,
+    isSuperAdmin,
+    isAdminPointVente,
+    isAdminRegion,
+  ]);
 
   // Appliquer le filtre de période localement (au cas où la route ne le supporte pas)
   const { dateFrom, dateTo } = buildRange();
@@ -219,7 +240,9 @@ const GerantDashboard: React.FC = () => {
   };
 
   const handleCheck = (checked: boolean, index: number) => {
-    setProduitsLivrables((prev) => prev.map((p, i) => (i === index ? { ...p, _tempChecked: checked } : p)));
+    setProduitsLivrables((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, _tempChecked: checked } : p))
+    );
   };
 
   const effectuerLivraison = async () => {
@@ -256,12 +279,14 @@ const GerantDashboard: React.FC = () => {
 
   const actionTemplate = (row: Commande) => (
     <>
-      <Button icon="pi pi-ellipsis-v" className="p-button-text" onClick={(e) => showMenu(e, row._id)} />
+      <Button
+        icon="pi pi-ellipsis-v"
+        className="p-button-text"
+        onClick={(e) => showMenu(e, row._id)}
+      />
       <Menu
         popup
-        model={[
-          { label: 'Voir Produits', icon: 'pi pi-eye', command: () => handleOpenModal(row) },
-        ]}
+        model={[{ label: 'Voir Produits', icon: 'pi pi-eye', command: () => handleOpenModal(row) }]}
         ref={(el) => setMenuRefs((prev) => ({ ...prev, [row._id]: el }))}
       />
     </>
@@ -272,7 +297,11 @@ const GerantDashboard: React.FC = () => {
   const statutTemplate = (row: Commande) => (
     <span
       className={`px-2 py-1 rounded text-white text-sm ${
-        row.statut === 'livrée' ? 'bg-green-500' : row.statut === 'annulée' ? 'bg-red-400' : 'bg-yellow-400'
+        row.statut === 'livrée'
+          ? 'bg-green-500'
+          : row.statut === 'annulée'
+            ? 'bg-red-400'
+            : 'bg-yellow-400'
       }`}
     >
       {row.statut}
@@ -280,13 +309,19 @@ const GerantDashboard: React.FC = () => {
   );
 
   const montantTemplate = (row: Commande) =>
-    new Intl.NumberFormat('fr-CD', { style: 'currency', currency: 'CDF', minimumFractionDigits: 0 }).format(
-      (row as any)?.montant ?? 0
-    );
+    new Intl.NumberFormat('fr-CD', {
+      style: 'currency',
+      currency: 'CDF',
+      minimumFractionDigits: 0,
+    }).format((row as any)?.montant ?? 0);
 
   // UI helpers
   const formatCurrency = (v: number) =>
-    new Intl.NumberFormat('fr-CD', { style: 'currency', currency: 'CDF', minimumFractionDigits: 0 }).format(v || 0);
+    new Intl.NumberFormat('fr-CD', {
+      style: 'currency',
+      currency: 'CDF',
+      minimumFractionDigits: 0,
+    }).format(v || 0);
 
   const now = new Date();
   const formattedDate = format(now, 'dd/MM/yy HH:mm');
@@ -307,102 +342,101 @@ const GerantDashboard: React.FC = () => {
 
       {/* Filtre temporel (design moderne + résumé) */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-md mb-5 bg-gradient-to-br from-green-50 to-white">
-  <div className="flex flex-wrap items-center gap-4 bg-gradient-to-br from-green-50 to-white">
-    <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1.5 text-sm font-semibold text-green-800 ring-1 ring-inset ring-green-200">
-      <i className="pi pi-calendar-clock text-base" aria-hidden="true" />
-      Filtre
-    </span>
-
-    {/* Sélecteur période */}
-    <div className="relative w-40">
-      <select
-        className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
-        value={period}
-        onChange={(e) => {
-          const p = e.target.value as Period;
-          setPeriod(p);
-          if (p === 'mois') {
-            if (month < 0 || month > 11) setMonth(new Date().getMonth());
-            if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
-          }
-          if (p === 'annee') {
-            if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
-          }
-        }}
-        aria-label="Sélecteur période"
-      >
-        <option value="tout">Tout</option>
-        <option value="jour">Jour</option>
-        <option value="semaine">Semaine</option>
-        <option value="mois">Mois</option>
-        <option value="annee">Année</option>
-      </select>
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-        <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
-      </span>
-    </div>
-
-    {/* Sélecteur mois + année quand period = mois */}
-    {period === 'mois' && (
-      <>
-        <div className="relative w-28">
-          <select
-            className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
-            value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
-            aria-label="Sélecteur mois"
-          >
-            {MONTHS_SHORT.map((m, i) => (
-              <option key={m} value={i}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-            <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
+        <div className="flex flex-wrap items-center gap-4 bg-gradient-to-br from-green-50 to-white">
+          <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1.5 text-sm font-semibold text-green-800 ring-1 ring-inset ring-green-200">
+            <i className="pi pi-calendar-clock text-base" aria-hidden="true" />
+            Filtre
           </span>
+
+          {/* Sélecteur période */}
+          <div className="relative w-40">
+            <select
+              className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
+              value={period}
+              onChange={(e) => {
+                const p = e.target.value as Period;
+                setPeriod(p);
+                if (p === 'mois') {
+                  if (month < 0 || month > 11) setMonth(new Date().getMonth());
+                  if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
+                }
+                if (p === 'annee') {
+                  if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
+                }
+              }}
+              aria-label="Sélecteur période"
+            >
+              <option value="tout">Tout</option>
+              <option value="jour">Jour</option>
+              <option value="semaine">Semaine</option>
+              <option value="mois">Mois</option>
+              <option value="annee">Année</option>
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
+            </span>
+          </div>
+
+          {/* Sélecteur mois + année quand period = mois */}
+          {period === 'mois' && (
+            <>
+              <div className="relative w-28">
+                <select
+                  className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
+                  value={month}
+                  onChange={(e) => setMonth(Number(e.target.value))}
+                  aria-label="Sélecteur mois"
+                >
+                  {MONTHS_SHORT.map((m, i) => (
+                    <option key={m} value={i}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
+                </span>
+              </div>
+
+              <input
+                type="number"
+                className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                placeholder="Année"
+                min={2000}
+                max={2100}
+                aria-label="Sélecteur année"
+              />
+            </>
+          )}
+
+          {/* Sélecteur année quand period = annee */}
+          {period === 'annee' && (
+            <input
+              type="number"
+              className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              placeholder="Année"
+              min={2000}
+              max={2100}
+              aria-label="Sélecteur année"
+            />
+          )}
         </div>
 
-        <input
-          type="number"
-          className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
-          value={year}
-          onChange={(e) => setYear(Number(e.target.value))}
-          placeholder="Année"
-          min={2000}
-          max={2100}
-          aria-label="Sélecteur année"
-        />
-      </>
-    )}
-
-    {/* Sélecteur année quand period = annee */}
-    {period === 'annee' && (
-      <input
-        type="number"
-        className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
-        value={year}
-        onChange={(e) => setYear(Number(e.target.value))}
-        placeholder="Année"
-        min={2000}
-        max={2100}
-        aria-label="Sélecteur année"
-      />
-    )}
-  </div>
-
-  {/* Résumé sélection */}
-  <div className="flex items-center gap-3">
-    <span className="hidden md:inline text-xs text-gray-500">Sélection :</span>
-    <span className="inline-flex items-center gap-2 rounded-full bg-gray-50 px-4 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-inset ring-gray-200">
-      <i className="pi pi-clock text-xs text-gray-500" />
-      <span className="whitespace-nowrap">
-        {PERIOD_LABELS[period]} • {selectedPeriodText}
-      </span>
-    </span>
-  </div>
-</div>
-
+        {/* Résumé sélection */}
+        <div className="flex items-center gap-3">
+          <span className="hidden md:inline text-xs text-gray-500">Sélection :</span>
+          <span className="inline-flex items-center gap-2 rounded-full bg-gray-50 px-4 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-inset ring-gray-200">
+            <i className="pi pi-clock text-xs text-gray-500" />
+            <span className="whitespace-nowrap">
+              {PERIOD_LABELS[period]} • {selectedPeriodText}
+            </span>
+          </span>
+        </div>
+      </div>
 
       {/* KPIs */}
       <div className="flex flex-row gap-5 mb-6">
@@ -419,7 +453,9 @@ const GerantDashboard: React.FC = () => {
                       <h3 className="text-xs font-semibold text-green-700 uppercase tracking-wider">
                         Commandes non livrées (CDF)
                       </h3>
-                      <span className="text-green-600 text-xs font-medium px-2 py-1 rounded-full">•</span>
+                      <span className="text-green-600 text-xs font-medium px-2 py-1 rounded-full">
+                        •
+                      </span>
                     </div>
                     <div className="mt-2">
                       <div className="text-2xl font-bold text-green-900">
@@ -434,7 +470,10 @@ const GerantDashboard: React.FC = () => {
               </div>
             )}
             <div className="h-1 w-full bg-green-100 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-green-400 to-green-500" style={{ width: '30%' }} />
+              <div
+                className="h-full bg-gradient-to-r from-green-400 to-green-500"
+                style={{ width: '30%' }}
+              />
             </div>
           </div>
         </div>
@@ -452,7 +491,9 @@ const GerantDashboard: React.FC = () => {
                       <h3 className="text-xs font-semibold text-red-700 uppercase tracking-wider">
                         Stock en rupture
                       </h3>
-                      <span className="text-red-600 text-xs font-medium px-2 py-1 rounded-full">•</span>
+                      <span className="text-red-600 text-xs font-medium px-2 py-1 rounded-full">
+                        •
+                      </span>
                     </div>
                     <div className="mt-2">
                       <div className="text-2xl font-bold text-red-900">
@@ -467,7 +508,10 @@ const GerantDashboard: React.FC = () => {
               </div>
             )}
             <div className="h-1 w-full bg-red-100 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-red-400 to-red-500" style={{ width: '30%' }} />
+              <div
+                className="h-full bg-gradient-to-r from-red-400 to-red-500"
+                style={{ width: '30%' }}
+              />
             </div>
           </div>
         </div>
@@ -485,7 +529,9 @@ const GerantDashboard: React.FC = () => {
                       <h3 className="text-xs font-semibold text-orange-700 uppercase tracking-wider">
                         Produits commandés
                       </h3>
-                      <span className="text-orange-600 text-xs font-medium px-2 py-1 rounded-full">•</span>
+                      <span className="text-orange-600 text-xs font-medium px-2 py-1 rounded-full">
+                        •
+                      </span>
                     </div>
                     <div className="mt-2">
                       <div className="text-2xl font-bold text-orange-900">
@@ -500,7 +546,10 @@ const GerantDashboard: React.FC = () => {
               </div>
             )}
             <div className="h-1 w-full bg-orange-100 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-orange-400 to-orange-500" style={{ width: '30%' }} />
+              <div
+                className="h-full bg-gradient-to-r from-orange-400 to-orange-500"
+                style={{ width: '30%' }}
+              />
             </div>
           </div>
         </div>

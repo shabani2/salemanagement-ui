@@ -35,7 +35,20 @@ import {
 /* ----------------------------- Utils ----------------------------- */
 type Period = 'tout' | 'jour' | 'semaine' | 'mois' | 'annee';
 
-const MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+const MONTHS_SHORT = [
+  'Jan',
+  'Fév',
+  'Mar',
+  'Avr',
+  'Mai',
+  'Juin',
+  'Juil',
+  'Aoû',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Déc',
+];
 const PERIOD_LABELS: Record<Period, string> = {
   tout: 'Tout',
   jour: 'Jour',
@@ -64,7 +77,9 @@ const VendeurDashboard: React.FC = () => {
   const userId: string | undefined = user?._id;
 
   // --- store
-  const mouvements = useSelector((s: RootState) => asArray<MouvementStock>(selectAllMouvementsStock(s)));
+  const mouvements = useSelector((s: RootState) =>
+    asArray<MouvementStock>(selectAllMouvementsStock(s))
+  );
   const mvtStatus = useSelector(selectMouvementStockStatus);
   const loading = mvtStatus === 'loading';
 
@@ -127,8 +142,8 @@ const VendeurDashboard: React.FC = () => {
         includeTotal: true,
         sortBy: 'createdAt',
         order: 'desc',
-        user: userId,          // ✅ filtre par vendeur
-        dateFrom,              // ✅ filtre temps
+        user: userId, // ✅ filtre par vendeur
+        dateFrom, // ✅ filtre temps
         dateTo,
       })
     );
@@ -147,7 +162,10 @@ const VendeurDashboard: React.FC = () => {
 
   // KPI: CA = somme des montants des Ventes sur la période pour ce user
   const totalVentes = useMemo(
-    () => mouvements.filter((m) => m?.type === 'Vente').reduce((acc, m) => acc + (Number(m?.montant) || 0), 0),
+    () =>
+      mouvements
+        .filter((m) => m?.type === 'Vente')
+        .reduce((acc, m) => acc + (Number(m?.montant) || 0), 0),
     [mouvements]
   );
 
@@ -207,7 +225,11 @@ const VendeurDashboard: React.FC = () => {
 
   /* ------------------------------ Helpers UI ------------------------------ */
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'CDF', minimumFractionDigits: 0 }).format(value || 0);
+    new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'CDF',
+      minimumFractionDigits: 0,
+    }).format(value || 0);
 
   const produitBodyTemplate = (row: AggRow) => row?.produit?.nom || 'Produit inconnu';
   const quantiteBodyTemplate = (row: AggRow) => (
@@ -234,100 +256,99 @@ const VendeurDashboard: React.FC = () => {
       {/* Filtre temporel (design moderne + résumé) */}
       <div className="flex flex-wrap items-center gap-3 justify-between rounded-xl border border-gray-200 bg-white p-3 shadow-sm mb-5 bg-gradient-to-br from-green-50 to-white">
         <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-lg shadow-md border border-gray-200 bg-gradient-to-br from-green-50 to-white">
-  <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1.5 text-sm font-semibold text-green-800 ring-1 ring-inset ring-green-200">
-    <i className="pi pi-calendar-clock text-base" aria-hidden="true" />
-    Filtre
-  </span>
+          <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1.5 text-sm font-semibold text-green-800 ring-1 ring-inset ring-green-200">
+            <i className="pi pi-calendar-clock text-base" aria-hidden="true" />
+            Filtre
+          </span>
 
-  {/* Sélecteur période */}
-  <div className="relative w-40">
-    <select
-      className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
-      value={period}
-      onChange={(e) => {
-        const p = e.target.value as Period;
-        setPeriod(p);
-        if (p === 'mois') {
-          if (month < 0 || month > 11) setMonth(new Date().getMonth());
-          if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
-        }
-        if (p === 'annee') {
-          if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
-        }
-      }}
-      aria-label="Sélecteur période"
-    >
-      <option value="tout">Tout</option>
-      <option value="jour">Jour</option>
-      <option value="semaine">Semaine</option>
-      <option value="mois">Mois</option>
-      <option value="annee">Année</option>
-    </select>
-    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-      <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
-    </span>
-  </div>
+          {/* Sélecteur période */}
+          <div className="relative w-40">
+            <select
+              className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
+              value={period}
+              onChange={(e) => {
+                const p = e.target.value as Period;
+                setPeriod(p);
+                if (p === 'mois') {
+                  if (month < 0 || month > 11) setMonth(new Date().getMonth());
+                  if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
+                }
+                if (p === 'annee') {
+                  if (year < 2000 || year > 2100) setYear(new Date().getFullYear());
+                }
+              }}
+              aria-label="Sélecteur période"
+            >
+              <option value="tout">Tout</option>
+              <option value="jour">Jour</option>
+              <option value="semaine">Semaine</option>
+              <option value="mois">Mois</option>
+              <option value="annee">Année</option>
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
+            </span>
+          </div>
 
-  {/* Sélecteur mois + année lorsque period = mois */}
-  {period === 'mois' && (
-    <>
-      <div className="relative w-28">
-        <select
-          className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
-          value={month}
-          onChange={(e) => setMonth(Number(e.target.value))}
-          aria-label="Sélecteur mois"
-        >
-          {MONTHS_SHORT.map((m, i) => (
-            <option key={m} value={i}>
-              {m}
-            </option>
-          ))}
-        </select>
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-          <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
-        </span>
-      </div>
+          {/* Sélecteur mois + année lorsque period = mois */}
+          {period === 'mois' && (
+            <>
+              <div className="relative w-28">
+                <select
+                  className="appearance-none border border-gray-300 rounded-md px-4 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out pr-10 cursor-pointer"
+                  value={month}
+                  onChange={(e) => setMonth(Number(e.target.value))}
+                  aria-label="Sélecteur mois"
+                >
+                  {MONTHS_SHORT.map((m, i) => (
+                    <option key={m} value={i}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <i className="pi pi-chevron-down text-sm" aria-hidden="true" />
+                </span>
+              </div>
 
-      <input
-        type="number"
-        className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
-        value={year}
-        onChange={(e) => setYear(Number(e.target.value))}
-        placeholder="Année"
-        min={2000}
-        max={2100}
-        aria-label="Sélecteur année"
-      />
-    </>
-  )}
+              <input
+                type="number"
+                className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                placeholder="Année"
+                min={2000}
+                max={2100}
+                aria-label="Sélecteur année"
+              />
+            </>
+          )}
 
-  {/* Sélecteur année lorsque period = annee */}
-  {period === 'annee' && (
-    <input
-      type="number"
-      className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
-      value={year}
-      onChange={(e) => setYear(Number(e.target.value))}
-      placeholder="Année"
-      min={2000}
-      max={2100}
-      aria-label="Sélecteur année"
-    />
-  )}
-</div>
+          {/* Sélecteur année lorsque period = annee */}
+          {period === 'annee' && (
+            <input
+              type="number"
+              className="border border-gray-300 rounded-md px-4 py-2 text-sm w-28 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 ease-in-out"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              placeholder="Année"
+              min={2000}
+              max={2100}
+              aria-label="Sélecteur année"
+            />
+          )}
+        </div>
 
-
-      {/* Résumé sélection */}
-  <div className="flex items-center gap-3">
-    <span className="hidden md:inline text-xs text-gray-500">Sélection :</span>
-    <span className="inline-flex items-center gap-2 rounded-full bg-gray-50 px-4 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-inset ring-gray-200">
-      <i className="pi pi-clock text-xs text-gray-500" />
-      <span className="whitespace-nowrap">
-        {PERIOD_LABELS[period]} • {selectedPeriodText}
-      </span>
-    </span>
-  </div>
+        {/* Résumé sélection */}
+        <div className="flex items-center gap-3">
+          <span className="hidden md:inline text-xs text-gray-500">Sélection :</span>
+          <span className="inline-flex items-center gap-2 rounded-full bg-gray-50 px-4 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-inset ring-gray-200">
+            <i className="pi pi-clock text-xs text-gray-500" />
+            <span className="whitespace-nowrap">
+              {PERIOD_LABELS[period]} • {selectedPeriodText}
+            </span>
+          </span>
+        </div>
       </div>
 
       {/* Section KPIs */}
@@ -345,7 +366,9 @@ const VendeurDashboard: React.FC = () => {
                       <h3 className="text-xs font-semibold text-green-700 uppercase tracking-wider">
                         Chiffre d&apos;affaires
                       </h3>
-                      <span className="text-green-600 text-xs font-medium px-2 py-1 rounded-full">•</span>
+                      <span className="text-green-600 text-xs font-medium px-2 py-1 rounded-full">
+                        •
+                      </span>
                     </div>
                     <div className="mt-2">
                       <div className="text-2xl font-bold text-green-900">
@@ -360,7 +383,10 @@ const VendeurDashboard: React.FC = () => {
               </div>
             )}
             <div className="h-1 w-full bg-green-100 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-green-400 to-green-500" style={{ width: '30%' }} />
+              <div
+                className="h-full bg-gradient-to-r from-green-400 to-green-500"
+                style={{ width: '30%' }}
+              />
             </div>
           </div>
         </div>
@@ -380,7 +406,9 @@ const VendeurDashboard: React.FC = () => {
                       </h3>
                     </div>
                     <div className="mt-2">
-                      <div className="text-xl font-bold text-green-900">{mostSold.produit?.nom || 'N/A'}</div>
+                      <div className="text-xl font-bold text-green-900">
+                        {mostSold.produit?.nom || 'N/A'}
+                      </div>
                       <div className="text-green-700 text-sm mt-1">
                         {mostSold.totalQuantite.toLocaleString('fr-FR')} unités
                       </div>
@@ -398,7 +426,10 @@ const VendeurDashboard: React.FC = () => {
               </div>
             )}
             <div className="h-1 w-full bg-green-100 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-green-400 to-green-500" style={{ width: '45%' }} />
+              <div
+                className="h-full bg-gradient-to-r from-green-400 to-green-500"
+                style={{ width: '45%' }}
+              />
             </div>
           </div>
         </div>
@@ -418,7 +449,9 @@ const VendeurDashboard: React.FC = () => {
                       </h3>
                     </div>
                     <div className="mt-2">
-                      <div className="text-xl font-bold text-orange-900">{leastSold.produit?.nom || 'N/A'}</div>
+                      <div className="text-xl font-bold text-orange-900">
+                        {leastSold.produit?.nom || 'N/A'}
+                      </div>
                       <div className="text-orange-700 text-sm mt-1">
                         {leastSold.totalQuantite.toLocaleString('fr-FR')} unités
                       </div>
@@ -436,7 +469,10 @@ const VendeurDashboard: React.FC = () => {
               </div>
             )}
             <div className="h-1 w-full bg-orange-100 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-orange-400 to-orange-500" style={{ width: '15%' }} />
+              <div
+                className="h-full bg-gradient-to-r from-orange-400 to-orange-500"
+                style={{ width: '15%' }}
+              />
             </div>
           </div>
         </div>
@@ -482,7 +518,7 @@ const VendeurDashboard: React.FC = () => {
                       src={url}
                       alt={row?.produit?.nom || ''}
                       className="rounded-full w-full h-full object-cover border border-gray-100"
-                      onError={(e) => ((e.currentTarget.style.display = 'none'))}
+                      onError={(e) => (e.currentTarget.style.display = 'none')}
                     />
                   </div>
                 ) : (
@@ -493,8 +529,20 @@ const VendeurDashboard: React.FC = () => {
             />
 
             <Column field="produit.nom" header="Produit" body={produitBodyTemplate} sortable />
-            <Column field="totalQuantite" header="Quantité vendue" body={quantiteBodyTemplate} align="center" sortable />
-            <Column field="totalMontant" header="Montant total" body={montantBodyTemplate} align="right" sortable />
+            <Column
+              field="totalQuantite"
+              header="Quantité vendue"
+              body={quantiteBodyTemplate}
+              align="center"
+              sortable
+            />
+            <Column
+              field="totalMontant"
+              header="Montant total"
+              body={montantBodyTemplate}
+              align="right"
+              sortable
+            />
             <Column field="count" header="Transactions" align="center" sortable />
           </DataTable>
         </Card>
