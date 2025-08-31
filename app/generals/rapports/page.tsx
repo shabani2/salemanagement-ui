@@ -163,7 +163,7 @@ const Page: React.FC = () => {
   const total = meta?.total ?? 0;
   //@ts-ignore
   const totalPages =
-  //@ts-expect-error --hello here
+    //@ts-expect-error --hello here
     meta?.totalPages ?? meta?.pages ?? Math.max(1, Math.ceil(total / Math.max(1, currentLimit)));
   const firstIndex = (meta?.skip ?? ((meta?.page ?? page) - 1) * currentLimit) | 0;
 

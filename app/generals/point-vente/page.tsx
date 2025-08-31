@@ -19,7 +19,8 @@ import {
   addPointVente,
   deletePointVente as deletePointVenteThunk,
   fetchPointVentes,
-  fetchPointVentesByRegionId, // ⬅️ import du thunk AdminRegion
+  fetchPointVentesByRegionId,
+  searchPointVentes, // 👈 import recherche
   selectAllPointVentes,
   selectPointVenteMeta,
   selectPointVenteStatus,
@@ -62,6 +63,7 @@ export default function PointVenteManagement() {
   const meta = useSelector(selectPointVenteMeta);
   const status = useSelector(selectPointVenteStatus);
   const loading = status === 'loading';
+  const [isLoadingRegions, setIsLoadingRegions] = useState(false);
 
   // Requête serveur (params)
   const [page, setPage] = useState(1); // 1-based
@@ -139,38 +141,60 @@ export default function PointVenteManagement() {
   }, [isAdminRegion, forcedRegionId]);
 
   /* ------------------------------ Fetch serveur ----------------------------- */
+  const inSearch = isNonEmptyString(searchText);
+
   // helper pour fetch à une page précise (utile après suppression ou "Filtrer")
   const fetchAtPage = useCallback(
     (targetPage: number) => {
+      const common = {
+        page: targetPage,
+        limit: rows,
+        sortBy,
+        order,
+        includeTotal: true,
+        includeStock: false,
+      } as const;
+
       if (isAdminRegion && forcedRegionId) {
+        // AdminRegion : route /region/:id (gère aussi q)
         dispatch(
           fetchPointVentesByRegionId({
             regionId: forcedRegionId,
-            page: targetPage,
-            limit: rows,
             q: searchText || undefined,
-            sortBy,
-            order,
-            includeTotal: true,
-            includeStock: false,
+            ...common,
+          }) as any
+        );
+      } else if (inSearch) {
+        // Recherche globale : /pointventes/search
+        dispatch(
+          searchPointVentes({
+            q: searchText,
+            region: regionFilter || undefined,
+            ...common,
           }) as any
         );
       } else {
+        // Liste globale : /pointventes
         dispatch(
           fetchPointVentes({
-            page: targetPage,
-            limit: rows,
-            q: searchText || undefined,
+            q: undefined,
             region: regionFilter || undefined,
-            sortBy,
-            order,
-            includeTotal: true,
-            includeStock: false,
+            ...common,
           }) as any
         );
       }
     },
-    [dispatch, isAdminRegion, forcedRegionId, rows, searchText, regionFilter, sortBy, order]
+    [
+      dispatch,
+      isAdminRegion,
+      forcedRegionId,
+      rows,
+      sortBy,
+      order,
+      searchText,
+      inSearch,
+      regionFilter,
+    ]
   );
 
   // fetch "courant" basé sur l'état `page`
@@ -201,12 +225,15 @@ export default function PointVenteManagement() {
 
   /* --------------------------- Pagination custom ---------------------------- */
   const total = meta?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / rows));
-  const firstIndex = (page - 1) * rows;
+  const totalPages = meta?.totalPages ?? Math.max(1, Math.ceil(total / rows));
+  const currentPage = meta?.page ?? page;
+  const canPrev = Boolean(meta?.hasPrev ?? currentPage > 1);
+  const canNext = Boolean(meta?.hasNext ?? currentPage < totalPages);
+  const firstIndex = (currentPage - 1) * rows;
 
   const goTo = (p: number) => {
     const next = Math.min(Math.max(1, p), totalPages);
-    if (next !== page) {
+    if (next !== currentPage) {
       setPage(next);
       fetchAtPage(next);
     }
@@ -216,7 +243,7 @@ export default function PointVenteManagement() {
     const newRows = Number(n);
     setRows(newRows);
     const newTotalPages = Math.max(1, Math.ceil(total / newRows));
-    const fixedPage = Math.min(page, newTotalPages);
+    const fixedPage = Math.min(currentPage, newTotalPages);
     setPage(fixedPage);
     fetchAtPage(fixedPage);
   };
@@ -268,7 +295,7 @@ export default function PointVenteManagement() {
         detail: 'Nom, Adresse et Région sont obligatoires',
         life: 2500,
       });
-      setLoading1(false); // ⬅️ éviter spinner bloqué
+      setLoading1(false);
       return;
     }
     const r = await dispatch(addPointVente(form as any) as any);
@@ -354,9 +381,10 @@ export default function PointVenteManagement() {
         detail: 'Point de vente supprimé',
         life: 2000,
       });
-      // reculer si la page devient vide
       const nextPage =
-        pointsVente.length === 1 && (meta?.page ?? 1) > 1 ? meta!.page - 1 : (meta?.page ?? page);
+        pointsVente.length === 1 && (meta?.page ?? 1) > 1
+          ? (meta!.page as number) - 1
+          : (meta?.page ?? page);
       setPage(nextPage);
       fetchAtPage(nextPage);
     } else {
@@ -395,7 +423,7 @@ export default function PointVenteManagement() {
           const r = await dispatch(
             exportFile({
               url: '/export/pointventes',
-              mouvements: pointsVente, // idéalement: endpoint backend d’export avec les mêmes filtres
+              mouvements: pointsVente,
               fileType,
             }) as any
           );
@@ -580,7 +608,7 @@ export default function PointVenteManagement() {
           {/* ---------- PAGINATION TAILWIND ----------- */}
           <div className="flex items-center justify-between mt-3">
             <div className="text-sm text-gray-700">
-              Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+              Page <span className="font-semibold">{currentPage}</span> / {totalPages} —{' '}
               <span className="font-semibold">{total}</span> éléments
             </div>
 
@@ -602,25 +630,25 @@ export default function PointVenteManagement() {
                 label="«"
                 className="!bg-gray-200 !text-gray-800 px-2 py-1"
                 onClick={() => goTo(1)}
-                disabled={page <= 1}
+                disabled={!canPrev}
               />
               <Button
                 label="‹"
                 className="!bg-gray-200 !text-gray-800 px-2 py-1"
-                onClick={() => goTo(page - 1)}
-                disabled={page <= 1}
+                onClick={() => goTo(currentPage - 1)}
+                disabled={!canPrev}
               />
               <Button
                 label="›"
                 className="!bg-gray-200 !text-gray-800 px-2 py-1"
-                onClick={() => goTo(page + 1)}
-                disabled={page >= totalPages}
+                onClick={() => goTo(currentPage + 1)}
+                disabled={!canNext}
               />
               <Button
                 label="»"
                 className="!bg-gray-200 !text-gray-800 px-2 py-1"
                 onClick={() => goTo(totalPages)}
-                disabled={page >= totalPages}
+                disabled={!canNext}
               />
             </div>
           </div>
@@ -676,19 +704,8 @@ export default function PointVenteManagement() {
           <div className="flex justify-end gap-2">
             <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
             <Button
-              //@ts-ignore
-              label={
-                loading1 ? (
-                  <div className="flex items-center gap-2">
-                    <i className="pi pi-spinner pi-spin"></i>
-                    {dialogType === 'edit' ? 'Modifier' : 'Créer'}
-                  </div>
-                ) : dialogType === 'edit' ? (
-                  'Modifier'
-                ) : (
-                  'Créer'
-                )
-              }
+              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              icon={loading1 ? 'pi pi-spinner pi-spin' : undefined}
               disabled={loading1}
               className="!bg-green-700 text-white"
               onClick={dialogType === 'edit' ? handleUpdate : handleCreate}
