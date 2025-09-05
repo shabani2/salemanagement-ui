@@ -33,7 +33,7 @@ import {
 
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 
-import { checkStock } from '@/stores/slices/stock/stockSlice';
+import { checkStock, CheckStockParams } from '@/stores/slices/stock/stockSlice';
 import { User } from '@/Models/UserType';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { downloadPdfFile, generateStockPdf } from '@/stores/slices/document/pdfGenerator';
@@ -67,6 +67,36 @@ const extractProduitList = (payload: any): Produit[] => {
     if (Array.isArray(payload.items)) return payload.items as Produit[];
   }
   return [];
+};
+
+/* ----------------------------- Scope commun ----------------------------- */
+
+const ROLES_PV = ['AdminPointVente', 'Vendeur', 'Logisticien'] as const;
+
+type Scope = { depotCentral: true } | { regionId: string } | { pointVenteId: string };
+
+const computeScope = ({
+  op,
+  isSuperAdmin,
+  isAdminRegion,
+  regionId,
+  pointVenteId,
+}: {
+  op: string;
+  isSuperAdmin: boolean;
+  isAdminRegion: boolean;
+  regionId?: string | null;
+  pointVenteId?: string | null;
+}): Scope => {
+  if (isSuperAdmin) return { depotCentral: true };
+  if (isAdminRegion && isNonEmptyString(regionId)) return { regionId: regionId! };
+  if (isNonEmptyString(pointVenteId)) return { pointVenteId: pointVenteId! };
+
+  // filet de sécurité pour op critiques
+  if (['Livraison', 'Vente', 'Sortie'].includes(op)) return { depotCentral: true };
+
+  // autres types (ex: Entrée/Commande) → default central
+  return { depotCentral: true };
 };
 
 /* ----------------------------- Types ------------------------------- */
@@ -223,7 +253,7 @@ const Page = () => {
   const isPointVenteLocked = !!(user && rolesWithFixedPointVente.includes(user.role as any));
 
   useEffect(() => {
-    // aligne PV si verrouillé
+    // aligne PV si verrouillé (techniquement « fixé » ; texte UI ajusté ailleurs)
     if (isPointVenteLocked && user?.pointVente && pointsVente.length > 0) {
       const targetId = typeof user.pointVente === 'string' ? user.pointVente : user.pointVente?._id;
       if (targetId && getValues('pointVente') !== targetId) setValue('pointVente', targetId);
@@ -245,6 +275,12 @@ const Page = () => {
       if (Number.isFinite(tf) && tf > 0) setValue('tauxFranc', tf);
     } catch {}
   }, [setValue]);
+
+  // Forcer depotCentral=true dans le form pour SuperAdmin (incluant Entrée)
+  useEffect(() => {
+    if (isSuperAdmin) setValue('depotCentral', true, { shouldDirty: false });
+    else if (isAdminRegion) setValue('depotCentral', false, { shouldDirty: false });
+  }, [isSuperAdmin, isAdminRegion, setValue, type]);
 
   /* ------------------------------ UI helpers ------------------------------- */
   const filteredTypeOptions = useMemo(
@@ -301,107 +337,54 @@ const Page = () => {
   /* --------------------------- Validation de stock ------------------------- */
   const validateStock = useCallback(
     async (value: number) => {
+      // --- Entrées invalides / cas simples ---
       const produitId = getValues('formulaire.produit');
-      if (!isNonEmptyString(produitId) || !value || value <= 0) return 'Quantité invalide';
+      if (!isNonEmptyString(produitId) || !Number.isFinite(value) || value <= 0) {
+        return 'Quantité invalide';
+      }
 
-      const op = getValues('type');
+      const op = getValues('type') as string;
       if (op === 'Entrée' || op === 'Commande') return true;
 
+      // point de vente sélectionné: string | {_id: string}
       const pvId =
         typeof selectedPointVente === 'string'
           ? selectedPointVente
           : (selectedPointVente as any)?._id;
 
-      // --- VENTE / SORTIE ---
-      if (['Vente', 'Sortie'].includes(op)) {
-        try {
-          // base commun
-          const base = { type: op, produitId, quantite: value };
+      // portée normalisée par rôle (SA > Région > PV)
+      const scope = computeScope({
+        op,
+        isSuperAdmin,
+        isAdminRegion,
+        regionId,
+        pointVenteId: pvId ?? null,
+      });
 
-          // SuperAdmin : stock central
-          if (isSuperAdmin) {
-            const result = await dispatch(checkStock({ ...base, depotCentral: true })).unwrap();
-            if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
-              return `Stock insuffisant (central). Disponible: ${safeNumber(result?.quantiteDisponible, 0)}`;
-            }
-            return true;
-          }
+      const payload: CheckStockParams = {
+        type: op,
+        produitId,
+        quantite: value,
+        ...('depotCentral' in scope && scope.depotCentral ? { depotCentral: true } : {}),
+        ...('regionId' in scope ? { regionId: scope.regionId } : {}),
+        ...('pointVenteId' in scope ? { pointVenteId: scope.pointVenteId } : {}),
+      };
 
-          // AdminRegion : stock de la région
-          if (isAdminRegion && isNonEmptyString(regionId)) {
-            const result = await dispatch(checkStock({ ...base, regionId })).unwrap();
-            if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
-              return `Stock insuffisant (région). Disponible: ${safeNumber(result?.quantiteDisponible, 0)}`;
-            }
-            return true;
-          }
-
-          // Autres rôles : stock du point de vente
-          if (pvId) {
-            const result = await dispatch(checkStock({ ...base, pointVenteId: pvId })).unwrap();
-            if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
-              return `Stock insuffisant (point de vente). Disponible: ${safeNumber(result?.quantiteDisponible, 0)}`;
-            }
-            return true;
-          }
-
-          return 'Périmètre de stock introuvable';
-        } catch {
-          return 'Vérification de stock indisponible';
-        }
-      }
-
-      // --- LIVRAISON (SuperAdmin -> région) : source = dépôt central ---
-      if (op === 'Livraison' && isSuperAdmin && livraisonCible === 'region') {
-        if (!isNonEmptyString(selectedRegionLivraison || '')) {
-          return 'Sélectionnez une région de livraison';
-        }
-        try {
-          const result = await dispatch(
-            checkStock({
-              type: op,
-              produitId,
-              quantite: value,
-              depotCentral: true, // on vérifie la source centrale
-            })
-          ).unwrap();
-          if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
-            return `Stock central insuffisant. Disponible: ${safeNumber(result?.quantiteDisponible, 0)}`;
-          }
-          return true;
-        } catch {
-          return 'Vérification de stock indisponible';
-        }
-      }
-
-      // --- CAS PAR DÉFAUT (Livraison -> PV / rôles PV, etc.) ---
       try {
-        if (!regionId && !pvId) return 'Aucun périmètre de stock (région/point de vente).';
-
-        const result = await dispatch(
-          isNonEmptyString(regionId)
-            ? checkStock({ type: op, produitId, quantite: value, regionId })
-            : checkStock({ type: op, produitId, quantite: value, pointVenteId: pvId })
-        ).unwrap();
-
-        if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < value) {
-          return `Stock disponible : ${safeNumber(result?.quantiteDisponible, 0)}`;
+        const result = await dispatch(checkStock(payload)).unwrap();
+        const dispo = safeNumber(result?.quantiteDisponible, 0);
+        if (!result?.success) return 'Vérification de stock indisponible';
+        if (!result?.suffisant || dispo < value) {
+          const label =
+            'depotCentral' in scope ? 'central' : 'regionId' in scope ? 'région' : 'point de vente';
+          return `Stock insuffisant (${label}). Disponible: ${dispo}`;
         }
         return true;
       } catch {
         return 'Vérification de stock indisponible';
       }
     },
-    [
-      dispatch,
-      selectedPointVente,
-      getValues,
-      regionId,
-      isSuperAdmin,
-      isAdminRegion,
-      livraisonCible,
-      selectedRegionLivraison,
-    ]
+    [dispatch, getValues, selectedPointVente, isSuperAdmin, isAdminRegion, regionId]
   );
 
   /* --------------------------- Autocomplete produits ----------------------- */
@@ -465,7 +448,7 @@ const Page = () => {
       // garde-fous de périmètre
       if (['Vente', 'Sortie'].includes(data.type)) {
         if (isSuperAdmin) {
-          // OK central
+          // SA => central
         } else if (isAdminRegion) {
           if (!isNonEmptyString(regionId)) {
             toast.current?.show({
@@ -507,31 +490,39 @@ const Page = () => {
           const regId = getId(data.region as any) ?? null;
           const userId = getId(data.user as any) ?? null;
 
-          // périmètre final selon rôle/type
-          let depotCentral = !!data.depotCentral;
-          let pointVente: string | null = pvId;
-          let region: string | null = regId;
+          // source normalisée (SA -> central ; AR -> region ; PV-roles -> pv)
+          const scope = computeScope({
+            op: data.type,
+            isSuperAdmin,
+            isAdminRegion,
+            regionId: regId,
+            pointVenteId: pvId,
+          });
 
-          if (['Vente', 'Sortie'].includes(data.type)) {
-            if (isSuperAdmin) {
-              depotCentral = true;
-              pointVente = null; // interdit PV
-            }
-            if (isAdminRegion) {
-              depotCentral = false;
-              pointVente = null;
-              // region = regId (déjà défini)
-            }
+          // champs du doc mouvement (source + destination éventuelle pour Livraison)
+          let depotCentral = false;
+          let region: string | null = null;
+          let pointVente: string | null = null;
+
+          if ('depotCentral' in scope && scope.depotCentral) {
+            depotCentral = true;
+          } else if ('regionId' in scope) {
+            region = scope.regionId;
+          } else if ('pointVenteId' in scope) {
+            pointVente = scope.pointVenteId;
           }
 
-          if (data.type === 'Livraison' && isSuperAdmin) {
-            if (livraisonCible === 'region') {
-              depotCentral = true; // on sort du central
-              pointVente = null;
+          // Livraison: destination via UI
+          if (data.type === 'Livraison') {
+            if (isSuperAdmin && livraisonCible === 'region') {
+              depotCentral = true; // source central
               region = selectedRegionLivraison || null; // destination région
-            } else {
-              // livraison vers PV : garder pointVente
+              pointVente = null;
+            } else if (isSuperAdmin && livraisonCible === 'pointVente') {
+              depotCentral = true; // source central
+              pointVente = pvId;
             }
+            // AR: region (source) -> PV (destination) si PV fourni (via UI : pointVente déjà posé)
           }
 
           return {
@@ -544,6 +535,7 @@ const Page = () => {
             pointVente,
             region,
             user: userId,
+            // Entrée/Vente/Sortie validées à la création ; Livraison créditera la destination à l'update (statut true)
             statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type),
           };
         });
@@ -747,7 +739,7 @@ const Page = () => {
                   )}
                 </div>
 
-                {/* Entrée : SuperAdmin/AR comme avant */}
+                {/* Entrée : SA/AR */}
                 {type === 'Entrée' && (
                   <div className="mt-4">
                     {isSuperAdmin ? (
@@ -756,7 +748,9 @@ const Page = () => {
                           <input
                             type="checkbox"
                             {...register('depotCentral')}
-                            disabled={!type}
+                            checked
+                            onChange={() => {}}
+                            disabled
                             className="h-4 w-4 text-blue-600 rounded"
                           />
                           <i className="pi pi-building text-blue-600"></i>
@@ -780,7 +774,7 @@ const Page = () => {
                   </div>
                 )}
 
-                {/* Vente/Sortie : SA/AR -> central/région affichage */}
+                {/* Vente/Sortie : SA/AR */}
                 {isVenteOrSortie && (
                   <div className="mt-4">
                     {isSuperAdmin && (
@@ -794,7 +788,7 @@ const Page = () => {
                             className="h-4 w-4 text-blue-600 rounded"
                           />
                           <i className="pi pi-building text-blue-600"></i>
-                          Dépôt central (verrouillé)
+                          Dépôt central
                         </label>
                       </div>
                     )}
@@ -863,7 +857,7 @@ const Page = () => {
                   </div>
                 )}
 
-                {/* Point de vente pour autres opérations (sauf Vente/Sortie SA/AR et Livraison->région) */}
+                {/* Point de vente (masqué pour Vente/Sortie SA/AR et Livraison->région) */}
                 {type &&
                   type !== 'Entrée' &&
                   !(
@@ -945,7 +939,7 @@ const Page = () => {
                 {/* Recherche Produit + Quantité */}
                 <div className="space-y-6 mt-6">
                   <div className="grid grid-cols-1 gap-4">
-                    {/* Recherche Produit (PrimeReact AutoComplete) */}
+                    {/* Recherche Produit */}
                     <div>
                       <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
                         <i className="pi pi-search text-blue-500"></i>
@@ -957,9 +951,9 @@ const Page = () => {
                         control={control}
                         render={({ field }) => (
                           <AutoComplete
-                            value={searchText} // texte affiché (nom)
-                            suggestions={productSuggestions} // objets Produit
-                            completeMethod={completeProduits} // appelé à chaque frappe
+                            value={searchText}
+                            suggestions={productSuggestions}
+                            completeMethod={completeProduits}
                             delay={200}
                             field="nom"
                             dropdown
@@ -969,16 +963,15 @@ const Page = () => {
                             appendTo={typeof window !== 'undefined' ? document.body : undefined}
                             panelClassName="z-50"
                             onChange={(e) => {
-                              setSearchText(String(e.value ?? '')); // tape libre
-                              // ne pas toucher field.onChange ici (on stocke l'id seulement au select)
+                              setSearchText(String(e.value ?? ''));
                               if (!e.value) setProductSuggestions([]);
                             }}
                             onSelect={(e) => {
                               const p: Produit = e.value;
                               if (p && p._id) {
                                 productCacheRef.current[p._id] = p;
-                                field.onChange(p._id); // <-- on stocke l’ID dans le form
-                                setSearchText(p.nom); // <-- on affiche le nom
+                                field.onChange(p._id);
+                                setSearchText(p.nom);
                                 clearErrors('formulaire.produit');
                               }
                             }}
@@ -1085,7 +1078,7 @@ const Page = () => {
                   </h2>
                 </div>
 
-                {/* Carte PV sélectionné (masquée quand Vente/Sortie SA/AR ou Livraison->région) */}
+                {/* Carte PV sélectionné */}
                 {type &&
                   type !== 'Entrée' &&
                   !(
