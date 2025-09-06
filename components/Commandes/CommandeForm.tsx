@@ -1,5 +1,5 @@
+// components/commande/CommandeForm.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment, react-hooks/exhaustive-deps, @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
@@ -74,8 +74,8 @@ const CommandeForm = () => {
   );
 
   // états
-  const [searchTerm, setSearchTerm] = useState(''); // valeur tapée dans l'AutoComplete
-  const [suggestions, setSuggestions] = useState<Produit[]>([]); // résultats de recherche
+  const [searchTerm, setSearchTerm] = useState('');
+  const [suggestions, setSuggestions] = useState<Produit[]>([]);
   const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
   const [quantite, setQuantite] = useState<number>(1);
 
@@ -84,35 +84,57 @@ const CommandeForm = () => {
   const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(null);
 
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [pvLoading, setPvLoading] = useState<boolean>(false);
+  const [regionsLoading, setRegionsLoading] = useState<boolean>(false);
 
   /* ----------------------------- Boot data ----------------------------- */
   useEffect(() => {
     if (!user?.role) return;
 
-    if (user?.role === 'AdminRegion') {
-      if (user?.region?._id) {
-        dispatch(fetchPointVentesByRegionId(user.region._id));
+    (async () => {
+      try {
+        if (user?.role === 'AdminRegion') {
+          if (user?.region?._id) {
+            setPvLoading(true);
+            await dispatch(
+              fetchPointVentesByRegionId({ regionId: user.region._id, limit: 100000 } as any)
+            );
+            setPvLoading(false);
+          }
+          setRegionsLoading(true);
+          await dispatch(fetchRegions({ limit: 100000 } as any));
+          setRegionsLoading(false);
+        } else if (user?.role === 'SuperAdmin') {
+          setPvLoading(true);
+          await dispatch(fetchPointVentes({ limit: 100000 } as any));
+          setPvLoading(false);
+          setRegionsLoading(true);
+          await dispatch(fetchRegions({ limit: 100000 } as any));
+          setRegionsLoading(false);
+        } else {
+          // autres rôles : récupérer au moins son PV
+          if (user?.pointVente?._id) {
+            await dispatch(fetchPointVenteById(user.pointVente._id));
+          }
+        }
+      } catch {
+        setPvLoading(false);
+        setRegionsLoading(false);
       }
-      dispatch(fetchRegions());
-    } else if (user?.role === 'SuperAdmin') {
-      dispatch(fetchPointVentes());
-      dispatch(fetchRegions());
-    } else {
-      // autres rôles : récupérer au moins son PV
-      if (user?.pointVente?._id) {
-        dispatch(fetchPointVenteById(user.pointVente._id));
-      }
-    }
+    })();
   }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
 
   // quand la région change, charger ses PV
   useEffect(() => {
-    if (selectedRegion?._id) {
-      // @ts-expect-error - compat: external lib types mismatch
-      dispatch(fetchPointVentesByRegionId(selectedRegion._id));
-      // Si on change de région, on “désélectionne” le PV pour éviter incohérence
-      setSelectedPointVente(null);
-    }
+    (async () => {
+      if (selectedRegion?._id) {
+        setPvLoading(true);
+       
+        await dispatch(fetchPointVentesByRegionId({ regionId: selectedRegion._id, limit: 100000 }));
+        setPvLoading(false);
+        setSelectedPointVente(null); // éviter incohérence
+      }
+    })();
   }, [dispatch, selectedRegion?._id]);
 
   /* ------------------------ AutoComplete Produits ------------------------ */
@@ -124,18 +146,10 @@ const CommandeForm = () => {
         return;
       }
       try {
-        // utilise le thunk "searchProduits" (signature: { q, page, limit, includeTotal })
         const action = await dispatch(
-          searchProduits({
-            q,
-            page: 1,
-            limit: 10,
-            includeTotal: false,
-          }) as any
+          searchProduits({ q, page: 1, limit: 10, includeTotal: false }) as any
         );
-
         if ((searchProduits as any).fulfilled.match(action)) {
-          // action.payload peut être [], {data}, {docs}, {items}
           const list = extractProduitList(action.payload);
           setSuggestions(list);
         } else {
@@ -157,8 +171,7 @@ const CommandeForm = () => {
       <div className="flex flex-col">
         <div className="font-semibold text-gray-900">{item.nom}</div>
         <div className="text-xs text-gray-500">
-          fc{Number(item.prix ?? 0).toFixed(2)} •{' '}
-          {(item.categorie as Categorie)?.nom || 'Sans catégorie'}
+          fc{Number(item.prix ?? 0).toFixed(2)} • {(item.categorie as Categorie)?.nom || 'Sans catégorie'}
         </div>
       </div>
     </div>
@@ -192,11 +205,10 @@ const CommandeForm = () => {
       ]);
     }
 
-    // reset champs de saisie
     setSelectedProduit(null);
     setSearchTerm('');
     setQuantite(1);
-    setSuggestions([]); // ferme le panel
+    setSuggestions([]);
   }, [selectedProduit, quantite, commandeProduits]);
 
   const handleRemoveProduit = useCallback((produitId: string) => {
@@ -209,9 +221,8 @@ const CommandeForm = () => {
   }, []);
 
   const canSubmit = useMemo(() => {
-    // la commande doit contenir des produits + une localisation (region | pv | depotCentral)
     const hasItems = commandeProduits.length > 0;
-    const hasLocation = !!selectedRegion || !!selectedPointVente || false; // depotCentral géré à false ici
+    const hasLocation = !!selectedRegion || !!selectedPointVente;
     return hasItems && hasLocation && status !== 'loading';
   }, [commandeProduits.length, selectedRegion, selectedPointVente, status]);
 
@@ -230,22 +241,11 @@ const CommandeForm = () => {
 
   const handleSubmit = useCallback(async () => {
     if (commandeProduits.length === 0) {
-      toast.current?.show({
-        severity: 'warn',
-        summary: 'Commande vide',
-        detail: 'Veuillez ajouter au moins un produit',
-        life: 3000,
-      });
+      toast.current?.show({ severity: 'warn', summary: 'Commande vide', detail: 'Veuillez ajouter au moins un produit', life: 3000 });
       return;
     }
-
     if (!selectedRegion && !selectedPointVente) {
-      toast.current?.show({
-        severity: 'warn',
-        summary: 'Localisation requise',
-        detail: 'Choisissez une région ou un point de vente.',
-        life: 3000,
-      });
+      toast.current?.show({ severity: 'warn', summary: 'Localisation requise', detail: 'Choisissez une région ou un point de vente.', life: 3000 });
       return;
     }
 
@@ -262,8 +262,8 @@ const CommandeForm = () => {
       pointVente: selectedPointVente?._id || undefined,
       depotCentral: false,
       produits: produitsPourAPI,
-      print: true, // ← Demande d'impression
-      format: 'pos80', // ← Optionnel
+      print: true,
+      format: 'pos80',
     };
 
     try {
@@ -272,44 +272,20 @@ const CommandeForm = () => {
 
       if (createCommande.fulfilled.match(resultAction)) {
         const result = resultAction.payload;
-
         if (result.type === 'pdf') {
-          // Télécharger le PDF
           downloadBlob(result.blob, result.filename);
-          toast.current?.show({
-            severity: 'success',
-            summary: 'Succès',
-            detail: 'Commande créée et imprimée avec succès',
-            life: 3000,
-          });
+          toast.current?.show({ severity: 'success', summary: 'Succès', detail: 'Commande créée et imprimée avec succès', life: 3000 });
         } else {
-          toast.current?.show({
-            severity: 'success',
-            summary: 'Succès',
-            detail: 'Commande créée avec succès',
-            life: 3000,
-          });
+          toast.current?.show({ severity: 'success', summary: 'Succès', detail: 'Commande créée avec succès', life: 3000 });
         }
-
-        // Reset
         setCommandeProduits([]);
         setSelectedRegion(null);
         setSelectedPointVente(null);
       } else {
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Erreur',
-          detail: resultAction.payload || 'Erreur lors de la création de la commande',
-          life: 5000,
-        });
+        toast.current?.show({ severity: 'error', summary: 'Erreur', detail: resultAction.payload || 'Erreur lors de la création de la commande', life: 5000 });
       }
     } catch (err) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Erreur',
-        detail: (err as Error).message || 'Erreur inconnue',
-        life: 5000,
-      });
+      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: (err as Error).message || 'Erreur inconnue', life: 5000 });
     } finally {
       setStatus('idle');
     }
@@ -323,10 +299,7 @@ const CommandeForm = () => {
       {/* Header */}
       <header className="flex items-center mb-8 flex-row justify-between">
         <div className="flex items-center flex-row gap-3">
-          <i
-            className="pi pi-shopping-cart text-4xl mr-1"
-            style={{ color: '#15803d', fontSize: '26px' }}
-          />
+          <i className="pi pi-shopping-cart text-4xl mr-1" style={{ color: '#15803d', fontSize: '26px' }} />
           <h1 className="text-3xl md:text-4xl font-extrabold" style={{ color: '#15803d' }}>
             Nouvelle Commande
           </h1>
@@ -367,6 +340,16 @@ const CommandeForm = () => {
                 className="w-full shadow-sm border border-gray-300 rounded-md"
                 showClear
                 style={{ borderColor: '#15803d' }}
+                disabled={status === 'loading' || regionsLoading}
+                loading={regionsLoading}
+                filter
+                filterBy="nom"
+                filterPlaceholder="Rechercher..."
+                resetFilterOnHide
+                panelClassName="max-h-72 overflow-auto"
+                panelStyle={{ maxHeight: '18rem' }}
+                emptyFilterMessage="Aucun résultat"
+                emptyMessage="Aucune région"
               />
             </div>
 
@@ -384,6 +367,22 @@ const CommandeForm = () => {
                 className="w-full shadow-sm border border-gray-300 rounded-md"
                 showClear
                 style={{ borderColor: '#15803d' }}
+                disabled={status === 'loading' || pvLoading}
+                loading={pvLoading}
+                filter
+                filterBy="nom,adresse"
+                filterPlaceholder="Rechercher..."
+                resetFilterOnHide
+                panelClassName="max-h-72 overflow-auto"
+                panelStyle={{ maxHeight: '18rem' }}
+                emptyFilterMessage="Aucun résultat"
+                emptyMessage="Aucun point de vente"
+                itemTemplate={(pv: PointVente) => (
+                  <div className="flex flex-col">
+                    <span className="font-medium text-gray-800">{pv?.nom}</span>
+                    <span className="text-xs text-gray-500">{(pv as any)?.adresse || '\u00A0'}</span>
+                  </div>
+                )}
               />
             </div>
           </div>
@@ -406,14 +405,13 @@ const CommandeForm = () => {
                   field="nom"
                   delay={200}
                   dropdown
-                  forceSelection={false} // saisie libre autorisée
+                  forceSelection={false}
                   itemTemplate={suggestionItemTemplate}
                   placeholder="Rechercher un produit..."
                   className="w-full shadow-sm border border-gray-300 rounded-md"
                   appendTo={typeof window !== 'undefined' ? document.body : undefined}
                   panelClassName="z-50"
                   onChange={(e) => {
-                    // e.value peut être string (saisie) ou Produit (si set programmatique)
                     if (typeof e.value === 'string') {
                       setSearchTerm(e.value);
                       setSelectedProduit(null);
@@ -497,20 +495,14 @@ const CommandeForm = () => {
                   stripedRows
                   showGridlines
                 >
-                  <Column
-                    header="#"
-                    body={(_, options) => (options?.rowIndex ?? 0) + 1}
-                    className="w-12"
-                  />
+                  <Column header="#" body={(_, options) => (options?.rowIndex ?? 0) + 1} className="w-12" />
                   <Column
                     field="produit.nom"
                     header="Produit"
                     body={(data) => (
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-green-600 flex items-center justify-center text-white font-bold text-sm">
-                          {String(data.nom || '?')
-                            .charAt(0)
-                            .toUpperCase()}
+                          {String(data.nom || '?').charAt(0).toUpperCase()}
                         </div>
                         <span className="font-medium">{data.nom}</span>
                       </div>
@@ -525,9 +517,7 @@ const CommandeForm = () => {
                   <Column
                     field="total"
                     header="Total"
-                    body={(rowData) =>
-                      `fc${(Number(rowData.prixUnitaire ?? 0) * Number(rowData.quantite ?? 0)).toFixed(2)}`
-                    }
+                    body={(rowData) => `fc${(Number(rowData.prixUnitaire ?? 0) * Number(rowData.quantite ?? 0)).toFixed(2)}`}
                   />
                   <Column
                     header=""

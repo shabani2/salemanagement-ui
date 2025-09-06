@@ -1,3 +1,4 @@
+// app/gestion-rapports/page.tsx
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -40,12 +41,10 @@ const safeNumber = (v: unknown, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 const safeApiImage = (rel?: string) =>
-  isNonEmptyString(rel) ? `${API_URL()}/${rel.replace('../', '').replace(/^\/+/, '')}` : '';
+  isNonEmptyString(rel) ? `${API_URL()}/${rel.replace('../', '').replace(/^\/+/,'')}` : '';
 
 const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
-  <span className="inline-block align-middle ml-1">
-    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
-  </span>
+  <span className="inline-block align-middle ml-1">{order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}</span>
 );
 
 /* -------------------------------- Page -------------------------------- */
@@ -54,10 +53,10 @@ const Page: React.FC = () => {
   const toast = useRef<Toast | null>(null);
 
   const { user, isAdminPointVente, isAdminRegion } = useUserRole();
+  const role = (user as any)?.role as string | undefined;
+  const isSuperAdmin = role === 'SuperAdmin';
 
-  const mvtList = useSelector((s: RootState) =>
-    asArray<MouvementStock>(selectAllMouvementsStock(s))
-  );
+  const mvtList = useSelector((s: RootState) => asArray<MouvementStock>(selectAllMouvementsStock(s)));
   const meta = useSelector(selectMouvementStockMeta);
   const status = useSelector(selectMouvementStockStatus);
   const loading = status === 'loading';
@@ -65,7 +64,7 @@ const Page: React.FC = () => {
   const [selectedMvt, setSelectedMvt] = useState<MouvementStock | null>(null);
   const [isValidateMvt, setIsValidateMvt] = useState(false);
 
-  // UI (local) — la source de vérité pour page/limit reste le backend via meta, on se resynchronise
+  // UI (local)
   const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
   const [sortBy, setSortBy] = useState<string>('createdAt');
@@ -77,70 +76,95 @@ const Page: React.FC = () => {
     if (meta?.page && meta.page !== page) setPage(meta.page);
   }, [meta?.limit, meta?.page]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Menu actions
+  // Menu actions (piloté par ligne courante)
   const actionsMenuRef = useRef<Menu | null>(null);
   const currentRowRef = useRef<MouvementStock | null>(null);
+
+  /**
+   * Règle d'autorisation de validation.
+   * Pourquoi: empêcher l'auto-validation des livraisons selon le rôle.
+   */
+  const canValidate = useCallback(
+    (row: MouvementStock | null | undefined): boolean => {
+      if (!row) return false;
+      if (row.statut) return false; // déjà validé
+
+      // SuperAdmin → impossible pour toute Livraison
+      if (isSuperAdmin && row.type === 'Livraison') return false;
+
+      // Admin région → impossible UNIQUEMENT si Livraison vers un point de vente
+      if (isAdminRegion && row.type === 'Livraison' && !!row.pointVente) return false;
+
+      return true;
+    },
+    [isSuperAdmin, isAdminRegion]
+  );
+
+  const [actionsModel, setActionsModel] = useState<MenuItem[]>([{
+    label: 'Valider',
+    disabled: true,
+  }]);
+
   const openActionsMenu = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>, row: MouvementStock) => {
       currentRowRef.current = row;
+
+      const model: MenuItem[] = [
+        {
+          label: 'Valider',
+          // on garde disabled uniquement si déjà validé; sinon on gère le blocage via la commande pour afficher un toast
+          disabled: !!row.statut,
+          command: () => {
+            const target = currentRowRef.current;
+            if (!target) return;
+
+            if (!canValidate(target)) {
+              toast.current?.show({
+                severity: 'warn',
+                summary: 'Action bloquée',
+                detail: "Vous ne pouvez pas valider une opération en attente.",
+                life: 3000,
+              });
+              return;
+            }
+
+            setSelectedMvt(target);
+            setIsValidateMvt(true);
+          },
+        },
+      ];
+
+      setActionsModel(model);
       actionsMenuRef.current?.toggle(e);
     },
-    []
-  );
-  const actionsModel = useMemo<MenuItem[]>(
-    () => [
-      {
-        label: 'Valider',
-        disabled: !!currentRowRef.current?.statut,
-        command: () => {
-          if (currentRowRef.current) {
-            setSelectedMvt(currentRowRef.current);
-            setIsValidateMvt(true);
-          }
-        },
-      },
-    ],
-    []
+    [canValidate]
   );
 
   /* ------------------- Filtres de rôle → orientent la route serveur ------------------ */
   const roleFilters = useMemo(() => {
     const rf: Record<string, any> = {};
-    const role = (user as any)?.role as string | undefined;
 
-    // Priorité: Point de Vente → Région → Utilisateur (Vendeur/Logisticien) → aucun (SuperAdmin)
     if (isAdminPointVente && isNonEmptyString((user as any)?.pointVente?._id)) {
       rf.pointVente = (user as any).pointVente._id;
     } else if (isAdminRegion && isNonEmptyString((user as any)?.region?._id)) {
       rf.region = (user as any).region._id;
-    } else if (
-      (role === 'Vendeur' || role === 'Logisticien') &&
-      isNonEmptyString((user as any)?._id)
-    ) {
+    } else if (((role === 'Vendeur' || role === 'Logisticien') && isNonEmptyString((user as any)?._id))) {
       rf.user = (user as any)._id;
     }
-    // SuperAdmin → pas de filtre : on tombera sur /mouvements/page
-    return rf;
-  }, [
-    isAdminPointVente,
-    isAdminRegion,
-    user?.pointVente?._id,
-    user?.region?._id,
-    (user as any)?._id,
-    (user as any)?.role,
-  ]);
+    return rf; // SuperAdmin → pas de filtre
+  }, [isAdminPointVente, isAdminRegion, user?.pointVente?._id, user?.region?._id, (user as any)?._id, role]);
 
   /* ------------------- Paramètres fetch (page/limit/tri/recherche) ------------------ */
   const serverParams = useMemo(
     () => ({
-      page, // 1-based
+      page,
       limit: rows,
       q: search || undefined,
       sortBy,
       order,
       includeTotal: true,
       includeRefs: true,
-      preferServerPage: true, // ✅ active la logique /mouvements/page | /by-point-vente/:id/page | /by-region/:id/page | /by-user/:id
+      preferServerPage: true,
       ...roleFilters,
     }),
     [page, rows, search, sortBy, order, roleFilters]
@@ -153,18 +177,13 @@ const Page: React.FC = () => {
     [dispatch, serverParams]
   );
 
-  // premier fetch + refetch à chaque changement contrôlé
-  useEffect(() => {
-    doFetch();
-  }, [doFetch]);
+  useEffect(() => { doFetch(); }, [doFetch]);
 
   /* ----------------------- Tri / Pagination (pilotés par meta) ---------------------- */
   const currentLimit = meta?.limit ?? rows;
   const total = meta?.total ?? 0;
-  //@ts-ignore
-  const totalPages =
-    //@ts-expect-error --hello here
-    meta?.totalPages ?? meta?.pages ?? Math.max(1, Math.ceil(total / Math.max(1, currentLimit)));
+  // @ts-ignore
+  const totalPages = meta?.totalPages ?? meta?.pages ?? Math.max(1, Math.ceil(total / Math.max(1, currentLimit)));
   const firstIndex = (meta?.skip ?? ((meta?.page ?? page) - 1) * currentLimit) | 0;
 
   const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
@@ -230,12 +249,7 @@ const Page: React.FC = () => {
               onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
             />
 
-            <Button
-              label="Filtrer"
-              icon="pi pi-search"
-              className="!bg-green-700 text-white"
-              onClick={applyFilters}
-            />
+            <Button label="Filtrer" icon="pi pi-search" className="!bg-green-700 text-white" onClick={applyFilters} />
 
             {isNonEmptyString(search) && (
               <Button
@@ -255,46 +269,25 @@ const Page: React.FC = () => {
             <DropdownImportExport
               onAction={async ({ type, format, file }) => {
                 if (type === 'import' && file) {
-                  toast.current?.show({
-                    severity: 'info',
-                    summary: `Import ${format.toUpperCase()}`,
-                    detail: `Fichier importé: ${file.name}`,
-                    life: 3000,
-                  });
+                  toast.current?.show({ severity: 'info', summary: `Import ${format.toUpperCase()}`, detail: `Fichier importé: ${file.name}` , life: 3000 });
                   return;
                 }
                 if (type === 'export') {
-                  const { exportFile, downloadExportedFile } = await import(
-                    '@/stores/slices/document/importDocuments/exportDoc'
-                  );
+                  const { exportFile, downloadExportedFile } = await import('@/stores/slices/document/importDocuments/exportDoc');
                   const fileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : 'csv';
                   try {
                     const r: any = await (dispatch as any)(
-                      exportFile({
-                        url: '/export/rapport-mouvement-stock',
-                        mouvements: mvtList, // exporte la liste actuelle (page affichée)
-                        fileType,
-                      })
+                      exportFile({ url: '/export/rapport-mouvement-stock', mouvements: mvtList, fileType })
                     );
                     if ((exportFile as any).fulfilled.match(r)) {
                       const filename = `rapport.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
                       downloadExportedFile(r.payload, filename);
-                      toast.current?.show({
-                        severity: 'success',
-                        summary: `Export ${format.toUpperCase()}`,
-                        detail: `Fichier téléchargé: ${filename}`,
-                        life: 3000,
-                      });
+                      toast.current?.show({ severity: 'success', summary: `Export ${format.toUpperCase()}`, detail: `Fichier téléchargé: ${filename}`, life: 3000 });
                     } else {
                       throw new Error('Export non abouti');
                     }
                   } catch {
-                    toast.current?.show({
-                      severity: 'error',
-                      summary: `Export ${format.toUpperCase()} échoué`,
-                      detail: 'Une erreur est survenue.',
-                      life: 3000,
-                    });
+                    toast.current?.show({ severity: 'error', summary: `Export ${format.toUpperCase()} échoué`, detail: 'Une erreur est survenue.', life: 3000 });
                   }
                 }
               }}
@@ -310,31 +303,19 @@ const Page: React.FC = () => {
                 <th className="px-4 py-2 text-left">N°</th>
                 <th className="px-4 py-2 text-left"> </th>
 
-                <th
-                  className="px-4 py-2 text-left cursor-pointer select-none"
-                  onClick={() => toggleSort('produit.nom')}
-                  title="Trier par produit"
-                >
+                <th className="px-4 py-2 text-left cursor-pointer select-none" onClick={() => toggleSort('produit.nom')} title="Trier par produit">
                   Produit <SortIcon order={sortedOrderFor('produit.nom')} />
                 </th>
 
                 <th className="px-4 py-2 text-left">Catégorie</th>
 
-                <th
-                  className="px-4 py-2 text-left cursor-pointer select-none"
-                  onClick={() => toggleSort('type')}
-                  title="Trier par type"
-                >
+                <th className="px-4 py-2 text-left cursor-pointer select-none" onClick={() => toggleSort('type')} title="Trier par type">
                   Type <SortIcon order={sortedOrderFor('type')} />
                 </th>
 
                 <th className="px-4 py-2 text-left">Stock</th>
 
-                <th
-                  className="px-4 py-2 text-left cursor-pointer select-none"
-                  onClick={() => toggleSort('quantite')}
-                  title="Trier par quantité"
-                >
+                <th className="px-4 py-2 text-left cursor-pointer select-none" onClick={() => toggleSort('quantite')} title="Trier par quantité">
                   Quantité <SortIcon order={sortedOrderFor('quantite')} />
                 </th>
 
@@ -345,11 +326,7 @@ const Page: React.FC = () => {
                 <th className="px-4 py-2 text-left">Statut</th>
                 <th className="px-4 py-2 text-left">Utilisateur</th>
 
-                <th
-                  className="px-4 py-2 text-left cursor-pointer select-none"
-                  onClick={() => toggleSort('createdAt')}
-                  title="Trier par date de création"
-                >
+                <th className="px-4 py-2 text-left cursor-pointer select-none" onClick={() => toggleSort('createdAt')} title="Trier par date de création">
                   Créé le <SortIcon order={sortedOrderFor('createdAt')} />
                 </th>
 
@@ -360,21 +337,16 @@ const Page: React.FC = () => {
             <tbody>
               {loading && mvtList.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-center text-gray-500" colSpan={14}>
-                    Chargement...
-                  </td>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={14}>Chargement...</td>
                 </tr>
               ) : mvtList.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-center text-gray-500" colSpan={14}>
-                    Aucun mouvement de stock trouvé.
-                  </td>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={14}>Aucun mouvement de stock trouvé.</td>
                 </tr>
               ) : (
                 mvtList.map((row, idx) => {
                   const cat = (row?.produit as any)?.categorie;
-                  const imageUrl =
-                    typeof cat === 'object' && cat?.image ? safeApiImage(cat.image) : '';
+                  const imageUrl = typeof cat === 'object' && cat?.image ? safeApiImage(cat.image) : '';
                   const q = safeNumber(row?.quantite, 0);
 
                   const prixBase = ['Entrée', 'Livraison', 'Commande'].includes(row?.type ?? '')
@@ -389,10 +361,7 @@ const Page: React.FC = () => {
                   else if (prixVente < base) ttcCls = 'text-red-600 font-bold';
 
                   return (
-                    <tr
-                      key={row._id}
-                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
-                    >
+                    <tr key={row._id} className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}>
                       <td className="px-4 py-2">{firstIndex + idx + 1}</td>
 
                       <td className="px-4 py-2">
@@ -412,17 +381,11 @@ const Page: React.FC = () => {
 
                       <td className="px-4 py-2">{row?.produit?.nom ?? '—'}</td>
 
-                      <td className="px-4 py-2">
-                        {typeof cat === 'object' && cat !== null
-                          ? (cat?.nom ?? '—')
-                          : ((row?.produit as any)?.categorie ?? '—')}
-                      </td>
+                      <td className="px-4 py-2">{typeof cat === 'object' && cat !== null ? (cat?.nom ?? '—') : ((row?.produit as any)?.categorie ?? '—')}</td>
 
                       <td className="px-4 py-2">{row?.type || '—'}</td>
 
-                      <td className="px-4 py-2">
-                        {row?.pointVente?.nom ?? row?.region?.nom ?? 'Depot Central'}
-                      </td>
+                      <td className="px-4 py-2">{row?.pointVente?.nom ?? row?.region?.nom ?? 'Depot Central'}</td>
 
                       <td className="px-4 py-2">{q.toString()}</td>
 
@@ -433,10 +396,7 @@ const Page: React.FC = () => {
                             : row?.produit?.prixVente;
                           const val = safeNumber(prix, NaN);
                           return Number.isFinite(val)
-                            ? val.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })
+                            ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                             : 'N/A';
                         })()}
                       </td>
@@ -461,17 +421,11 @@ const Page: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-2">
-                        <Badge
-                          value={row?.statut ? 'Validé' : 'En attente'}
-                          severity={row?.statut ? 'success' : 'warning'}
-                          className="text-xs px-2 py-1"
-                        />
+                        <Badge value={row?.statut ? 'Validé' : 'En attente'} severity={row?.statut ? 'success' : 'warning'} className="text-xs px-2 py-1" />
                       </td>
 
                       <td className="px-4 py-2">
-                        {typeof row?.user === 'object'
-                          ? ((row.user as any)?.nom ?? '—')
-                          : ((row as any)?.user ?? '—')}
+                        {typeof row?.user === 'object' ? ((row.user as any)?.nom ?? '—') : ((row as any)?.user ?? '—')}
                       </td>
 
                       <td className="px-4 py-2">
@@ -489,6 +443,7 @@ const Page: React.FC = () => {
                           icon="pi pi-bars"
                           className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
                           onClick={(e) => openActionsMenu(e, row)}
+                          // on NE désactive PAS le bouton menu pour SuperAdmin/AdminRégion; on bloque uniquement l'action Valider
                           disabled={!isNonEmptyString((row as any)?._id)}
                           aria-haspopup
                         />
@@ -504,48 +459,21 @@ const Page: React.FC = () => {
         {/* ---------- PAGINATION TAILWIND ----------- */}
         <div className="flex items-center justify-between mt-3">
           <div className="text-sm text-gray-700">
-            Page <span className="font-semibold">{meta?.page ?? page}</span> / {totalPages} —{' '}
-            <span className="font-semibold">{total}</span> éléments
+            Page <span className="font-semibold">{meta?.page ?? page}</span> / {totalPages} — <span className="font-semibold">{total}</span> éléments
           </div>
 
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-700 mr-2">Lignes:</label>
-            <select
-              className="border rounded px-2 py-1 text-sm"
-              value={currentLimit}
-              onChange={(e) => onChangeRows(Number(e.target.value))}
-            >
+            <select className="border rounded px-2 py-1 text-sm" value={currentLimit} onChange={(e) => onChangeRows(Number(e.target.value))}>
               {[10, 20, 30, 50, 100].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
+                <option key={n} value={n}>{n}</option>
               ))}
             </select>
 
-            <Button
-              label="«"
-              className="!bg-gray-200 !text-gray-800 px-2 py-1"
-              onClick={() => goTo(1)}
-              disabled={meta ? !meta.hasPrev && (meta.page ?? 1) <= 1 : page <= 1}
-            />
-            <Button
-              label="‹"
-              className="!bg-gray-200 !text-gray-800 px-2 py-1"
-              onClick={() => goTo((meta?.page ?? page) - 1)}
-              disabled={meta ? !meta.hasPrev && (meta.page ?? 1) <= 1 : page <= 1}
-            />
-            <Button
-              label="›"
-              className="!bg-gray-200 !text-gray-800 px-2 py-1"
-              onClick={() => goTo((meta?.page ?? page) + 1)}
-              disabled={meta ? !meta.hasNext && (meta.page ?? 1) >= totalPages : page >= totalPages}
-            />
-            <Button
-              label="»"
-              className="!bg-gray-200 !text-gray-800 px-2 py-1"
-              onClick={() => goTo(totalPages)}
-              disabled={meta ? !meta.hasNext && (meta.page ?? 1) >= totalPages : page >= totalPages}
-            />
+            <Button label="«" className="!bg-gray-200 !text-gray-800 px-2 py-1" onClick={() => goTo(1)} disabled={meta ? !meta.hasPrev && (meta.page ?? 1) <= 1 : page <= 1} />
+            <Button label="‹" className="!bg-gray-200 !text-gray-800 px-2 py-1" onClick={() => goTo((meta?.page ?? page) - 1)} disabled={meta ? !meta.hasPrev && (meta.page ?? 1) <= 1 : page <= 1} />
+            <Button label="›" className="!bg-gray-200 !text-gray-800 px-2 py-1" onClick={() => goTo((meta?.page ?? page) + 1)} disabled={meta ? !meta.hasNext && (meta.page ?? 1) >= totalPages : page >= totalPages} />
+            <Button label="»" className="!bg-gray-200 !text-gray-800 px-2 py-1" onClick={() => goTo(totalPages)} disabled={meta ? !meta.hasNext && (meta.page ?? 1) >= totalPages : page >= totalPages} />
           </div>
         </div>
 
@@ -567,28 +495,15 @@ const Page: React.FC = () => {
           try {
             if (!item?._id) return;
             const r = await dispatch(validateMouvementStock(item._id as any));
-            if (
-              validateMouvementStock.fulfilled?.match?.(r) ||
-              r?.meta?.requestStatus === 'fulfilled'
-            ) {
-              toast.current?.show({
-                severity: 'success',
-                summary: 'Validé',
-                detail: "L'opération a été validée.",
-                life: 2500,
-              });
+            if (validateMouvementStock.fulfilled?.match?.(r) || r?.meta?.requestStatus === 'fulfilled') {
+              toast.current?.show({ severity: 'success', summary: 'Validé', detail: "L'opération a été validée.", life: 2500 });
               doFetch({ page });
               setIsValidateMvt(false);
             } else {
               throw new Error();
             }
           } catch {
-            toast.current?.show({
-              severity: 'error',
-              summary: 'Erreur',
-              detail: 'Échec de la validation.',
-              life: 3000,
-            });
+            toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Échec de la validation.', life: 3000 });
           }
         }}
         item={selectedMvt}
