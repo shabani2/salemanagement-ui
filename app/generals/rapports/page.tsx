@@ -202,7 +202,7 @@ const Page: React.FC = () => {
   const total = meta?.total ?? 0;
   // @ts-ignore
   const totalPages =
-    meta?.totalPages ?? meta?.pages ?? Math.max(1, Math.ceil(total / Math.max(1, currentLimit)));
+    meta?.totalPages ?? meta?.page ?? Math.max(1, Math.ceil(total / Math.max(1, currentLimit)));
   const firstIndex = (meta?.skip ?? ((meta?.page ?? page) - 1) * currentLimit) | 0;
 
   const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
