@@ -129,7 +129,7 @@ const CommandeForm = () => {
     (async () => {
       if (selectedRegion?._id) {
         setPvLoading(true);
-       
+
         await dispatch(fetchPointVentesByRegionId({ regionId: selectedRegion._id, limit: 100000 }));
         setPvLoading(false);
         setSelectedPointVente(null); // éviter incohérence
@@ -171,7 +171,8 @@ const CommandeForm = () => {
       <div className="flex flex-col">
         <div className="font-semibold text-gray-900">{item.nom}</div>
         <div className="text-xs text-gray-500">
-          fc{Number(item.prix ?? 0).toFixed(2)} • {(item.categorie as Categorie)?.nom || 'Sans catégorie'}
+          fc{Number(item.prix ?? 0).toFixed(2)} •{' '}
+          {(item.categorie as Categorie)?.nom || 'Sans catégorie'}
         </div>
       </div>
     </div>
@@ -241,11 +242,21 @@ const CommandeForm = () => {
 
   const handleSubmit = useCallback(async () => {
     if (commandeProduits.length === 0) {
-      toast.current?.show({ severity: 'warn', summary: 'Commande vide', detail: 'Veuillez ajouter au moins un produit', life: 3000 });
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Commande vide',
+        detail: 'Veuillez ajouter au moins un produit',
+        life: 3000,
+      });
       return;
     }
     if (!selectedRegion && !selectedPointVente) {
-      toast.current?.show({ severity: 'warn', summary: 'Localisation requise', detail: 'Choisissez une région ou un point de vente.', life: 3000 });
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Localisation requise',
+        detail: 'Choisissez une région ou un point de vente.',
+        life: 3000,
+      });
       return;
     }
 
@@ -274,18 +285,38 @@ const CommandeForm = () => {
         const result = resultAction.payload;
         if (result.type === 'pdf') {
           downloadBlob(result.blob, result.filename);
-          toast.current?.show({ severity: 'success', summary: 'Succès', detail: 'Commande créée et imprimée avec succès', life: 3000 });
+          toast.current?.show({
+            severity: 'success',
+            summary: 'Succès',
+            detail: 'Commande créée et imprimée avec succès',
+            life: 3000,
+          });
         } else {
-          toast.current?.show({ severity: 'success', summary: 'Succès', detail: 'Commande créée avec succès', life: 3000 });
+          toast.current?.show({
+            severity: 'success',
+            summary: 'Succès',
+            detail: 'Commande créée avec succès',
+            life: 3000,
+          });
         }
         setCommandeProduits([]);
         setSelectedRegion(null);
         setSelectedPointVente(null);
       } else {
-        toast.current?.show({ severity: 'error', summary: 'Erreur', detail: resultAction.payload || 'Erreur lors de la création de la commande', life: 5000 });
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Erreur',
+          detail: resultAction.payload || 'Erreur lors de la création de la commande',
+          life: 5000,
+        });
       }
     } catch (err) {
-      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: (err as Error).message || 'Erreur inconnue', life: 5000 });
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: (err as Error).message || 'Erreur inconnue',
+        life: 5000,
+      });
     } finally {
       setStatus('idle');
     }
@@ -299,7 +330,10 @@ const CommandeForm = () => {
       {/* Header */}
       <header className="flex items-center mb-8 flex-row justify-between">
         <div className="flex items-center flex-row gap-3">
-          <i className="pi pi-shopping-cart text-4xl mr-1" style={{ color: '#15803d', fontSize: '26px' }} />
+          <i
+            className="pi pi-shopping-cart text-4xl mr-1"
+            style={{ color: '#15803d', fontSize: '26px' }}
+          />
           <h1 className="text-3xl md:text-4xl font-extrabold" style={{ color: '#15803d' }}>
             Nouvelle Commande
           </h1>
@@ -380,7 +414,9 @@ const CommandeForm = () => {
                 itemTemplate={(pv: PointVente) => (
                   <div className="flex flex-col">
                     <span className="font-medium text-gray-800">{pv?.nom}</span>
-                    <span className="text-xs text-gray-500">{(pv as any)?.adresse || '\u00A0'}</span>
+                    <span className="text-xs text-gray-500">
+                      {(pv as any)?.adresse || '\u00A0'}
+                    </span>
                   </div>
                 )}
               />
@@ -495,14 +531,20 @@ const CommandeForm = () => {
                   stripedRows
                   showGridlines
                 >
-                  <Column header="#" body={(_, options) => (options?.rowIndex ?? 0) + 1} className="w-12" />
+                  <Column
+                    header="#"
+                    body={(_, options) => (options?.rowIndex ?? 0) + 1}
+                    className="w-12"
+                  />
                   <Column
                     field="produit.nom"
                     header="Produit"
                     body={(data) => (
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-green-600 flex items-center justify-center text-white font-bold text-sm">
-                          {String(data.nom || '?').charAt(0).toUpperCase()}
+                          {String(data.nom || '?')
+                            .charAt(0)
+                            .toUpperCase()}
                         </div>
                         <span className="font-medium">{data.nom}</span>
                       </div>
@@ -517,7 +559,9 @@ const CommandeForm = () => {
                   <Column
                     field="total"
                     header="Total"
-                    body={(rowData) => `fc${(Number(rowData.prixUnitaire ?? 0) * Number(rowData.quantite ?? 0)).toFixed(2)}`}
+                    body={(rowData) =>
+                      `fc${(Number(rowData.prixUnitaire ?? 0) * Number(rowData.quantite ?? 0)).toFixed(2)}`
+                    }
                   />
                   <Column
                     header=""

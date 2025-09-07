@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
 import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
@@ -50,6 +50,10 @@ const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
   </span>
 );
 
+// type guard: assure qu'on affiche bien un objet stock (et pas un point de vente par erreur)
+const isStockRow = (row: any): row is Stock =>
+  row && typeof row === 'object' && row.produit && (row.quantite ?? row.quantite === 0);
+
 /* -------------------------------- Component -------------------------------- */
 const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -72,7 +76,7 @@ const Page: React.FC = () => {
   const loading = status === 'loading';
 
   /* ------------------------------ pagination/tri (custom) ------------------- */
-  const [page, setPage] = useState(1); // ✅ 1-based
+  const [page, setPage] = useState(1); // 1-based
   const [rows, setRows] = useState(10);
   const [sortBy, setSortBy] = useState<string>('updatedAt'); // défaut updatedAt
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
@@ -87,11 +91,12 @@ const Page: React.FC = () => {
 
   const serverFilters = useMemo(() => {
     const roleFilters: Record<string, any> = {};
-    if (user?.role === 'AdminPointVente' && isNonEmptyString(user?.pointVente?._id)) {
-      roleFilters.pointVente = user.pointVente._id;
-    } else if (user?.role === 'AdminRegion' && isNonEmptyString(user?.region?._id)) {
-      roleFilters.region = user.region._id;
+    if (user?.role === 'AdminPointVente' && isNonEmptyString((user as any)?.pointVente?._id)) {
+      roleFilters.pointVente = (user as any).pointVente._id;
+    } else if (user?.role === 'AdminRegion' && isNonEmptyString((user as any)?.region?._id)) {
+      roleFilters.region = (user as any).region._id;
     }
+
     // La sélection PV dans l'UI override le filtre rôle région
     if (selectedPointVente?._id) {
       roleFilters.pointVente = selectedPointVente._id;
@@ -99,13 +104,12 @@ const Page: React.FC = () => {
     }
 
     return {
-      first, // ✅ offset attendu par le slice
-      limit: rows, // ✅ taille de page côté client
+      first, // offset géré côté client par le slice
+      limit: rows, // taille de page côté client
       q: search || undefined,
       sortBy,
       order,
-      includeTotal: true,
-      includeRefs: true,
+      // ⚠️ pas besoin de includeTotal/includeRefs côté stocks, on laisse le slice paginer en client
       ...roleFilters,
     };
   }, [
@@ -116,12 +120,13 @@ const Page: React.FC = () => {
     order,
     selectedPointVente?._id,
     user?.role,
-    user?.pointVente?._id,
-    user?.region?._id,
+    (user as any)?.pointVente?._id,
+    (user as any)?.region?._id,
   ]);
 
   /* ------------------------------ Chargement data --------------------------- */
   useEffect(() => {
+    // un seul thunk: fetchStocks route automatiquement vers /stocks/point-vente/:id si pointVente est fourni
     dispatch(fetchStocks(serverFilters));
   }, [dispatch, serverFilters]);
 
@@ -135,15 +140,20 @@ const Page: React.FC = () => {
 
   /* --------------------------------- Filtrage client (catégorie) ----------- */
   const visibleStocks = useMemo(() => {
-    if (!selectedCategorie) return stocks;
-    return stocks.filter((s) => {
+    // on ne rend QUE des lignes ayant le shape “stock”
+    const onlyStocks = (stocks || []).filter(isStockRow);
+
+    if (!selectedCategorie) return onlyStocks;
+    return onlyStocks.filter((s) => {
       const catObj = (s?.produit as any)?.categorie;
-      return typeof catObj === 'object' && catObj !== null && catObj?._id === selectedCategorie._id;
+      const catId =
+        typeof catObj === 'object' && catObj ? catObj._id : (s?.produit as any)?.categorie;
+      return catId === selectedCategorie._id;
     });
   }, [stocks, selectedCategorie]);
 
   /* ----------------------------- Tri + Pagination UI ------------------------ */
-  const total = meta?.total ?? 0;
+  const total = meta?.total ?? visibleStocks.length; // fallback si meta pas à jour
   const totalPages = Math.max(1, Math.ceil(total / rows));
   const firstIndex = (page - 1) * rows;
 
@@ -170,7 +180,8 @@ const Page: React.FC = () => {
     const fixed = Math.min(page, newTotalPages);
     setPage(fixed);
   };
-  console.log('data : ', stocks);
+
+  console.log('stock : ', visibleStocks);
 
   /* ---------------------------------- UI ----------------------------------- */
   return (
@@ -265,13 +276,12 @@ const Page: React.FC = () => {
           </div>
         </div>
 
-        {/* -------- TABLE TAILWIND (look DataTable) -------- */}
+        {/* -------- TABLE -------- */}
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="min-w-[70rem] w-full text-sm">
             <thead>
               <tr className="bg-green-800 text-white">
                 <th className="px-4 py-2 text-left">N°</th>
-
                 <th className="px-4 py-2 text-left"> </th>
 
                 <th
@@ -310,7 +320,7 @@ const Page: React.FC = () => {
             </thead>
 
             <tbody>
-              {loading && stocks.length === 0 ? (
+              {loading && visibleStocks.length === 0 ? (
                 <tr>
                   <td className="px-4 py-6 text-center text-gray-500" colSpan={12}>
                     Chargement...
@@ -319,7 +329,9 @@ const Page: React.FC = () => {
               ) : visibleStocks.length === 0 ? (
                 <tr>
                   <td className="px-4 py-6 text-center text-gray-500" colSpan={12}>
-                    Aucun article en stock
+                    {selectedPointVente
+                      ? 'Aucun produit en stock pour ce point de vente'
+                      : 'Aucun produit en stock'}
                   </td>
                 </tr>
               ) : (
@@ -415,7 +427,7 @@ const Page: React.FC = () => {
                         {(() => {
                           try {
                             return new Date(
-                              row?.updatedAt || row?.createdAt || ''
+                              (row as any)?.updatedAt || (row as any)?.createdAt || ''
                             ).toLocaleDateString();
                           } catch {
                             return '—';
@@ -430,7 +442,7 @@ const Page: React.FC = () => {
           </table>
         </div>
 
-        {/* -------- PAGINATION TAILWIND -------- */}
+        {/* -------- PAGINATION -------- */}
         <div className="flex items-center justify-between mt-3">
           <div className="text-sm text-gray-700">
             Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}

@@ -18,11 +18,19 @@ import { AppDispatch, RootState } from '@/stores/store';
 
 import { selectAllCategories, fetchCategories } from '@/stores/slices/produits/categoriesSlice';
 import { Produit, Categorie } from '@/Models/produitsType';
-import { fetchProduits, selectAllProduits, searchProduits } from '@/stores/slices/produits/produitsSlice';
+import {
+  fetchProduits,
+  selectAllProduits,
+  searchProduits,
+} from '@/stores/slices/produits/produitsSlice';
 import { createMouvementStock } from '@/stores/slices/mvtStock/mvtStock';
 
 import { PointVente } from '@/Models/pointVenteType';
-import { fetchPointVentes, fetchPointVentesByRegionId, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
+import {
+  fetchPointVentes,
+  fetchPointVentesByRegionId,
+  selectAllPointVentes,
+} from '@/stores/slices/pointvente/pointventeSlice';
 
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 
@@ -47,7 +55,8 @@ const safeNumber = (v: unknown, fallback = 0) => {
   const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
   return Number.isFinite(n) ? n : fallback;
 };
-const getId = (v: string | { _id?: string } | null | undefined) => (typeof v === 'string' ? v : v?._id) ?? undefined;
+const getId = (v: string | { _id?: string } | null | undefined) =>
+  (typeof v === 'string' ? v : v?._id) ?? undefined;
 
 const extractProduitList = (payload: any): Produit[] => {
   if (Array.isArray(payload)) return payload as Produit[];
@@ -64,7 +73,19 @@ const ROLES_PV = ['AdminPointVente', 'Vendeur', 'Logisticien'] as const;
 
 type Scope = { depotCentral: true } | { regionId: string } | { pointVenteId: string };
 
-const computeScope = ({ op, isSuperAdmin, isAdminRegion, regionId, pointVenteId }: { op: string; isSuperAdmin: boolean; isAdminRegion: boolean; regionId?: string | null; pointVenteId?: string | null; }): Scope => {
+const computeScope = ({
+  op,
+  isSuperAdmin,
+  isAdminRegion,
+  regionId,
+  pointVenteId,
+}: {
+  op: string;
+  isSuperAdmin: boolean;
+  isAdminRegion: boolean;
+  regionId?: string | null;
+  pointVenteId?: string | null;
+}): Scope => {
   if (isSuperAdmin) return { depotCentral: true };
   if (isAdminRegion && isNonEmptyString(regionId)) return { regionId: regionId! };
   if (isNonEmptyString(pointVenteId)) return { pointVenteId: pointVenteId! };
@@ -110,14 +131,29 @@ const Page = () => {
   const [productSuggestions, setProductSuggestions] = useState<Produit[]>([]);
   const productCacheRef = useRef<Record<string, Produit>>({});
 
-  const user: User | null = typeof window !== 'undefined' ? (() => { try { return JSON.parse(localStorage.getItem('user-agricap') || 'null'); } catch { return null; } })() : null;
+  // 🔒 Ajout minimal: état de chargement pour bloquer le bouton (anti double-clic)
+  const [isLoading, setIsLoading] = useState(false);
+
+  const user: User | null =
+    typeof window !== 'undefined'
+      ? (() => {
+          try {
+            return JSON.parse(localStorage.getItem('user-agricap') || 'null');
+          } catch {
+            return null;
+          }
+        })()
+      : null;
 
   const defaultValues: FormValues = {
     type: '',
     depotCentral: false,
-    pointVente: user && user?.role && !['SuperAdmin', 'AdminRegion'].includes(user?.role)
-      ? ((typeof (user as any).pointVente === 'string' ? (user as any).pointVente : (user as any).pointVente?._id) ?? null)
-      : null,
+    pointVente:
+      user && user?.role && !['SuperAdmin', 'AdminRegion'].includes(user?.role)
+        ? ((typeof (user as any).pointVente === 'string'
+            ? (user as any).pointVente
+            : (user as any).pointVente?._id) ?? null)
+        : null,
     region: typeof user?.region === 'string' ? user.region : (user as any)?.region?._id,
     user: typeof user === 'object' && (user as any)?._id ? (user as any)._id : undefined,
     produits: [],
@@ -130,7 +166,20 @@ const Page = () => {
     montantRecu: 0,
   };
 
-  const { register, handleSubmit, control, formState: { errors }, watch, setValue, reset, setError, clearErrors, getValues, resetField, trigger } = useForm<FormValues>({ defaultValues, mode: 'onChange' });
+  const {
+    register,
+    handleSubmit,
+    control,
+    formState: { errors },
+    watch,
+    setValue,
+    reset,
+    setError,
+    clearErrors,
+    getValues,
+    resetField,
+    trigger,
+  } = useForm<FormValues>({ defaultValues, mode: 'onChange' });
 
   const { fields, append, remove, update } = useFieldArray({ control, name: 'produits' });
   const watchProduits = watch('produits') ?? [];
@@ -162,7 +211,12 @@ const Page = () => {
           dispatch(fetchProduits()),
         ]);
       } catch {
-        toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Chargement initial incomplet.', life: 4000 });
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Erreur',
+          detail: 'Chargement initial incomplet.',
+          life: 4000,
+        });
       }
     })();
   }, [dispatch]);
@@ -173,9 +227,24 @@ const Page = () => {
     (async () => {
       try {
         if (user.role === 'SuperAdmin') {
-          await dispatch(fetchPointVentes({ limit: 100000, includeTotal: false, sortBy: 'nom', order: 'asc' }) as any);
+          await dispatch(
+            fetchPointVentes({
+              limit: 100000,
+              includeTotal: false,
+              sortBy: 'nom',
+              order: 'asc',
+            }) as any
+          );
         } else if (isNonEmptyString(regionId)) {
-          await dispatch(fetchPointVentesByRegionId({ regionId, limit: 100000, includeTotal: false, sortBy: 'nom', order: 'asc' }) as any);
+          await dispatch(
+            fetchPointVentesByRegionId({
+              regionId,
+              limit: 100000,
+              includeTotal: false,
+              sortBy: 'nom',
+              order: 'asc',
+            }) as any
+          );
         }
       } catch {}
     })();
@@ -184,7 +253,9 @@ const Page = () => {
   // 🔄 Chargement régions (toutes occurrences) si nécessaire — via limite élevée
   useEffect(() => {
     if (isSuperAdmin && isLivraison) {
-      dispatch(fetchRegions({ limit: 100000, includeTotal: false, sortBy: 'nom', order: 'asc' }) as any);
+      dispatch(
+        fetchRegions({ limit: 100000, includeTotal: false, sortBy: 'nom', order: 'asc' }) as any
+      );
     }
   }, [dispatch, isSuperAdmin, isLivraison]);
 
@@ -197,7 +268,8 @@ const Page = () => {
       if (targetId && getValues('pointVente') !== targetId) setValue('pointVente', targetId);
     }
     const regionVal = getValues('region');
-    const userRegionId = typeof user?.region === 'string' ? user?.region : (user as any)?.region?._id;
+    const userRegionId =
+      typeof user?.region === 'string' ? user?.region : (user as any)?.region?._id;
     // @ts-ignore
     if (userRegionId && regionVal !== userRegionId) setValue('region', userRegionId);
   }, [isPointVenteLocked, pointsVente, user?.pointVente, user?.region, getValues, setValue]);
@@ -217,11 +289,17 @@ const Page = () => {
   }, [isSuperAdmin, isAdminRegion, setValue, type]);
 
   /* ------------------------------ UI helpers ------------------------------- */
-  const filteredTypeOptions = useMemo(() => (user ? getOptionsByRole((user as any).role) : []), [user]);
+  const filteredTypeOptions = useMemo(
+    () => (user ? getOptionsByRole((user as any).role) : []),
+    [user]
+  );
 
   /* ----------------------------- Calculs panier ---------------------------- */
   const computeLine = useCallback((p: Produit, qte: number, currentType: string) => {
-    const prixBase = currentType === 'Vente' ? safeNumber((p as any).prixVente, safeNumber(p.prix)) : safeNumber(p.prix);
+    const prixBase =
+      currentType === 'Vente'
+        ? safeNumber((p as any).prixVente, safeNumber(p.prix))
+        : safeNumber(p.prix);
     const montant = prixBase * qte;
     if (currentType === 'Vente') {
       const marge = (montant * safeNumber(p.marge, 0)) / 100;
@@ -235,7 +313,9 @@ const Page = () => {
   const totalMontant = useMemo(() => {
     const currentType = type || '';
     const t = asArray<{ produit: string; quantite: number }>(watchProduits).reduce((acc, item) => {
-      const produit = asArray<Produit>(allProduits).find((p) => p?._id === item.produit) || productCacheRef.current[item.produit];
+      const produit =
+        asArray<Produit>(allProduits).find((p) => p?._id === item.produit) ||
+        productCacheRef.current[item.produit];
       if (!produit) return acc;
       const qte = safeNumber(item.quantite, 0);
       const { totalTtc } = computeLine(produit, qte, currentType);
@@ -245,8 +325,14 @@ const Page = () => {
   }, [watchProduits, allProduits, type, computeLine]);
 
   const valeurRabais = useMemo(() => (totalMontant * rabais) / 100, [totalMontant, rabais]);
-  const valeurRemise = useMemo(() => ((totalMontant - valeurRabais) * remise) / 100, [totalMontant, valeurRabais, remise]);
-  const netAPayer = useMemo(() => totalMontant - valeurRabais - valeurRemise, [totalMontant, valeurRabais, valeurRemise]);
+  const valeurRemise = useMemo(
+    () => ((totalMontant - valeurRabais) * remise) / 100,
+    [totalMontant, valeurRabais, remise]
+  );
+  const netAPayer = useMemo(
+    () => totalMontant - valeurRabais - valeurRemise,
+    [totalMontant, valeurRabais, valeurRemise]
+  );
   const reste = useMemo(() => {
     const totalRecuFC = montantRecu + montantFranc;
     return totalRecuFC - netAPayer;
@@ -256,18 +342,36 @@ const Page = () => {
   const validateStock = useCallback(
     async (value: number) => {
       const produitId = getValues('formulaire.produit');
-      if (!isNonEmptyString(produitId) || !Number.isFinite(value) || value <= 0) return 'Quantité invalide';
+      if (!isNonEmptyString(produitId) || !Number.isFinite(value) || value <= 0)
+        return 'Quantité invalide';
       const op = getValues('type') as string;
       if (op === 'Entrée' || op === 'Commande') return true;
-      const pvId = typeof selectedPointVente === 'string' ? selectedPointVente : (selectedPointVente as any)?._id;
-      const scope = computeScope({ op, isSuperAdmin, isAdminRegion, regionId, pointVenteId: pvId ?? null });
-      const payload: CheckStockParams = { type: op, produitId, quantite: value, ...('depotCentral' in scope && scope.depotCentral ? { depotCentral: true } : {}), ...('regionId' in scope ? { regionId: scope.regionId } : {}), ...('pointVenteId' in scope ? { pointVenteId: scope.pointVenteId } : {}) };
+      const pvId =
+        typeof selectedPointVente === 'string'
+          ? selectedPointVente
+          : (selectedPointVente as any)?._id;
+      const scope = computeScope({
+        op,
+        isSuperAdmin,
+        isAdminRegion,
+        regionId,
+        pointVenteId: pvId ?? null,
+      });
+      const payload: CheckStockParams = {
+        type: op,
+        produitId,
+        quantite: value,
+        ...('depotCentral' in scope && scope.depotCentral ? { depotCentral: true } : {}),
+        ...('regionId' in scope ? { regionId: scope.regionId } : {}),
+        ...('pointVenteId' in scope ? { pointVenteId: scope.pointVenteId } : {}),
+      };
       try {
         const result = await dispatch(checkStock(payload)).unwrap();
         const dispo = safeNumber(result?.quantiteDisponible, 0);
         if (!result?.success) return 'Vérification de stock indisponible';
         if (!result?.suffisant || dispo < value) {
-          const label = 'depotCentral' in scope ? 'central' : 'regionId' in scope ? 'région' : 'point de vente';
+          const label =
+            'depotCentral' in scope ? 'central' : 'regionId' in scope ? 'région' : 'point de vente';
           return `Stock insuffisant (${label}). Disponible: ${dispo}`;
         }
         return true;
@@ -281,11 +385,16 @@ const Page = () => {
   /* --------------------------- Autocomplete produits ----------------------- */
   const suggestionItemTemplate = useCallback(
     (item: Produit) => {
-      const catName = typeof item.categorie === 'object' && item.categorie ? (item.categorie as any)?.nom : categories.find((c) => c._id === (item.categorie as any))?.nom;
+      const catName =
+        typeof item.categorie === 'object' && item.categorie
+          ? (item.categorie as any)?.nom
+          : categories.find((c) => c._id === (item.categorie as any))?.nom;
       return (
         <div className="flex flex-col">
           <div className="font-medium text-gray-800">{item.nom}</div>
-          <div className="text-xs text-gray-500">{catName ? `${catName} • ` : ''}Prix: {safeNumber(item.prix).toLocaleString()} FC</div>
+          <div className="text-xs text-gray-500">
+            {catName ? `${catName} • ` : ''}Prix: {safeNumber(item.prix).toLocaleString()} FC
+          </div>
         </div>
       );
     },
@@ -294,92 +403,236 @@ const Page = () => {
 
   const completeProduits = async (e: AutoCompleteCompleteEvent) => {
     const q = String(e.query || '').trim();
-    if (!q) { setProductSuggestions([]); return; }
+    if (!q) {
+      setProductSuggestions([]);
+      return;
+    }
     try {
-      const action = await dispatch(searchProduits({ q, page: 1, limit: 10, includeTotal: false }) as any);
+      const action = await dispatch(
+        searchProduits({ q, page: 1, limit: 10, includeTotal: false }) as any
+      );
       if ((searchProduits as any).fulfilled.match(action)) {
         const list = extractProduitList(action.payload);
-        list.forEach((p) => { if (p?._id) productCacheRef.current[p._id] = p; });
+        list.forEach((p) => {
+          if (p?._id) productCacheRef.current[p._id] = p;
+        });
         setProductSuggestions(list);
       } else {
         setProductSuggestions([]);
       }
-    } catch { setProductSuggestions([]); }
+    } catch {
+      setProductSuggestions([]);
+    }
   };
 
   /* ------------------------------- Submit ---------------------------------- */
-  const onSubmit = useCallback(async (data: FormValues) => {
-    if (!data?.produits?.length) { toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Veuillez ajouter au moins un produit avant de soumettre.', life: 4000 }); return; }
-    if (['Vente', 'Sortie'].includes(data.type)) {
-      if (isAdminRegion && !isNonEmptyString(regionId)) { toast.current?.show({ severity: 'error', summary: 'Erreur', detail: 'Région introuvable pour AdminRegion.', life: 4000 }); return; }
-    }
-    if (data.type === 'Livraison' && isSuperAdmin && livraisonCible === 'region' && !isNonEmptyString(selectedRegionLivraison || '')) {
-      toast.current?.show({ severity: 'warn', summary: 'Information', detail: 'Sélectionnez une région de livraison.', life: 3000 });
-      return;
-    }
-    try {
-      const mouvements = data.produits.map((item) => {
-        const produitObj = asArray<Produit>(allProduits).find((p) => p?._id === item.produit) || productCacheRef.current[item.produit];
-        if (!produitObj) throw new Error('Produit introuvable');
-        const prix = ['Entrée', 'Livraison', 'Sortie'].includes(data.type) ? safeNumber(produitObj.prix) : safeNumber((produitObj as any).prixVente, safeNumber(produitObj.prix));
-        const pvId = getId(data.pointVente as any) ?? null;
-        const regId = getId(data.region as any) ?? null;
-        const userId = getId(data.user as any) ?? null;
-        const scope = computeScope({ op: data.type, isSuperAdmin, isAdminRegion, regionId: regId, pointVenteId: pvId });
-        let depotCentral = false; let region: string | null = null; let pointVente: string | null = null;
-        if ('depotCentral' in scope && scope.depotCentral) depotCentral = true; else if ('regionId' in scope) region = scope.regionId; else if ('pointVenteId' in scope) pointVente = scope.pointVenteId;
-        if (data.type === 'Livraison') {
-          if (isSuperAdmin && livraisonCible === 'region') { depotCentral = true; region = selectedRegionLivraison || null; pointVente = null; }
-          else if (isSuperAdmin && livraisonCible === 'pointVente') { depotCentral = true; pointVente = pvId; }
-        }
-        return { produit: (produitObj as any)._id, produitNom: produitObj.nom, quantite: safeNumber(item.quantite, 0), montant: prix * safeNumber(item.quantite, 0), type: data.type, depotCentral, pointVente, region, user: userId, statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type) };
-      });
+  const onSubmit = useCallback(
+    async (data: FormValues) => {
+      if (isLoading) return; // bloque multi-clics
+      setIsLoading(true);
 
-      for (const m of mouvements) {
-        if (['Entrée', 'Commande'].includes(m.type)) continue;
-        const payload: any = { type: m.type, produitId: m.produit, quantite: m.quantite };
-        if (m.depotCentral) payload.depotCentral = true; if (m.region) payload.regionId = m.region; if (m.pointVente) payload.pointVenteId = m.pointVente;
-        try {
-          const result = await dispatch(checkStock(payload)).unwrap();
-          if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < m.quantite) {
-            toast.current?.show({ severity: 'error', summary: `Stock insuffisant`, detail: `${m.produitNom} — dispo: ${safeNumber(result?.quantiteDisponible, 0)}`, life: 5000 });
-            return;
-          }
-        } catch {
-          toast.current?.show({ severity: 'error', summary: 'Erreur', detail: `Vérification de stock indisponible pour ${m.produitNom}`, life: 4000 });
+      try {
+        if (!data?.produits?.length) {
+          toast.current?.show({
+            severity: 'error',
+            summary: 'Erreur',
+            detail: 'Veuillez ajouter au moins un produit avant de soumettre.',
+            life: 4000,
+          });
           return;
         }
-      }
-
-      const results = await Promise.allSettled(mouvements.map((m) => dispatch(createMouvementStock(m as any))));
-      results.forEach((res, i) => {
-        if (res.status === 'rejected') {
-          const produitNom = (mouvements[i] as any).produitNom;
-          toast.current?.show({ severity: 'error', summary: `Erreur: ${produitNom}`, detail: 'Échec de l’enregistrement', life: 7000 });
+        if (['Vente', 'Sortie'].includes(data.type)) {
+          if (isAdminRegion && !isNonEmptyString(regionId)) {
+            toast.current?.show({
+              severity: 'error',
+              summary: 'Erreur',
+              detail: 'Région introuvable pour AdminRegion.',
+              life: 4000,
+            });
+            return;
+          }
         }
-      });
+        if (
+          data.type === 'Livraison' &&
+          isSuperAdmin &&
+          livraisonCible === 'region' &&
+          !isNonEmptyString(selectedRegionLivraison || '')
+        ) {
+          toast.current?.show({
+            severity: 'warn',
+            summary: 'Information',
+            detail: 'Sélectionnez une région de livraison.',
+            life: 3000,
+          });
+          return;
+        }
 
-      const allOk = results.every((r) => r.status === 'fulfilled');
-      if (allOk) {
-        toast.current?.show({ severity: 'success', summary: 'Succès', detail: 'Tous les mouvements ont été enregistrés', life: 3000 });
-        confirmDialog({
-          message: 'Voulez-vous télécharger le document PDF ?',
-          header: 'Téléchargement',
-          icon: 'pi pi-file-pdf',
-          acceptLabel: 'Oui',
-          rejectLabel: 'Non',
-          accept: async () => {
-            const result = await dispatch(generateStockPdf({ organisation: org[0] || organisation, user, mouvements, type: data.type, destinateur, serie }) as any);
-            if ((generateStockPdf as any).fulfilled.match(result)) { downloadPdfFile((result as any).payload, `${data.type}-${serie}.pdf`); }
-            else { toast.current?.show({ severity: 'error', summary: 'Erreur PDF', detail: 'Erreur lors de la génération du fichier PDF', life: 4000 }); }
-          },
+        const mouvements = data.produits.map((item) => {
+          const produitObj =
+            asArray<Produit>(allProduits).find((p) => p?._id === item.produit) ||
+            productCacheRef.current[item.produit];
+          if (!produitObj) throw new Error('Produit introuvable');
+          const prix = ['Entrée', 'Livraison', 'Sortie'].includes(data.type)
+            ? safeNumber(produitObj.prix)
+            : safeNumber((produitObj as any).prixVente, safeNumber(produitObj.prix));
+          const pvId = getId(data.pointVente as any) ?? null;
+          const regId = getId(data.region as any) ?? null;
+          const userId = getId(data.user as any) ?? null;
+          const scope = computeScope({
+            op: data.type,
+            isSuperAdmin,
+            isAdminRegion,
+            regionId: regId,
+            pointVenteId: pvId,
+          });
+          let depotCentral = false;
+          let region: string | null = null;
+          let pointVente: string | null = null;
+          if ('depotCentral' in scope && scope.depotCentral) depotCentral = true;
+          else if ('regionId' in scope) region = scope.regionId;
+          else if ('pointVenteId' in scope) pointVente = scope.pointVenteId;
+
+          // ✅ FIX minimal: AdminRegion qui sélectionne un PV pour une Livraison
+          //    -> on garde region (source) ET on renseigne destination pointVente
+          if (data.type === 'Livraison') {
+            if (isSuperAdmin && livraisonCible === 'region') {
+              depotCentral = true;
+              region = selectedRegionLivraison || null;
+              pointVente = null;
+            } else if (isSuperAdmin && livraisonCible === 'pointVente') {
+              depotCentral = true;
+              pointVente = pvId;
+            } else if (isAdminRegion && pvId) {
+              pointVente = pvId;
+            }
+          }
+
+          return {
+            produit: (produitObj as any)._id,
+            produitNom: produitObj.nom,
+            quantite: safeNumber(item.quantite, 0),
+            montant: prix * safeNumber(item.quantite, 0),
+            type: data.type,
+            depotCentral,
+            pointVente,
+            region,
+            user: userId,
+            statut: ['Entrée', 'Vente', 'Sortie'].includes(data.type),
+          };
         });
-        reset(defaultValues); setSearchText(''); setProductSuggestions([]); productCacheRef.current = {}; setLivraisonCible('pointVente'); setSelectedRegionLivraison(null);
+
+        for (const m of mouvements) {
+          if (['Entrée', 'Commande'].includes(m.type)) continue;
+          const payload: any = { type: m.type, produitId: m.produit, quantite: m.quantite };
+          if (m.depotCentral) payload.depotCentral = true;
+          if (m.region) payload.regionId = m.region;
+          if (m.pointVente) payload.pointVenteId = m.pointVente;
+          try {
+            const result = await dispatch(checkStock(payload)).unwrap();
+            if (!result?.suffisant || safeNumber(result?.quantiteDisponible, 0) < m.quantite) {
+              toast.current?.show({
+                severity: 'error',
+                summary: `Stock insuffisant`,
+                detail: `${m.produitNom} — dispo: ${safeNumber(result?.quantiteDisponible, 0)}`,
+                life: 5000,
+              });
+              return;
+            }
+          } catch {
+            toast.current?.show({
+              severity: 'error',
+              summary: 'Erreur',
+              detail: `Vérification de stock indisponible pour ${m.produitNom}`,
+              life: 4000,
+            });
+            return;
+          }
+        }
+
+        const results = await Promise.allSettled(
+          mouvements.map((m) => dispatch(createMouvementStock(m as any)))
+        );
+        results.forEach((res, i) => {
+          if (res.status === 'rejected') {
+            const produitNom = (mouvements[i] as any).produitNom;
+            toast.current?.show({
+              severity: 'error',
+              summary: `Erreur: ${produitNom}`,
+              detail: 'Échec de l’enregistrement',
+              life: 7000,
+            });
+          }
+        });
+
+        const allOk = results.every((r) => r.status === 'fulfilled');
+        if (allOk) {
+          toast.current?.show({
+            severity: 'success',
+            summary: 'Succès',
+            detail: 'Tous les mouvements ont été enregistrés',
+            life: 3000,
+          });
+          confirmDialog({
+            message: 'Voulez-vous télécharger le document PDF ?',
+            header: 'Téléchargement',
+            icon: 'pi pi-file-pdf',
+            acceptLabel: 'Oui',
+            rejectLabel: 'Non',
+            accept: async () => {
+              const result = await dispatch(
+                generateStockPdf({
+                  organisation: org[0] || organisation,
+                  user,
+                  mouvements,
+                  type: data.type,
+                  destinateur,
+                  serie,
+                }) as any
+              );
+              if ((generateStockPdf as any).fulfilled.match(result)) {
+                downloadPdfFile((result as any).payload, `${data.type}-${serie}.pdf`);
+              } else {
+                toast.current?.show({
+                  severity: 'error',
+                  summary: 'Erreur PDF',
+                  detail: 'Erreur lors de la génération du fichier PDF',
+                  life: 4000,
+                });
+              }
+            },
+          });
+          reset(defaultValues);
+          setSearchText('');
+          setProductSuggestions([]);
+          productCacheRef.current = {};
+          setLivraisonCible('pointVente');
+          setSelectedRegionLivraison(null);
+        }
+      } catch {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Erreur critique',
+          detail: 'Échec de l’opération',
+          life: 4000,
+        });
+      } finally {
+        setIsLoading(false);
       }
-    } catch {
-      toast.current?.show({ severity: 'error', summary: 'Erreur critique', detail: 'Échec de l’opération', life: 4000 });
-    }
-  }, [dispatch, allProduits, org, user, reset, isSuperAdmin, isAdminRegion, regionId, livraisonCible, selectedRegionLivraison]);
+    },
+    [
+      dispatch,
+      allProduits,
+      org,
+      user,
+      reset,
+      isSuperAdmin,
+      isAdminRegion,
+      regionId,
+      livraisonCible,
+      selectedRegionLivraison,
+      isLoading,
+    ]
+  );
 
   /* ------------------------------- UI -------------------------------------- */
 
@@ -387,7 +640,11 @@ const Page = () => {
     <div className="min-h-screen p-4 text-xs">
       <Toast ref={toast} />
       <div className="flex items-center justify-between mb-6">
-        <BreadCrumb model={[{ label: 'Accueil', url: '/' }, { label: 'Opérations' }]} home={{ icon: 'pi pi-home', url: '/' }} className="bg-none" />
+        <BreadCrumb
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Opérations' }]}
+          home={{ icon: 'pi pi-home', url: '/' }}
+          className="bg-none"
+        />
         <h1 className="font-bold text-gray-500 text-[14px]">Gestion des opérations</h1>
       </div>
 
@@ -395,7 +652,10 @@ const Page = () => {
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="flex flex-col md:flex-row gap-0">
             {/* Formulaire: 2/12 */}
-            <form onSubmit={handleSubmit(onSubmit)} className="w-full md:w-2/12 p-3 bg-gradient-to-br from-blue-50 to-indigo-50">
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="w-full md:w-2/12 p-3 bg-gradient-to-br from-blue-50 to-indigo-50"
+            >
               <div className="flex items-center gap-3 mb-6">
                 <i className="pi pi-pencil text-blue-600 text-xl"></i>
                 <h2 className="text-xl font-bold text-gray-800">Nouvelle Operation</h2>
@@ -404,7 +664,9 @@ const Page = () => {
               <div className="space-y-6">
                 {/* Type d'opération */}
                 <div>
-                  <label className="font-medium mb-2 text-gray-700 flex items-center gap-2"><i className="pi pi-sitemap text-blue-500"></i>Type d&apos;opération</label>
+                  <label className="font-medium mb-2 text-gray-700 flex items-center gap-2">
+                    <i className="pi pi-sitemap text-blue-500"></i>Type d&apos;opération
+                  </label>
                   <Controller
                     name="type"
                     control={control}
@@ -419,24 +681,62 @@ const Page = () => {
                           setSearchText('');
                           clearErrors('formulaire.quantite');
                           const newType = e.value as string;
-                          if ((isSuperAdmin || isAdminRegion) && ['Vente', 'Sortie'].includes(newType)) { setValue('pointVente', null); }
-                          if (newType !== 'Livraison') { setLivraisonCible('pointVente'); setSelectedRegionLivraison(null); }
+                          if (
+                            (isSuperAdmin || isAdminRegion) &&
+                            ['Vente', 'Sortie'].includes(newType)
+                          ) {
+                            setValue('pointVente', null);
+                          }
+                          if (newType !== 'Livraison') {
+                            setLivraisonCible('pointVente');
+                            setSelectedRegionLivraison(null);
+                          }
                         }}
                         placeholder="Sélectionner une operation"
-                        className={classNames('w-full border-gray-300 rounded-xl', { 'p-invalid border-red-500': !!errors.type })}
+                        className={classNames('w-full border-gray-300 rounded-xl', {
+                          'p-invalid border-red-500': !!errors.type,
+                        })}
                       />
                     )}
                   />
-                  {errors.type && (<small className="text-red-600 mt-1 flex items-center gap-1"><i className="pi pi-exclamation-circle"></i>{errors.type.message}</small>)}
+                  {errors.type && (
+                    <small className="text-red-600 mt-1 flex items-center gap-1">
+                      <i className="pi pi-exclamation-circle"></i>
+                      {errors.type.message}
+                    </small>
+                  )}
                 </div>
 
                 {/* Livraison : SuperAdmin choisit la cible */}
                 {isSuperAdmin && isLivraison && (
                   <div className="mt-4 space-y-3 bg-indigo-50 p-4 rounded-xl">
-                    <div className="font-medium text-gray-700 flex items-center gap-2"><i className="pi pi-send text-indigo-600"></i>Cible de la livraison</div>
+                    <div className="font-medium text-gray-700 flex items-center gap-2">
+                      <i className="pi pi-send text-indigo-600"></i>Cible de la livraison
+                    </div>
                     <div className="flex items-center gap-6">
-                      <label className="flex items-center gap-2"><input type="radio" name="livraisonCible" checked={livraisonCible === 'pointVente'} onChange={() => { setLivraisonCible('pointVente'); }} />Auprès de point de vente</label>
-                      <label className="flex items-center gap-2"><input type="radio" name="livraisonCible" checked={livraisonCible === 'region'} onChange={() => { setLivraisonCible('region'); setValue('pointVente', null); }} />Auprès de région</label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="livraisonCible"
+                          checked={livraisonCible === 'pointVente'}
+                          onChange={() => {
+                            setLivraisonCible('pointVente');
+                          }}
+                        />
+                        Auprès de point de vente
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="livraisonCible"
+                          checked={livraisonCible === 'region'}
+                          onChange={() => {
+                            setLivraisonCible('region');
+                            setValue('pointVente', null);
+                          }}
+                        />
+                        Auprès de région
+                      </label>
                     </div>
 
                     {livraisonCible === 'region' && (
@@ -459,59 +759,95 @@ const Page = () => {
                 )}
 
                 {/* Point de vente */}
-                {type && type !== 'Entrée' && !((isVenteOrSortie && (isSuperAdmin || isAdminRegion)) || (isLivraison && isSuperAdmin && livraisonCible === 'region')) && (
-                  <div className="mt-4">
-                    <label className="font-medium mb-2 text-gray-700 flex items-center gap-2"><i className="pi pi-store text-blue-500"></i>Point de vente</label>
-                    {user && ['SuperAdmin', 'AdminRegion'].includes(user?.role as any) ? (
-                      <Controller
-                        name="pointVente"
-                        control={control}
-                        rules={{ required: 'Point de vente est requis' }}
-                        render={({ field }) => (
-                          <Dropdown
-                            value={typeof field.value === 'string' ? field.value : (field.value as any)?._id}
-                            options={pointsVente}
-                            optionLabel="nom"
-                            optionValue="_id"
-                            onChange={(e) => field.onChange(e.value)}
-                            placeholder="Sélectionner un point de vente"
-                            className="w-full border-gray-300 rounded-xl"
-                            disabled={!type}
-                            filter
-                            filterBy="nom,adresse"
-                            filterPlaceholder="Rechercher..."
-                            panelClassName="max-h-72 overflow-auto"
-                            panelStyle={{ maxHeight: '18rem' }}
-                          />
-                        )}
-                      />
-                    ) : (
-                      <Controller
-                        name="pointVente"
-                        control={control}
-                        render={({ field }) => (
-                          <Dropdown
-                            value={typeof (user as any)?.pointVente === 'string' ? (user as any).pointVente : (user as any)?.pointVente?._id}
-                            options={(user as any)?.pointVente ? [{ ...(typeof (user as any).pointVente === 'object' ? (user as any).pointVente : {}), _id: typeof (user as any).pointVente === 'string' ? (user as any).pointVente : (user as any).pointVente?._id }] : []}
-                            optionLabel="nom"
-                            optionValue="_id"
-                            placeholder="Votre point de vente"
-                            className="w-full border-gray-300 rounded-xl"
-                            disabled
-                            onChange={(e) => field.onChange(e.value)}
-                          />
-                        )}
-                      />
-                    )}
-                    {errors.pointVente && (<small className="text-red-600 mt-1 flex items-center gap-1"><i className="pi pi-exclamation-circle"></i>{errors.pointVente.message || 'Champ requis'}</small>)}
-                  </div>
-                )}
+                {type &&
+                  type !== 'Entrée' &&
+                  !(
+                    (isVenteOrSortie && (isSuperAdmin || isAdminRegion)) ||
+                    (isLivraison && isSuperAdmin && livraisonCible === 'region')
+                  ) && (
+                    <div className="mt-4">
+                      <label className="font-medium mb-2 text-gray-700 flex items-center gap-2">
+                        <i className="pi pi-store text-blue-500"></i>Point de vente
+                      </label>
+                      {user && ['SuperAdmin', 'AdminRegion'].includes(user?.role as any) ? (
+                        <Controller
+                          name="pointVente"
+                          control={control}
+                          rules={{ required: 'Point de vente est requis' }}
+                          render={({ field }) => (
+                            <Dropdown
+                              value={
+                                typeof field.value === 'string'
+                                  ? field.value
+                                  : (field.value as any)?._id
+                              }
+                              options={pointsVente}
+                              optionLabel="nom"
+                              optionValue="_id"
+                              onChange={(e) => field.onChange(e.value)}
+                              placeholder="Sélectionner un point de vente"
+                              className="w-full border-gray-300 rounded-xl"
+                              disabled={!type}
+                              filter
+                              filterBy="nom,adresse"
+                              filterPlaceholder="Rechercher..."
+                              panelClassName="max-h-72 overflow-auto"
+                              panelStyle={{ maxHeight: '18rem' }}
+                            />
+                          )}
+                        />
+                      ) : (
+                        <Controller
+                          name="pointVente"
+                          control={control}
+                          render={({ field }) => (
+                            <Dropdown
+                              value={
+                                typeof (user as any)?.pointVente === 'string'
+                                  ? (user as any).pointVente
+                                  : (user as any)?.pointVente?._id
+                              }
+                              options={
+                                (user as any)?.pointVente
+                                  ? [
+                                      {
+                                        ...(typeof (user as any).pointVente === 'object'
+                                          ? (user as any).pointVente
+                                          : {}),
+                                        _id:
+                                          typeof (user as any).pointVente === 'string'
+                                            ? (user as any).pointVente
+                                            : (user as any).pointVente?._id,
+                                      },
+                                    ]
+                                  : []
+                              }
+                              optionLabel="nom"
+                              optionValue="_id"
+                              placeholder="Votre point de vente"
+                              className="w-full border-gray-300 rounded-xl"
+                              disabled
+                              onChange={(e) => field.onChange(e.value)}
+                            />
+                          )}
+                        />
+                      )}
+                      {errors.pointVente && (
+                        <small className="text-red-600 mt-1 flex items-center gap-1">
+                          <i className="pi pi-exclamation-circle"></i>
+                          {errors.pointVente.message || 'Champ requis'}
+                        </small>
+                      )}
+                    </div>
+                  )}
 
                 {/* Recherche Produit + Quantité */}
                 <div className="space-y-6 mt-6">
                   <div className="grid grid-cols-1 gap-4">
                     <div>
-                      <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2"><i className="pi pi-search text-blue-500"></i>Rechercher un produit</label>
+                      <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
+                        <i className="pi pi-search text-blue-500"></i>Rechercher un produit
+                      </label>
                       <Controller
                         name="formulaire.produit"
                         control={control}
@@ -528,10 +864,18 @@ const Page = () => {
                             className="w-full"
                             appendTo={typeof window !== 'undefined' ? document.body : undefined}
                             panelClassName="z-50"
-                            onChange={(e) => { setSearchText(String(e.value ?? '')); if (!e.value) setProductSuggestions([]); }}
+                            onChange={(e) => {
+                              setSearchText(String(e.value ?? ''));
+                              if (!e.value) setProductSuggestions([]);
+                            }}
                             onSelect={(e) => {
                               const p: Produit = e.value;
-                              if (p && p._id) { productCacheRef.current[p._id] = p; field.onChange(p._id); setSearchText(p.nom); clearErrors('formulaire.produit'); }
+                              if (p && p._id) {
+                                productCacheRef.current[p._id] = p;
+                                field.onChange(p._id);
+                                setSearchText(p.nom);
+                                clearErrors('formulaire.produit');
+                              }
                             }}
                           />
                         )}
@@ -539,15 +883,28 @@ const Page = () => {
                     </div>
 
                     <div>
-                      <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2"><i className="pi pi-calculator text-blue-500"></i>Quantité</label>
+                      <label className="block font-medium mb-2 text-gray-700 flex items-center gap-2">
+                        <i className="pi pi-calculator text-blue-500"></i>Quantité
+                      </label>
                       <Controller
                         name="formulaire.quantite"
                         control={control}
                         render={({ field }) => (
-                          <InputText type="number" value={field.value !== undefined ? String(field.value) : ''} onChange={(e) => field.onChange(Number(e.target.value))} className={`w-full border-gray-300 rounded-xl ${errors.formulaire?.quantite ? 'p-invalid border-red-500' : ''}`} placeholder="Entrez la quantité" />
+                          <InputText
+                            type="number"
+                            value={field.value !== undefined ? String(field.value) : ''}
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                            className={`w-full border-gray-300 rounded-xl ${errors.formulaire?.quantite ? 'p-invalid border-red-500' : ''}`}
+                            placeholder="Entrez la quantité"
+                          />
                         )}
                       />
-                      {errors.formulaire?.quantite && (<small className="text-red-600 mt-1 flex items-center gap-1"><i className="pi pi-exclamation-circle"></i>{errors.formulaire.quantite.message || 'Quantité requise'}</small>)}
+                      {errors.formulaire?.quantite && (
+                        <small className="text-red-600 mt-1 flex items-center gap-1">
+                          <i className="pi pi-exclamation-circle"></i>
+                          {errors.formulaire.quantite.message || 'Quantité requise'}
+                        </small>
+                      )}
                     </div>
                   </div>
 
@@ -559,14 +916,42 @@ const Page = () => {
                       onClick={async () => {
                         const produitId = getValues('formulaire.produit');
                         const qte = safeNumber(getValues('formulaire.quantite'), 0);
-                        if (!isNonEmptyString(produitId)) { setError('formulaire.produit', { type: 'manual', message: 'Produit requis' }); return; }
-                        if (!qte || qte <= 0) { setError('formulaire.quantite', { type: 'manual', message: 'Quantité invalide' }); return; }
+                        if (!isNonEmptyString(produitId)) {
+                          setError('formulaire.produit', {
+                            type: 'manual',
+                            message: 'Produit requis',
+                          });
+                          return;
+                        }
+                        if (!qte || qte <= 0) {
+                          setError('formulaire.quantite', {
+                            type: 'manual',
+                            message: 'Quantité invalide',
+                          });
+                          return;
+                        }
                         const stockValidation = await validateStock(qte);
-                        if (stockValidation !== true) { setError('formulaire.quantite', { type: 'manual', message: String(stockValidation) }); return; }
-                        const idx = (watchProduits || []).findIndex((it) => it.produit === produitId);
-                        if (idx >= 0) { update(idx, { ...watchProduits[idx], quantite: safeNumber(watchProduits[idx].quantite, 0) + qte }); }
-                        else { append({ produit: produitId, quantite: qte }); }
-                        resetField('formulaire'); setSearchText(''); setProductSuggestions([]);
+                        if (stockValidation !== true) {
+                          setError('formulaire.quantite', {
+                            type: 'manual',
+                            message: String(stockValidation),
+                          });
+                          return;
+                        }
+                        const idx = (watchProduits || []).findIndex(
+                          (it) => it.produit === produitId
+                        );
+                        if (idx >= 0) {
+                          update(idx, {
+                            ...watchProduits[idx],
+                            quantite: safeNumber(watchProduits[idx].quantite, 0) + qte,
+                          });
+                        } else {
+                          append({ produit: produitId, quantite: qte });
+                        }
+                        resetField('formulaire');
+                        setSearchText('');
+                        setProductSuggestions([]);
                       }}
                     />
                   </div>
@@ -579,27 +964,50 @@ const Page = () => {
             {/* Panier */}
             <div className="w-full md:w-8/12 ">
               <Card className="h-full border-0 shadow-none">
-                <div className="flex items-center gap-2 mb-3 ml-3"><i className="pi pi-list text-indigo-600 text-xl"></i><h2 className="text-xl font-bold text-gray-800">Detail des operations selectionnees</h2></div>
+                <div className="flex items-center gap-2 mb-3 ml-3">
+                  <i className="pi pi-list text-indigo-600 text-xl"></i>
+                  <h2 className="text-xl font-bold text-gray-800">
+                    Detail des operations selectionnees
+                  </h2>
+                </div>
 
                 {/* Carte PV sélectionné */}
-                {type && type !== 'Entrée' && !((isVenteOrSortie && (isSuperAdmin || isAdminRegion)) || (isLivraison && isSuperAdmin && livraisonCible === 'region')) && selectedPointVente && (
-                  <div className="border border-gray-200 p-5 rounded-2xl bg-gradient-to-r from-gray-50 to-blue-50 shadow-sm m-3">
-                    <div className="font-semibold text-gray-700 mb-3 flex items-center gap-2"><i className="pi pi-map-marker text-blue-500"></i>Point de vente sélectionné</div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-sm text-gray-500">Nom</div>
-                        <div className="font-medium">{(typeof selectedPointVente === 'string' ? pointsVente.find((pv) => pv._id === selectedPointVente)?.nom : (selectedPointVente as any)?.nom) ?? '-'}</div>
+                {type &&
+                  type !== 'Entrée' &&
+                  !(
+                    (isVenteOrSortie && (isSuperAdmin || isAdminRegion)) ||
+                    (isLivraison && isSuperAdmin && livraisonCible === 'region')
+                  ) &&
+                  selectedPointVente && (
+                    <div className="border border-gray-200 p-5 rounded-2xl bg-gradient-to-r from-gray-50 to-blue-50 shadow-sm m-3">
+                      <div className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                        <i className="pi pi-map-marker text-blue-500"></i>Point de vente sélectionné
                       </div>
-                      <div>
-                        <div className="text-sm text-gray-500">Adresse</div>
-                        <div className="font-medium">{(typeof selectedPointVente === 'string' ? pointsVente.find((pv) => pv._id === selectedPointVente)?.adresse : (selectedPointVente as any)?.adresse) ?? '-'}</div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-sm text-gray-500">Nom</div>
+                          <div className="font-medium">
+                            {(typeof selectedPointVente === 'string'
+                              ? pointsVente.find((pv) => pv._id === selectedPointVente)?.nom
+                              : (selectedPointVente as any)?.nom) ?? '-'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-500">Adresse</div>
+                          <div className="font-medium">
+                            {(typeof selectedPointVente === 'string'
+                              ? pointsVente.find((pv) => pv._id === selectedPointVente)?.adresse
+                              : (selectedPointVente as any)?.adresse) ?? '-'}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 <div className="flex items-center gap-2 mb-6">
-                  <div className="bg-primary-50 p-2 rounded-lg"><i className="pi pi-shopping-cart text-primary text-xl"></i></div>
+                  <div className="bg-primary-50 p-2 rounded-lg">
+                    <i className="pi pi-shopping-cart text-primary text-xl"></i>
+                  </div>
                   <h2 className="text-xl font-semibold text-gray-800">Panier</h2>
                   <Badge value={watchProduits.length} className="ml-2 bg-primary" />
                 </div>
@@ -619,19 +1027,53 @@ const Page = () => {
                         </thead>
                         <tbody>
                           {watchProduits.map((item, index) => {
-                            const produit = asArray<Produit>(allProduits).find((p) => p?._id === item.produit) || productCacheRef.current[item.produit];
+                            const produit =
+                              asArray<Produit>(allProduits).find((p) => p?._id === item.produit) ||
+                              productCacheRef.current[item.produit];
                             const qte = safeNumber(item.quantite);
-                            const { unit, totalTtc } = produit ? computeLine(produit, qte, type || '') : { unit: 0, totalTtc: 0 };
+                            const { unit, totalTtc } = produit
+                              ? computeLine(produit, qte, type || '')
+                              : { unit: 0, totalTtc: 0 };
                             return (
                               <tr key={index} className="bg-white border-b hover:bg-gray-50">
-                                <td className="px-4 py-3 font-medium text-gray-900">{produit?.nom ?? 'Produit inconnu'}</td>
-                                <td className="px-4 py-3"><Tag value={qte.toString()} severity="info" rounded /></td>
+                                <td className="px-4 py-3 font-medium text-gray-900">
+                                  {produit?.nom ?? 'Produit inconnu'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Tag value={qte.toString()} severity="info" rounded />
+                                </td>
                                 <td className="px-4 py-3">{unit.toFixed(2)} FC</td>
-                                <td className="px-4 py-3 font-semibold">{totalTtc.toFixed(2)} FC</td>
+                                <td className="px-4 py-3 font-semibold">
+                                  {totalTtc.toFixed(2)} FC
+                                </td>
                                 <td className="px-4 py-3 text-right">
                                   <div className="flex gap-2">
-                                    <Button icon="pi pi-pencil" className="p-button-text p-button-sm" onClick={() => { setValue('formulaire', { produit: item.produit, quantite: item.quantite } as any); setSearchText(productCacheRef.current[item.produit]?.nom || asArray<Produit>(allProduits).find((p) => p?._id === item.produit)?.nom || ''); }} tooltip="Modifier" tooltipOptions={{ position: 'top' }} />
-                                    <Button icon="pi pi-trash" className="p-button-text p-button-danger p-button-sm" onClick={() => remove(index)} tooltip="Supprimer" tooltipOptions={{ position: 'top' }} />
+                                    <Button
+                                      icon="pi pi-pencil"
+                                      className="p-button-text p-button-sm"
+                                      onClick={() => {
+                                        setValue('formulaire', {
+                                          produit: item.produit,
+                                          quantite: item.quantite,
+                                        } as any);
+                                        setSearchText(
+                                          productCacheRef.current[item.produit]?.nom ||
+                                            asArray<Produit>(allProduits).find(
+                                              (p) => p?._id === item.produit
+                                            )?.nom ||
+                                            ''
+                                        );
+                                      }}
+                                      tooltip="Modifier"
+                                      tooltipOptions={{ position: 'top' }}
+                                    />
+                                    <Button
+                                      icon="pi pi-trash"
+                                      className="p-button-text p-button-danger p-button-sm"
+                                      onClick={() => remove(index)}
+                                      tooltip="Supprimer"
+                                      tooltipOptions={{ position: 'top' }}
+                                    />
                                   </div>
                                 </td>
                               </tr>
@@ -642,33 +1084,81 @@ const Page = () => {
                     </div>
 
                     <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                      <div className="flex justify-between items-center mb-3"><span className="text-gray-600">Sous-total:</span><span className="font-semibold">{totalMontant.toFixed(2)} FC</span></div>
-                      <div className="flex justify-between items-center mb-3"><span className="text-gray-600">Rabais ({rabais}%):</span><span className="font-semibold text-red-500">-{valeurRabais.toFixed(2)} FC</span></div>
-                      <div className="flex justify-between items-center mb-3"><span className="text-gray-600">Remise ({remise}%):</span><span className="font-semibold text-red-500">-{valeurRemise.toFixed(2)} FC</span></div>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-gray-600">Sous-total:</span>
+                        <span className="font-semibold">{totalMontant.toFixed(2)} FC</span>
+                      </div>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-gray-600">Rabais ({rabais}%):</span>
+                        <span className="font-semibold text-red-500">
+                          -{valeurRabais.toFixed(2)} FC
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-gray-600">Remise ({remise}%):</span>
+                        <span className="font-semibold text-red-500">
+                          -{valeurRemise.toFixed(2)} FC
+                        </span>
+                      </div>
                       <Divider className="my-2" />
-                      <div className="flex justify-between items-center"><span className="text-lg font-bold text-gray-800">Total:</span><span className="text-xl font-bold text-primary">{netAPayer.toFixed(2)} FC</span></div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-lg font-bold text-gray-800">Total:</span>
+                        <span className="text-xl font-bold text-primary">
+                          {netAPayer.toFixed(2)} FC
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
                     <i className="pi pi-shopping-cart text-gray-400 text-4xl mb-3"></i>
                     <p className="text-gray-500 mb-4">Votre panier est vide</p>
-                    <p className="text-gray-400 text-center max-w-xs">Ajoutez des produits via le champ de recherche à gauche pour commencer une opération</p>
+                    <p className="text-gray-400 text-center max-w-xs">
+                      Ajoutez des produits via le champ de recherche à gauche pour commencer une
+                      opération
+                    </p>
                   </div>
                 )}
 
                 {type && !['Livraison', 'Entrée', 'Commande'].includes(type) && (
                   <>
-                    <div className="text-right text-xl font-bold text-green-600 bg-green-50 p-4 rounded-xl">{type === 'Vente' && `Montant à payer: ${totalMontant.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC`}</div>
+                    <div className="text-right text-xl font-bold text-green-600 bg-green-50 p-4 rounded-xl">
+                      {type === 'Vente' &&
+                        `Montant à payer: ${totalMontant.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC`}
+                    </div>
                     <div className="flex gap-4">
-                      <div className="w-1/2"><label className=" font-medium text-gray-700 mb-2 flex items-center gap-2"><i className="pi pi-money-bill text-green-500"></i>Montant reçu en franc</label><InputText type="number" {...register('montantRecu')} className="w-full border-gray-300 rounded-xl" /></div>
-                      <div className="w-1/2"><label className=" font-medium text-gray-700 mb-2 flex items-center gap-2"><i className="pi pi-wallet text-green-500"></i>Reste / à retourner</label><div className="w-full border border-gray-300 rounded-xl p-3 text-right text-white bg-gradient-to-r from-gray-700 to-gray-800 font-bold">{reste.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC</div></div>
+                      <div className="w-1/2">
+                        <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <i className="pi pi-money-bill text-green-500"></i>Montant reçu en franc
+                        </label>
+                        <InputText
+                          type="number"
+                          {...register('montantRecu')}
+                          className="w-full border-gray-300 rounded-xl"
+                        />
+                      </div>
+                      <div className="w-1/2">
+                        <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <i className="pi pi-wallet text-green-500"></i>Reste / à retourner
+                        </label>
+                        <div className="w-full border border-gray-300 rounded-xl p-3 text-right text-white bg-gradient-to-r from-gray-700 to-gray-800 font-bold">
+                          {reste.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}
 
                 <div className="flex justify-end pt-4 border-t border-gray-200 mt-4">
-                  <Button className="mt-4 py-3 px-6 rounded-xl font-bold bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 transition-all duration-300" label="Valider l'opération" icon="pi pi-check" onClick={handleSubmit(onSubmit)} />
+                  <Button
+                    className="mt-4 py-3 px-6 rounded-xl font-bold bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 transition-all duration-300"
+                    label={isLoading ? 'Validation…' : "Valider l'opération"}
+                    icon={isLoading ? 'pi pi-spin pi-spinner' : 'pi pi-check'}
+                    onClick={handleSubmit(onSubmit)}
+                    disabled={isLoading}
+                    loading={isLoading}
+                    aria-busy={isLoading}
+                  />
                 </div>
               </Card>
             </div>
@@ -677,29 +1167,116 @@ const Page = () => {
 
             {/* Bloc taux/remise */}
             <div className="w-full md:w-2/12 p-2 bg-gradient-to-br from-gray-50 to-indigo-50">
-              <div className="flex items-center gap-2 mb-6"><div className="bg-primary-50 p-2 rounded-lg"><i className="pi pi-wallet text-primary text-xl"></i></div><h2 className="text-xl font-semibold text-gray-800">Paiement</h2></div>
+              <div className="flex items-center gap-2 mb-6">
+                <div className="bg-primary-50 p-2 rounded-lg">
+                  <i className="pi pi-wallet text-primary text-xl"></i>
+                </div>
+                <h2 className="text-xl font-semibold text-gray-800">Paiement</h2>
+              </div>
 
               <div className="space-y-6">
                 <div>
-                  <label className=" font-medium mb-2 text-gray-700 flex items-center gap-2"><i className="pi pi-dollar text-indigo-500"></i>Taux dollar</label>
-                  <InputText type="number" value={watch('tauxDollar') !== undefined ? String(watch('tauxDollar')) : ''} onChange={(e) => { const value = e.target.value; if (value !== '') { const n = Number(value); setValue('tauxDollar', n); try { localStorage.setItem('tauxDollar', String(n)); } catch {} } }} className="w-full border-gray-300 rounded-xl" />
+                  <label className=" font-medium mb-2 text-gray-700 flex items-center gap-2">
+                    <i className="pi pi-dollar text-indigo-500"></i>Taux dollar
+                  </label>
+                  <InputText
+                    type="number"
+                    value={watch('tauxDollar') !== undefined ? String(watch('tauxDollar')) : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value !== '') {
+                        const n = Number(value);
+                        setValue('tauxDollar', n);
+                        try {
+                          localStorage.setItem('tauxDollar', String(n));
+                        } catch {}
+                      }
+                    }}
+                    className="w-full border-gray-300 rounded-xl"
+                  />
                 </div>
                 <div>
-                  <label className="font-medium mb-2 text-gray-700 flex items-center gap-2"><i className="pi pi-euro text-indigo-500"></i>Taux en franc</label>
-                  <InputText type="number" value={watch('tauxFranc') !== undefined ? String(watch('tauxFranc')) : ''} onChange={(e) => { const value = e.target.value; if (value !== '') { const n = Number(value); setValue('tauxFranc', n); try { localStorage.setItem('tauxFranc', String(n)); } catch {} } }} className="w-full border-gray-300 rounded-xl" />
+                  <label className="font-medium mb-2 text-gray-700 flex items-center gap-2">
+                    <i className="pi pi-euro text-indigo-500"></i>Taux en franc
+                  </label>
+                  <InputText
+                    type="number"
+                    value={watch('tauxFranc') !== undefined ? String(watch('tauxFranc')) : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value !== '') {
+                        const n = Number(value);
+                        setValue('tauxFranc', n);
+                        try {
+                          localStorage.setItem('tauxFranc', String(n));
+                        } catch {}
+                      }
+                    }}
+                    className="w-full border-gray-300 rounded-xl"
+                  />
                 </div>
                 <div className="flex gap-4">
-                  <div className="w-1/2"><label className="font-medium text-gray-700 mb-2 flex items-center gap-2"><i className="pi pi-dollar text-indigo-500"></i>Montant reçu en $</label><InputText type="number" {...register('montantDollar')} className="w-full border-gray-300 rounded-xl" /></div>
-                  <div className="w-1/2"><label className="font-medium text-gray-700 mb-2 flex items-center gap-2"><i className="pi pi-sync text-indigo-500"></i>Montant converti</label><div className="w-full border border-gray-300 rounded-xl p-3 text-center text-white bg-gradient-to-r from-gray-700 to-gray-800 font-bold">{montantFranc.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC</div></div>
+                  <div className="w-1/2">
+                    <label className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <i className="pi pi-dollar text-indigo-500"></i>Montant reçu en $
+                    </label>
+                    <InputText
+                      type="number"
+                      {...register('montantDollar')}
+                      className="w-full border-gray-300 rounded-xl"
+                    />
+                  </div>
+                  <div className="w-1/2">
+                    <label className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <i className="pi pi-sync text-indigo-500"></i>Montant converti
+                    </label>
+                    <div className="w-full border border-gray-300 rounded-xl p-3 text-center text-white bg-gradient-to-r from-gray-700 to-gray-800 font-bold">
+                      {montantFranc.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC
+                    </div>
+                  </div>
                 </div>
                 <div className="pt-4">
-                  <h3 className="text-gray-700 font-bold mb-4 flex items-center gap-2"><i className="pi pi-percentage text-purple-500"></i>Zones de Réduction</h3>
+                  <h3 className="text-gray-700 font-bold mb-4 flex items-center gap-2">
+                    <i className="pi pi-percentage text-purple-500"></i>Zones de Réduction
+                  </h3>
                   <Divider className="my-3 bg-gray-300" />
                   <div className="space-y-4">
-                    <div><label className=" font-medium text-gray-700 mb-2 flex items-center gap-2"><i className="pi pi-tag text-purple-500"></i>Rabais (%)</label><InputText type="number" {...register('rabais')} className="w-full border-gray-300 rounded-xl" /></div>
-                    <div><label className="font-medium text-gray-700 mb-2 flex items-center gap-2"><i className="pi pi-tags text-purple-500"></i>Remise (%)</label><InputText type="number" {...register('remise')} className="w-full border-gray-300 rounded-xl" /></div>
-                    <div><label className=" font-medium text-gray-700 mb-2 flex items-center gap-2"><i className="pi pi-money-bill text-purple-500"></i>Valeur rabais</label><div className="w-full border border-gray-300 rounded-xl p-3 text-center bg-gradient-to-r from-purple-50 to-indigo-50 font-bold text-gray-800">{valeurRabais.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC</div></div>
-                    <div><label className=" font-medium text-gray-700 mb-2 flex items-center gap-2"><i className="pi pi-wallet text-purple-500"></i>Valeur remise</label><div className="w-full border border-gray-300 rounded-xl p-3 text-center bg-gradient-to-r from-purple-50 to-indigo-50 font-bold text-gray-800">{valeurRemise.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC</div></div>
+                    <div>
+                      <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        <i className="pi pi-tag text-purple-500"></i>Rabais (%)
+                      </label>
+                      <InputText
+                        type="number"
+                        {...register('rabais')}
+                        className="w-full border-gray-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        <i className="pi pi-tags text-purple-500"></i>Remise (%)
+                      </label>
+                      <InputText
+                        type="number"
+                        {...register('remise')}
+                        className="w-full border-gray-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className=" font-medium text-gray-700 mb-2 flex items_center gap-2">
+                        <i className="pi pi-money-bill text-purple-500"></i>Valeur rabais
+                      </label>
+                      <div className="w_full border border-gray-300 rounded-xl p-3 text-center bg-gradient-to-r from-purple-50 to-indigo-50 font-bold text-gray-800">
+                        {valeurRabais.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC
+                      </div>
+                    </div>
+                    <div>
+                      <label className=" font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        <i className="pi pi-wallet text-purple-500"></i>Valeur remise
+                      </label>
+                      <div className="w-full border border-gray-300 rounded-xl p-3 text-center bg-gradient-to-r from-purple-50 to-indigo-50 font-bold text-gray-800">
+                        {valeurRemise.toLocaleString(undefined, { maximumFractionDigits: 2 })} FC
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -17,6 +17,7 @@ export interface CheckStockResponse {
   success: boolean;
   quantiteDisponible: number;
   suffisant: boolean;
+  message?: string;
 }
 
 export interface ListMeta {
@@ -90,23 +91,35 @@ function applyClientFiltersSort(list: Stock[], params: FetchStocksParams): Stock
 
   let filtered = list;
 
-  // filtres structurés
-  if (pointVente)
+  // --- filtres structurés ---
+  if (pointVente) {
     filtered = filtered.filter(
       (s) => toStr((s as any)?.pointVente?._id ?? (s as any)?.pointVente) === pointVente
     );
-  if (region)
-    filtered = filtered.filter(
-      (s) => toStr((s as any)?.region?._id ?? (s as any)?.region) === region
-    );
-  if (produit)
+  }
+
+  // ⬇️ IMPORTANT : region directe OU region du point de vente
+  if (region) {
+    filtered = filtered.filter((s) => {
+      const regionTop = toStr((s as any)?.region?._id ?? (s as any)?.region);
+      const regionFromPV = toStr(
+        (s as any)?.pointVente?.region?._id ?? (s as any)?.pointVente?.region
+      );
+      return regionTop === region || regionFromPV === region;
+    });
+  }
+
+  if (produit) {
     filtered = filtered.filter(
       (s) => toStr((s as any)?.produit?._id ?? (s as any)?.produit) === produit
     );
-  if (typeof depotCentral === 'boolean')
-    filtered = filtered.filter((s) => (s as any)?.depotCentral === depotCentral);
+  }
 
-  // recherche texte (produit.nom, pointVente.nom, region.nom)
+  if (typeof depotCentral === 'boolean') {
+    filtered = filtered.filter((s) => (s as any)?.depotCentral === depotCentral);
+  }
+
+  // --- recherche texte (produit.nom, pointVente.nom, region.nom) ---
   if (q && q.trim()) {
     const needle = q.trim().toLowerCase();
     filtered = filtered.filter((s) => {
@@ -117,7 +130,7 @@ function applyClientFiltersSort(list: Stock[], params: FetchStocksParams): Stock
     });
   }
 
-  // tri
+  // --- tri ---
   if (sortBy) {
     const desc = order === 'desc' ? -1 : 1;
     filtered = [...filtered].sort((a, b) => {
@@ -182,7 +195,7 @@ function normalizeListPayload(
 /**
  * Choisit la route en fonction des params:
  * - region -> GET /stocks/region/:regionId
- * - pointVente -> GET /stocks/stock-by-pv/:pointVenteId
+ * - pointVente -> GET /stocks/point-vente/:pointVenteId
  * - default -> GET /stocks
  * Les filtres/tri recherchés non supportés par l'API sont appliqués côté client.
  */
@@ -190,7 +203,8 @@ async function fetchStocksApi(params: FetchStocksParams) {
   const { region, pointVente } = params;
 
   let url = '/stocks';
-  if (pointVente) url = `/stocks/stock-by-pv/${pointVente}`;
+  if (pointVente)
+    url = `/stocks/point-vente/${pointVente}`; // ⬅️ corrigé
   else if (region) url = `/stocks/region/${region}`;
 
   const r = await apiClient.get(url, { headers: getAuthHeaders() });
@@ -319,14 +333,6 @@ export interface CheckStockParams {
   depotCentral?: boolean; // ✅ nouveau
 }
 
-// (facultatif) Typage de la réponse si tu ne l’as pas déjà
-export interface CheckStockResponse {
-  success: boolean;
-  quantiteDisponible: number;
-  suffisant: boolean;
-  message?: string;
-}
-
 // petit util pour normaliser le payload envoyé à l’API
 const buildCheckStockPayload = (params: CheckStockParams) => {
   const pointVenteId =
@@ -406,12 +412,12 @@ const stockSlice = createSlice({
       })
       .addCase(fetchStockByRegionId.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const params = { region: 'X' } as FetchStocksParams; // dummy pour garder la même pagination locale
+        // ⚠️ pas de re-filtrage “bidon” ici : on laisse la liste telle que renvoyée par l’API
         const { list, meta } = normalizeListPayload(
           action.payload,
           state.meta.first,
           state.meta.limit,
-          params
+          {} // aucun filtre supplémentaire
         );
         stockAdapter.setAll(state, list ?? []);
         state.meta = meta;
@@ -428,12 +434,11 @@ const stockSlice = createSlice({
       })
       .addCase(fetchStockByPointVenteId.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        const params = { pointVente: 'X' } as FetchStocksParams;
         const { list, meta } = normalizeListPayload(
           action.payload,
           state.meta.first,
           state.meta.limit,
-          params
+          {} // aucun filtre supplémentaire
         );
         stockAdapter.setAll(state, list ?? []);
         state.meta = meta;
