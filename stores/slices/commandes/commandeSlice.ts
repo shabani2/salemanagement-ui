@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/ban-ts-comment */
+
+
 'use client';
 
 import {
@@ -23,9 +23,11 @@ export type CommandePayload = {
   user: string; // ObjectId
   region?: string; // ObjectId
   pointVente?: string; // ObjectId
+  requestedRegion?: string; // ObjectId (source)
+  requestedPointVente?: string; // ObjectId (source)
   depotCentral?: boolean;
+  fournisseur?: string; // ObjectId
   produits: CommandeProduitInput[];
-
   // impression immédiate
   print?: boolean; // si true => PDF
   format?: 'pos58' | 'pos80' | 'A5' | 'A4';
@@ -44,21 +46,6 @@ interface CommandeState {
   page: number;
   limit: number;
 }
-
-// ✅ types d’input pour la création
-// type CommandeProduitInput = {
-//   produit: string; // ObjectId as string
-//   quantite: number;
-//   uniteMesure?: string; // optionnel
-// };
-
-// export interface CommandePayload {
-//   user: string;
-//   region?: string;
-//   pointVente?: string;
-//   depotCentral?: boolean;
-//   produits: CommandeProduitInput[]; // ⬅️ au lieu du Pick<>
-// }
 
 // utils/download.ts
 export function downloadBlob(blob: Blob, filename = 'document.pdf') {
@@ -106,12 +93,15 @@ const q = (params?: Record<string, any>) => {
   return s ? `?${s}` : '';
 };
 
-// All (paginated)
+// All (paginated + filtres)
 export const fetchCommandes = createAsyncThunk(
   'commandes/fetchCommandes',
-  async ({ page = 1, limit = 10 }: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
+  async (
+    { page = 1, limit = 10, filters = {} as Record<string, any> }: { page?: number; limit?: number; filters?: Record<string, any> },
+    { rejectWithValue }
+  ) => {
     try {
-      const res = await apiClient.get(`/commandes${q({ page, limit })}`, {
+      const res = await apiClient.get(`/commandes${q({ page, limit, ...filters })}` , {
         headers: getAuthHeaders(),
       });
       // { total, commandes }
@@ -161,7 +151,7 @@ export const fetchCommandesByPointVente = createAsyncThunk(
   }
 );
 
-// By Region (paginated côté back = total calculé après filtre)
+// By Region (paginated)
 export const fetchCommandesByRegion = createAsyncThunk(
   'commandes/fetchByRegion',
   async (
@@ -179,15 +169,75 @@ export const fetchCommandesByRegion = createAsyncThunk(
   }
 );
 
+// By requestedRegion (paginated)
+export const fetchCommandesByRequestedRegion = createAsyncThunk(
+  'commandes/fetchByRequestedRegion',
+  async (
+    { requestedRegionId, page = 1, limit = 10 }: { requestedRegionId: string; page?: number; limit?: number },
+    { rejectWithValue }
+  ) => {
+    try {
+      const res = await apiClient.get(
+        `/commandes/by-requested-region/${requestedRegionId}${q({ page, limit })}`,
+        { headers: getAuthHeaders() },
+      );
+      return { ...res.data, page, limit };
+    } catch (error: any) {
+      return rejectWithValue(
+        error?.message || 'Erreur de récupération des commandes (région source)'
+      );
+    }
+  }
+);
+
+// By requestedPointVente (paginated)
+export const fetchCommandesByRequestedPointVente = createAsyncThunk(
+  'commandes/fetchByRequestedPointVente',
+  async (
+    { requestedPointVenteId, page = 1, limit = 10 }: { requestedPointVenteId: string; page?: number; limit?: number },
+    { rejectWithValue }
+  ) => {
+    try {
+      const res = await apiClient.get(
+        `/commandes/by-requested-point-vente/${requestedPointVenteId}${q({ page, limit })}`,
+        { headers: getAuthHeaders() },
+      );
+      return { ...res.data, page, limit };
+    } catch (error: any) {
+      return rejectWithValue(
+        error?.message || 'Erreur de récupération des commandes (PV source)'
+      );
+    }
+  }
+);
+
+// By fournisseur (paginated)
+export const fetchCommandesByFournisseur = createAsyncThunk(
+  'commandes/fetchByFournisseur',
+  async (
+    { fournisseurId, page = 1, limit = 10 }: { fournisseurId: string; page?: number; limit?: number },
+    { rejectWithValue }
+  ) => {
+    try {
+      const res = await apiClient.get(
+        `/commandes/by-fournisseur/${fournisseurId}${q({ page, limit })}`,
+        { headers: getAuthHeaders() },
+      );
+      return { ...res.data, page, limit };
+    } catch (error: any) {
+      return rejectWithValue(
+        error?.message || 'Erreur de récupération des commandes par fournisseur'
+      );
+    }
+  }
+);
+
 // By ID
 export const fetchCommandeById = createAsyncThunk(
   'commandes/fetchById',
   async (id: string, { rejectWithValue }) => {
     try {
-      const res = await apiClient.get(`/commandes/${id}`, {
-        headers: getAuthHeaders(),
-      });
-      // renvoie une commande formatée
+      const res = await apiClient.get(`/commandes/${id}`, { headers: getAuthHeaders() });
       return res.data as Commande;
     } catch (error: any) {
       return rejectWithValue(error?.message || 'Commande introuvable');
@@ -209,25 +259,19 @@ export const createCommande = createAsyncThunk<
         `/commandes?pdf=1&format=${encodeURIComponent(format)}`,
         body,
         {
-          headers: {
-            ...getAuthHeaders(),
-            Accept: 'application/pdf',
-          },
-          responseType: 'blob', // <- important pour récupérer le PDF
+          headers: { ...getAuthHeaders(), Accept: 'application/pdf' },
+          responseType: 'blob',
         }
       );
 
-      const cd =
-        (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
+      const cd = (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
       const filename = parseFilenameFromDisposition(cd) || 'Bon_de_commande.pdf';
 
       return { type: 'pdf', blob: res.data as Blob, filename };
     }
 
     // création simple -> JSON
-    const res = await apiClient.post('/commandes', payload, {
-      headers: getAuthHeaders(),
-    });
+    const res = await apiClient.post('/commandes', payload, { headers: getAuthHeaders() });
     return { type: 'json', data: res.data as Commande };
   } catch (error: any) {
     return rejectWithValue(
@@ -236,23 +280,19 @@ export const createCommande = createAsyncThunk<
   }
 });
 
-// 2) Imprimer une commande existante
+// Print existant
 export const printCommandeById = createAsyncThunk<
   { blob: Blob; filename: string },
   { id: string; format?: 'pos58' | 'pos80' | 'A5' | 'A4' },
   { rejectValue: string }
 >('commandes/printCommandeById', async ({ id, format = 'pos80' }, { rejectWithValue }) => {
   try {
-    const res = await apiClient.get(`/commandes/${id}/print?format=${encodeURIComponent(format)}`, {
-      headers: {
-        ...getAuthHeaders(),
-        Accept: 'application/pdf',
-      },
+    const res = await apiClient.get(`/commandes/${id}/print?format=${encodeURIComponent(format)}` , {
+      headers: { ...getAuthHeaders(), Accept: 'application/pdf' },
       responseType: 'blob',
     });
 
-    const cd =
-      (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
+    const cd = (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
     const filename = parseFilenameFromDisposition(cd) || `Bon_de_commande_${id}.pdf`;
 
     return { blob: res.data as Blob, filename };
@@ -262,15 +302,14 @@ export const printCommandeById = createAsyncThunk<
     );
   }
 });
+
 // Update
 export const updateCommande = createAsyncThunk(
   'commandes/updateCommande',
   async (commande: Commande, { rejectWithValue }) => {
     try {
       const { _id, ...data } = commande as any;
-      const res = await apiClient.put(`/commandes/${_id}`, data, {
-        headers: getAuthHeaders(),
-      });
+      const res = await apiClient.put(`/commandes/${_id}`, data, { headers: getAuthHeaders() });
       return res.data as Commande;
     } catch (error: any) {
       return rejectWithValue(error?.message || 'Erreur de mise à jour de la commande');
@@ -283,9 +322,7 @@ export const deleteCommande = createAsyncThunk(
   'commandes/deleteCommande',
   async (commandeId: string, { rejectWithValue }) => {
     try {
-      await apiClient.delete(`/commandes/${commandeId}`, {
-        headers: getAuthHeaders(),
-      });
+      await apiClient.delete(`/commandes/${commandeId}`, { headers: getAuthHeaders() });
       return commandeId;
     } catch (error: any) {
       return rejectWithValue(error?.message || 'Erreur de suppression de la commande');
@@ -343,18 +380,50 @@ const commandeSlice = createSlice({
         state.limit = action.payload.limit ?? 10;
       })
 
+      // by requestedRegion
+      .addCase(fetchCommandesByRequestedRegion.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        commandeAdapter.setAll(state, action.payload.commandes);
+        state.totalCommandes = action.payload.total ?? 0;
+        state.page = action.payload.page ?? 1;
+        state.limit = action.payload.limit ?? 10;
+      })
+
+      // by requestedPointVente
+      .addCase(fetchCommandesByRequestedPointVente.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        commandeAdapter.setAll(state, action.payload.commandes);
+        state.totalCommandes = action.payload.total ?? 0;
+        state.page = action.payload.page ?? 1;
+        state.limit = action.payload.limit ?? 10;
+      })
+
+      // by fournisseur
+      .addCase(fetchCommandesByFournisseur.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        commandeAdapter.setAll(state, action.payload.commandes);
+        state.totalCommandes = action.payload.total ?? 0;
+        state.page = action.payload.page ?? 1;
+        state.limit = action.payload.limit ?? 10;
+      })
+
       // by id
       .addCase(fetchCommandeById.fulfilled, (state, action) => {
         state.status = 'succeeded';
         commandeAdapter.upsertOne(state, action.payload);
       })
 
-      // create / update / delete
+      // create
       .addCase(createCommande.fulfilled, (state, action) => {
-        //@ts-ignore
-        commandeAdapter.addOne(state, action.payload);
-        state.totalCommandes += 1;
+        // Discriminated union handling
+        if (action.payload.type === 'json') {
+          commandeAdapter.addOne(state, action.payload.data);
+          state.totalCommandes += 1;
+        }
+        // Si PDF, pas de mutation directe de la liste
       })
+
+      // update / delete
       .addCase(updateCommande.fulfilled, (state, action) => {
         commandeAdapter.upsertOne(state, action.payload);
       })
@@ -382,3 +451,4 @@ export const selectCommandeError = (state: RootState) => state.commandes.error;
 export const selectCommandeTotalCount = (state: RootState) => state.commandes.totalCommandes;
 export const selectCommandePage = (state: RootState) => state.commandes.page;
 export const selectCommandeLimit = (state: RootState) => state.commandes.limit;
+
