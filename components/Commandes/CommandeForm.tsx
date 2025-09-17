@@ -313,254 +313,250 @@ const CommandeForm: React.FC = () => {
     );
   }
 
-  return (
-    <div className="w-full min-h-screen p-6 bg-gray-50">
-      <Toast ref={toast} position="top-right" />
+  // Remplace UNIQUEMENT le JSX du return par ceci (UI only)
+console.log('user here : ',user)
+return (
+  <div className="w-full rounded-lg shadow-md bg-white mx-auto">
+    <Toast ref={toast} position="top-right" />
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Colonne Gauche */}
-        <div className="lg:col-span-1 space-y-6">
-          <Card className="shadow-lg border-round-lg">
-            <div className="flex align-items-center mb-3">
-              <i className="pi pi-map-marker text-primary text-xl mr-2" />
-              <h3 className="text-lg font-semibold text-900">Informations de livraison</h3>
-            </div>
-            
-            {routeInfo?.display ? (
-              <div className="grid">
-                <div className="col-6 text-500">Source:</div>
-                <div className="col-6 font-medium">{routeInfo.display.source ?? '—'}</div>
-                
-                <div className="col-6 text-500">Destination:</div>
-                <div className="col-6 font-medium">{routeInfo.display.destination ?? '—'}</div>
-                
-                <div className="col-6 text-500">Date:</div>
-                <div className="col-6">{new Date().toLocaleDateString()}</div>
-              </div>
-            ) : (
-              <p className="text-500 italic">Sélectionnez une destination</p>
-            )}
-          </Card>
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-0">
+      {/* Colonne 1 — Informations de livraison */}
+     <section className="p-4 lg:p-6 lg:col-span-1">
+  {/* Header: titre + date (date à droite en desktop) */}
+  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between mb-4">
+    <div className="flex items-center">
+      <i className="pi pi-map-marker text-primary text-xl mr-2" />
+      <h3 className="text-lg font-semibold text-900 m-0">Informations de livraison</h3>
+    </div>
 
-          {(user?.role === 'SuperAdmin' || user?.role === 'AdminRegion') && (
-            <Card className="shadow-lg border-round-lg">
-              <div className="flex align-items-center mb-3">
-                <i className="pi pi-globe text-primary text-xl mr-2" />
-                <h3 className="text-lg font-semibold text-900">Destination</h3>
-              </div>
-              
-              <div className="space-y-3">
-                <Dropdown
-                  value={selectedRegion}
-                  options={regions}
-                  onChange={(e: DropdownChangeEvent) => {
-                    setSelectedRegion(e.value as Region | null);
-                    setSelectedPointVente(null);
-                    setSelectedFournisseur(null);
-                  }}
-                  optionLabel="nom"
-                  placeholder="Sélectionnez une région"
-                  showClear
-                  className="w-full"
-                  filter
-                  disabled={regionsLoading}
-                />
-                
-                {user?.role === 'SuperAdmin' && (
-                  <Dropdown
-                    value={selectedPointVente}
-                    options={pointsVente}
-                    onChange={(e: DropdownChangeEvent) => {
-                      setSelectedPointVente(e.value as PointVente | null);
-                      setSelectedRegion(null);
-                      setSelectedFournisseur(null);
-                    }}
-                    optionLabel="nom"
-                    placeholder="Sélectionnez un point de vente"
-                    showClear
-                    className="w-full"
-                    filter
-                    disabled={pvLoading}
-                  />
-                )}
-                
-                <Dropdown
-                  value={selectedFournisseur}
-                  options={MOCK_FOURNISSEURS}
-                  onChange={(e: DropdownChangeEvent) => {
-                    setSelectedFournisseur(e.value as Fournisseur | null);
-                    setSelectedRegion(null);
-                    setSelectedPointVente(null);
-                  }}
-                  optionLabel="nom"
-                  placeholder="Sélectionnez un fournisseur"
-                  showClear
-                  className="w-full"
-                />
-              </div>
-            </Card>
-          )}
+    {/* Date en badge (à droite en desktop) */}
+    <div className="inline-flex items-center gap-2 px-2 py-1 border-1 surface-border border-round text-600 text-sm">
+      <i className="pi pi-calendar text-sm" />
+      <span>{new Date().toLocaleDateString()}</span>
+    </div>
+  </div>
+
+  {routeInfo?.display ? (
+    <div className="space-y-3">
+      {/* Source */}
+      <div className="flex items-start gap-3 py-3 border-bottom-1 surface-border">
+        <i className="pi pi-shopping-bag text-primary text-lg mt-1" />
+        <div className="min-w-0">
+          <div className="text-500 text-sm">Source</div>
+          <div className="font-medium text-900 truncate">{routeInfo.display.source ?? '—'}</div>
         </div>
+      </div>
 
-        {/* Colonne Centrale - Formulaire principal */}
-        <div className="lg:col-span-2">
-          <Card className="shadow-lg border-round-lg">
-            <div className="flex align-items-center mb-4">
-              <i className="pi pi-shopping-cart text-primary text-2xl mr-2" />
-              <h2 className="text-2xl font-bold text-900">Nouvelle Commande</h2>
-            </div>
-
-            {/* Recherche et ajout de produits */}
-            <div className="grid grid-nogutter align-items-end gap-3 mb-6">
-              <div className="col-12 md:col-7">
-                <label htmlFor="produit-search" className="block text-500 text-sm mb-1">
-                  Rechercher un produit
-                </label>
-                <AutoComplete
-                  inputId="produit-search"
-                  value={searchInput}
-                  suggestions={suggestions}
-                  completeMethod={completeProduits}
-                  field="nom"
-                  dropdown
-                  forceSelection={false}
-                  onChange={e => setSearchInput(e.value)}
-                  onSelect={handleSelectProduit}
-                  placeholder="Saisissez le nom du produit..."
-                  className="w-full"
-                  dropdownMode="current"
-                />
-              </div>
-              
-              <div className="col-12 md:col-3">
-                <label htmlFor="quantite-input" className="block text-500 text-sm mb-1">
-                  Quantité
-                </label>
-                <InputNumber
-                  inputId="quantite-input"
-                  value={quantite}
-                  onValueChange={(e: InputNumberValueChangeEvent) => setQuantite(e.value ?? 1)}
-                  min={1}
-                  showButtons
-                  className="w-full"
-                />
-              </div>
-              
-              <div className="col-12 md:col-2">
-                <Button
-                  label="Ajouter"
-                  icon="pi pi-plus"
-                  className="w-full p-button-success"
-                  onClick={() => {
-                    const selected = suggestions.find(p => p.nom === searchInput) ?? suggestions[0] ?? null;
-                    handleAddProduit(selected, quantite);
-                  }}
-                  disabled={quantite <= 0 || suggestions.length === 0}
-                />
-              </div>
-            </div>
-
-            {/* Liste des produits */}
-            <div className="border-round border-1 surface-border">
-              {rows.length === 0 ? (
-                <div className="py-6 text-center">
-                  <i className="pi pi-inbox text-400 text-4xl mb-2" />
-                  <p className="text-500">Aucun produit ajouté à la commande</p>
-                </div>
-              ) : (
-                <DataTable
-                  value={rows}
-                  dataKey="id"
-                  scrollable
-                  scrollHeight="400px"
-                  className="w-full"
-                  responsiveLayout="stack"
-                  rowHover
-                >
-                  <Column header="#" body={(_, { rowIndex }) => rowIndex + 1} style={{ width: '60px' }} />
-                  <Column field="nom" header="Produit" />
-                  <Column field="quantite" header="Quantité" style={{ width: '120px' }} />
-                  <Column
-                    field="prixUnitaire"
-                    header="Prix unitaire"
-                    body={(row: CommandeProduitRow) => formatFc(safeNumber(row.prixUnitaire))}
-                    style={{ width: '160px' }}
-                  />
-                  <Column
-                    header="Total"
-                    body={(row: CommandeProduitRow) =>
-                      formatFc(safeNumber(row.prixUnitaire) * safeNumber(row.quantite))
-                    }
-                    style={{ width: '160px' }}
-                  />
-                  <Column
-                    body={(row: CommandeProduitRow) => (
-                      <Button
-                        icon="pi pi-trash"
-                        className="p-button-rounded p-button-text p-button-danger"
-                        onClick={() => handleRemoveProduit(row.id)}
-                        tooltip="Supprimer"
-                        tooltipOptions={{ position: 'top' }}
-                      />
-                    )}
-                    style={{ width: '80px' }}
-                    headerStyle={{ textAlign: 'center' }}
-                  />
-                </DataTable>
-              )}
-            </div>
-
-            {/* Total et validation */}
-            <div className="mt-6 border-top-1 surface-border pt-4 flex flex-column md:flex-row justify-between align-items-center">
-              <div className="mb-3 md:mb-0">
-                <span className="text-xl font-semibold text-900">Total: </span>
-                <span className="text-xl text-primary font-bold">{formatFc(totalCommande)}</span>
-              </div>
-              
-              <Button
-                label={status === 'loading' ? 'Traitement...' : 'Valider la commande'}
-                icon={status === 'loading' ? 'pi pi-spin pi-spinner' : 'pi pi-check'}
-                className="p-button-lg w-full md:w-auto"
-                onClick={handleSubmit}
-                disabled={!canSubmit}
-                size="large"
-              />
-            </div>
-          </Card>
-        </div>
-
-        {/* Colonne Droite - Informations supplémentaires */}
-        <div className="lg:col-span-1">
-          <Card className="shadow-lg border-round-lg">
-            <div className="flex align-items-center mb-3">
-              <i className="pi pi-info-circle text-primary text-xl mr-2" />
-              <h3 className="text-lg font-semibold text-900">Résumé</h3>
-            </div>
-            
-            <div className="grid mb-4">
-              <div className="col-6 text-500">Produits:</div>
-              <div className="col-6 text-right font-medium">{rows.length}</div>
-              
-              <div className="col-6 text-500">Quantité totale:</div>
-              <div className="col-6 text-right">{rows.reduce((acc, r) => acc + r.quantite, 0)}</div>
-            </div>
-
-            <div className="flex align-items-center mb-3">
-              <i className="pi pi-comment text-primary text-xl mr-2" />
-              <h3 className="text-lg font-semibold text-900">Notes</h3>
-            </div>
-            
-            <textarea
-              placeholder="Ajoutez des notes concernant cette commande..."
-              className="w-full p-3 border-1 surface-border border-round"
-              rows={4}
-              style={{ resize: 'vertical' }}
-            ></textarea>
-          </Card>
+      {/* Destination */}
+      <div className="flex items-start gap-3 py-3">
+        <i className="pi pi-shopping-bag text-primary text-lg mt-1" />
+        <div className="min-w-0">
+          <div className="text-500 text-sm">Destination</div>
+          <div className="font-medium text-900 truncate">{routeInfo.display.destination ?? '—'}</div>
         </div>
       </div>
     </div>
-  );
+  ) : (
+    <div className="p-3 border-1 border-dashed surface-border border-round text-600">
+      <i className="pi pi-info-circle mr-2" />
+      <span className="italic">Sélectionnez une destination</span>
+    </div>
+  )}
+</section>
+
+
+      {/* Colonne 2 — Formulaire principal */}
+      <section className="p-4 lg:p-6 lg:col-span-3 lg:border-l surface-border">
+        <div className="flex align-items-center mb-4">
+          <i className="pi pi-shopping-cart text-primary text-2xl mr-2" />
+          <h2 className="text-2xl font-bold text-900">Nouvelle Commande</h2>
+        </div>
+
+        {/* Ligne: Recherche & Quantité (stack mobile, 50/50 desktop) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="produit-search" className="block text-500 text-sm mb-1">
+              Rechercher un produit
+            </label>
+            <AutoComplete
+              inputId="produit-search"
+              value={searchInput}
+              suggestions={suggestions}
+              completeMethod={completeProduits}
+              field="nom"
+              dropdown
+              forceSelection={false}
+              onChange={(e) => setSearchInput(e.value)}
+              onSelect={handleSelectProduit}
+              placeholder="Saisissez le nom du produit..."
+              className="w-full"
+              dropdownMode="current"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="quantite-input" className="block text-500 text-sm mb-1">
+              Quantité
+            </label>
+            <InputNumber
+              inputId="quantite-input"
+              value={quantite}
+              onValueChange={(e: InputNumberValueChangeEvent) => setQuantite(e.value ?? 1)}
+              min={1}
+              showButtons
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        {/* Bouton Ajouter — sous les champs, à droite */}
+        <div className="mt-3 flex justify-end">
+          <Button
+            label="Ajouter"
+            icon="pi pi-plus"
+            className="w-full lg:w-auto p-button-success"
+            onClick={() => {
+              const selected = suggestions.find((p) => p.nom === searchInput) ?? suggestions[0] ?? null;
+              handleAddProduit(selected, quantite);
+            }}
+            disabled={quantite <= 0 || suggestions.length === 0}
+          />
+        </div>
+
+        {/* Détails / Liste produits */}
+        <div className="mt-6 border-1 surface-border border-round">
+          {rows.length === 0 ? (
+            <div className="py-6 text-center">
+              <i className="pi pi-inbox text-400 text-4xl mb-2" />
+              <p className="text-500">Aucun produit ajouté à la commande</p>
+            </div>
+          ) : (
+            <DataTable
+              value={rows}
+              dataKey="id"
+              scrollable
+              scrollHeight="400px"
+              className="w-full"
+              responsiveLayout="stack"
+              rowHover
+            >
+              <Column header="#" body={(_, { rowIndex }) => rowIndex + 1} style={{ width: '60px' }} />
+              <Column field="nom" header="Produit" />
+              <Column field="quantite" header="Quantité" style={{ width: '120px' }} />
+              <Column
+                field="prixUnitaire"
+                header="Prix unitaire"
+                body={(row: CommandeProduitRow) => formatFc(safeNumber(row.prixUnitaire))}
+                style={{ width: '160px' }}
+              />
+              <Column
+                header="Total"
+                body={(row: CommandeProduitRow) =>
+                  formatFc(safeNumber(row.prixUnitaire) * safeNumber(row.quantite))
+                }
+                style={{ width: '160px' }}
+              />
+              <Column
+                body={(row: CommandeProduitRow) => (
+                  <Button
+                    icon="pi pi-trash"
+                    className="p-button-rounded p-button-text p-button-danger"
+                    onClick={() => handleRemoveProduit(row.id)}
+                    tooltip="Supprimer"
+                    tooltipOptions={{ position: 'top' }}
+                  />
+                )}
+                style={{ width: '80px' }}
+                headerStyle={{ textAlign: 'center' }}
+              />
+            </DataTable>
+          )}
+        </div>
+
+        {/* Total & Validation */}
+        <div className="mt-6 border-top-1 surface-border pt-4 flex flex-col lg:flex-row justify-between items-center">
+          <div className="mb-3 lg:mb-0">
+            <span className="text-xl font-semibold text-900">Total: </span>
+            <span className="text-xl text-primary font-bold">{formatFc(totalCommande)}</span>
+          </div>
+
+          <Button
+            label={status === 'loading' ? 'Traitement...' : 'Valider la commande'}
+            icon={status === 'loading' ? 'pi pi-spin pi-spinner' : 'pi pi-check'}
+            className="p-button-lg w-full lg:w-auto"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            size="large"
+          />
+        </div>
+      </section>
+
+      {/* Colonne 3 — Destination (Résumé/Notes supprimés) */}
+      <section className="p-4 lg:p-6 lg:col-span-1 lg:border-l surface-border">
+        {(user?.role === 'SuperAdmin' || user?.role === 'AdminRegion') && (
+          <>
+            <div className="flex align-items-center mb-3">
+              <i className="pi pi-globe text-primary text-xl mr-2" />
+              <h3 className="text-lg font-semibold text-900">Destination</h3>
+            </div>
+
+            <div className="space-y-3">
+              <Dropdown
+                value={selectedRegion}
+                options={regions}
+                onChange={(e: DropdownChangeEvent) => {
+                  setSelectedRegion(e.value as Region | null);
+                  setSelectedPointVente(null);
+                  setSelectedFournisseur(null);
+                }}
+                optionLabel="nom"
+                placeholder="Sélectionnez une région"
+                showClear
+                className="w-full"
+                filter
+                disabled={regionsLoading}
+              />
+
+              {user?.role === 'SuperAdmin' && (
+                <Dropdown
+                  value={selectedPointVente}
+                  options={pointsVente}
+                  onChange={(e: DropdownChangeEvent) => {
+                    setSelectedPointVente(e.value as PointVente | null);
+                    setSelectedRegion(null);
+                    setSelectedFournisseur(null);
+                  }}
+                  optionLabel="nom"
+                  placeholder="Sélectionnez un point de vente"
+                  showClear
+                  className="w-full"
+                  filter
+                  disabled={pvLoading}
+                />
+              )}
+
+              <Dropdown
+                value={selectedFournisseur}
+                options={MOCK_FOURNISSEURS}
+                onChange={(e: DropdownChangeEvent) => {
+                  setSelectedFournisseur(e.value as Fournisseur | null);
+                  setSelectedRegion(null);
+                  setSelectedPointVente(null);
+                }}
+                optionLabel="nom"
+                placeholder="Sélectionnez un fournisseur"
+                showClear
+                className="w-full"
+              />
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  </div>
+);
+
+
 };
 
 export default CommandeForm;
