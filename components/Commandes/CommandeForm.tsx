@@ -1,27 +1,29 @@
-// components/commande/CommandeForm.tsx
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment, react-hooks/exhaustive-deps, @typescript-eslint/no-unused-vars */
+// File: app/(backoffice)/commande/CommandeForm.tsx
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import Link from 'next/link';
-import { List } from 'lucide-react';
-
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { AppDispatch, RootState } from '@/stores/store';
+import type { AppDispatch, RootState } from '@/stores/store';
 
+import { Toast } from 'primereact/toast';
+import {
+  AutoComplete,
+  AutoCompleteCompleteEvent,
+  AutoCompleteSelectEvent,
+} from 'primereact/autocomplete';
+import { Dropdown, DropdownChangeEvent } from 'primereact/dropdown';
+import { InputNumber, InputNumberValueChangeEvent } from 'primereact/inputnumber';
+import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
 import { Column } from 'primereact/column';
 import { DataTable } from 'primereact/datatable';
-import { Button } from 'primereact/button';
-import { InputNumber } from 'primereact/inputnumber';
-import { AutoComplete, AutoCompleteCompleteEvent } from 'primereact/autocomplete';
-import { Toast } from 'primereact/toast';
-import { Dropdown } from 'primereact/dropdown';
+import { ProgressSpinner } from 'primereact/progressspinner';
 
-import { Produit, Categorie } from '@/Models/produitsType';
-import { Region } from '@/Models/regionTypes';
-import { PointVente } from '@/Models/pointVenteType';
-import { CommandeProduit } from '@/Models/CommandeProduitType';
+import type { Produit } from '@/Models/produitsType';
+import type { Region } from '@/Models/regionTypes';
+import type { PointVente } from '@/Models/pointVenteType';
+import type { CommandeProduit } from '@/Models/CommandeProduitType';
+import type { User } from '@/Models/UserType';
 
 import { searchProduits } from '@/stores/slices/produits/produitsSlice';
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
@@ -33,596 +35,529 @@ import {
 } from '@/stores/slices/pointvente/pointventeSlice';
 import { createCommande, downloadBlob } from '@/stores/slices/commandes/commandeSlice';
 
-import { CommandeNotification } from '../CommandeNotification';
+type Fournisseur = { _id: string; nom: string };
+const MOCK_FOURNISSEURS: Fournisseur[] = [
+  { _id: 'f1', nom: 'Fournisseur Global' },
+  { _id: 'f2', nom: 'Eco Supplies' },
+  { _id: 'f3', nom: 'AgriParts SA' },
+];
 
-/* ----------------------------- Helpers ----------------------------- */
-const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
-const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+type CommandeProduitRow = {
+  id: string;
+  produit: Produit;
+  nom: string;
+  prixUnitaire: number;
+  quantite: number;
+  statut: string;
+};
 
-/** Décode tous les formats possibles renvoyés par l’API pour la recherche produits */
-const extractProduitList = (payload: any): Produit[] => {
-  if (Array.isArray(payload)) return payload as Produit[];
-  if (payload && typeof payload === 'object') {
-    if (Array.isArray(payload.data)) return payload.data as Produit[];
-    if (Array.isArray(payload.docs)) return payload.docs as Produit[];
-    if (Array.isArray(payload.items)) return payload.items as Produit[];
+type RouteInfo = {
+  display: { source?: string; destination?: string };
+  depotCentral?: boolean;
+  requestedPointVente?: string;
+  requestedRegion?: string;
+  region?: string;
+  pointVente?: string;
+  fournisseur?: string;
+};
+
+const getUserFromStorage = (): User | null => {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem('user-agricap');
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
   }
+};
+
+const extractProduitList = (payload: unknown): Produit[] => {
+  const p: any = payload;
+  if (!p) return [];
+  if (Array.isArray(p)) return p;
+  if (Array.isArray(p?.data)) return p.data;
+  if (Array.isArray(p?.docs)) return p.docs;
+  if (Array.isArray(p?.items)) return p.items;
   return [];
 };
 
-/* ============================== Component ============================== */
-const CommandeForm = () => {
+const safeNumber = (v: unknown, fallback = 0): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const formatFc = (n: number): string => `FC ${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const CommandeForm: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const toast = useRef<Toast>(null);
 
-  // user depuis localStorage
-  const user =
-    typeof window !== 'undefined'
-      ? (() => {
-          try {
-            return JSON.parse(localStorage.getItem('user-agricap') || 'null');
-          } catch {
-            return null;
-          }
-        })()
-      : null;
+  const [mounted, setMounted] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
-  // sélecteurs
-  const regions = useSelector((state: RootState) => asArray<Region>(selectAllRegions(state)));
-  const pointsVente = useSelector((state: RootState) =>
-    asArray<PointVente>(selectAllPointVentes(state))
-  );
+  const regions = useSelector((s: RootState) => selectAllRegions(s));
+  const pointsVente = useSelector((s: RootState) => selectAllPointVentes(s));
 
-  // états
-  const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState<Produit[]>([]);
-  const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
-  const [quantite, setQuantite] = useState<number>(1);
-
-  const [commandeProduits, setCommandeProduits] = useState<CommandeProduit[]>([]);
+  const [user, setUser] = useState<User | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
   const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(null);
+  const [selectedFournisseur, setSelectedFournisseur] = useState<Fournisseur | null>(null);
+
+  const [rows, setRows] = useState<CommandeProduitRow[]>([]);
+  const [searchInput, setSearchInput] = useState<string>('');
+  const [suggestions, setSuggestions] = useState<Produit[]>([]);
+  const [quantite, setQuantite] = useState<number>(1);
 
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [pvLoading, setPvLoading] = useState<boolean>(false);
-  const [regionsLoading, setRegionsLoading] = useState<boolean>(false);
+  const [regionsLoading, setRegionsLoading] = useState(false);
+  const [pvLoading, setPvLoading] = useState(false);
 
-  /* ----------------------------- Boot data ----------------------------- */
   useEffect(() => {
-    if (!user?.role) return;
+    setMounted(true);
+    const u = getUserFromStorage();
+    setUser(u);
 
-    (async () => {
-      try {
-        if (user?.role === 'AdminRegion') {
-          if (user?.region?._id) {
-            setPvLoading(true);
-            await dispatch(
-              fetchPointVentesByRegionId({ regionId: user.region._id, limit: 100000 } as any)
-            );
-            setPvLoading(false);
-          }
-          setRegionsLoading(true);
-          await dispatch(fetchRegions({ limit: 100000 } as any));
-          setRegionsLoading(false);
-        } else if (user?.role === 'SuperAdmin') {
-          setPvLoading(true);
-          await dispatch(fetchPointVentes({ limit: 100000 } as any));
-          setPvLoading(false);
-          setRegionsLoading(true);
-          await dispatch(fetchRegions({ limit: 100000 } as any));
-          setRegionsLoading(false);
-        } else {
-          // autres rôles : récupérer au moins son PV
-          if (user?.pointVente?._id) {
-            await dispatch(fetchPointVenteById(user.pointVente._id));
-          }
-        }
-      } catch {
-        setPvLoading(false);
-        setRegionsLoading(false);
-      }
-    })();
-  }, [dispatch, user?.role, user?.region?._id, user?.pointVente?._id]);
-
-  // quand la région change, charger ses PV
-  useEffect(() => {
-    (async () => {
-      if (selectedRegion?._id) {
-        setPvLoading(true);
-
-        await dispatch(fetchPointVentesByRegionId({ regionId: selectedRegion._id, limit: 100000 }));
-        setPvLoading(false);
-        setSelectedPointVente(null); // éviter incohérence
-      }
-    })();
-  }, [dispatch, selectedRegion?._id]);
-
-  /* ------------------------ AutoComplete Produits ------------------------ */
-  const completeProduits = useCallback(
-    async (e: AutoCompleteCompleteEvent) => {
-      const q = String(e.query || '').trim();
-      if (!q) {
-        setSuggestions([]);
+    const bootstrap = async () => {
+      if (!u?.role) {
+        setInitialized(true);
         return;
       }
       try {
-        const action = await dispatch(
-          searchProduits({ q, page: 1, limit: 10, includeTotal: false }) as any
-        );
-        if ((searchProduits as any).fulfilled.match(action)) {
-          const list = extractProduitList(action.payload);
-          setSuggestions(list);
-        } else {
-          setSuggestions([]);
+        setRegionsLoading(true);
+        setPvLoading(true);
+
+        if (u.role === 'SuperAdmin') {
+          await dispatch(fetchRegions({ limit: 100000 } as any));
+          await dispatch(fetchPointVentes({ limit: 100000 } as any));
+        } else if (u.role === 'AdminRegion' && u.region?._id) {
+          await dispatch(fetchRegions({ limit: 100000 } as any));
+          await dispatch(fetchPointVentesByRegionId({ regionId: u.region._id, limit: 100000 } as any));
+        } else if (u.role === 'AdminPointVente' && u.pointVente?._id) {
+          await dispatch(fetchPointVenteById(u.pointVente._id));
         }
-      } catch {
+      } catch (err) {
+        console.error('Erreur initialisation', err);
+      } finally {
+        setRegionsLoading(false);
+        setPvLoading(false);
+        setInitialized(true);
+      }
+    };
+
+    void bootstrap();
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (selectedRegion?._id) {
+      setSelectedPointVente(null);
+      dispatch(fetchPointVentesByRegionId({ regionId: selectedRegion._id, limit: 100000 } as any));
+    }
+  }, [dispatch, selectedRegion]);
+
+  const completeProduits = useCallback(
+    async (e: AutoCompleteCompleteEvent) => {
+    const q = String(e.query || '').trim();
+    if (!q) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const action = await dispatch(searchProduits({ q, page: 1, limit: 10 }) as any);
+      if (searchProduits.fulfilled.match(action)) {
+        setSuggestions(extractProduitList(action.payload));
+      } else {
         setSuggestions([]);
       }
-    },
-    [dispatch]
-  );
-
-  // Template des lignes de suggestion
-  const suggestionItemTemplate = (item: Produit) => (
-    <div className="flex items-center gap-3 p-2">
-      <div className="flex-shrink-0 w-10 h-10 bg-green-600 rounded-lg border border-green-700 flex items-center justify-center text-white text-lg font-bold">
-        {item?.nom?.charAt(0)?.toUpperCase() || '?'}
-      </div>
-      <div className="flex flex-col">
-        <div className="font-semibold text-gray-900">{item.nom}</div>
-        <div className="text-xs text-gray-500">
-          fc{Number(item.prix ?? 0).toFixed(2)} •{' '}
-          {(item.categorie as Categorie)?.nom || 'Sans catégorie'}
-        </div>
-      </div>
-    </div>
-  );
-
-  /* ----------------------------- Handlers ----------------------------- */
-  const handleAddProduit = useCallback(() => {
-    if (!selectedProduit || quantite <= 0) return;
-
-    const existIndex = commandeProduits.findIndex((p) =>
-      typeof p.produit === 'object'
-        ? p.produit._id === selectedProduit._id
-        : p.produit === selectedProduit._id
-    );
-
-    if (existIndex !== -1) {
-      const updated = [...commandeProduits];
-      updated[existIndex].quantite += quantite;
-      setCommandeProduits(updated);
-    } else {
-      // @ts-expect-error - compat: external lib types mismatch
-      setCommandeProduits((prev) => [
-        ...prev,
-        {
-          produit: selectedProduit,
-          quantite,
-          nom: selectedProduit.nom,
-          prixUnitaire: Number(selectedProduit.prix ?? 0),
-          statut: 'attente',
-        },
-      ]);
+    } catch (err) {
+      console.error('Erreur autocomplete', err);
+      setSuggestions([]);
     }
+  }, [dispatch]);
 
-    setSelectedProduit(null);
-    setSearchTerm('');
-    setQuantite(1);
-    setSuggestions([]);
-  }, [selectedProduit, quantite, commandeProduits]);
-
-  const handleRemoveProduit = useCallback((produitId: string) => {
-    setCommandeProduits((prev) =>
-      prev.filter((p) => {
-        const id = typeof p.produit === 'object' ? p.produit._id : p.produit;
-        return id !== produitId;
-      })
-    );
+  const handleSelectProduit = useCallback((e: AutoCompleteSelectEvent) => {
+    const p = e.value as Produit;
+    setSearchInput(p?.nom ?? '');
   }, []);
 
-  const canSubmit = useMemo(() => {
-    const hasItems = commandeProduits.length > 0;
-    const hasLocation = !!selectedRegion || !!selectedPointVente;
-    return hasItems && hasLocation && status !== 'loading';
-  }, [commandeProduits.length, selectedRegion, selectedPointVente, status]);
+  const handleAddProduit = useCallback((produit: Produit | null, qte: number) => {
+    if (!produit || qte <= 0) return;
+    const id = (produit as any)?._id as string;
+    const prix = safeNumber((produit as any)?.prix ?? (produit as any)?.prixVente ?? 0);
 
-  const totalCommande = useMemo(
-    () =>
-      commandeProduits.reduce((total, p) => {
-        const prix =
-          typeof p.produit === 'object'
-            ? Number(p.produit.prix ?? 0)
-            : // @ts-expect-error - compat: external lib types mismatch
-              Number(p?.produit.prix ?? 0);
-        return total + prix * (p.quantite ?? 0);
-      }, 0),
-    [commandeProduits]
-  );
+    setRows((prev) => {
+      const idx = prev.findIndex(r => r.id === id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], quantite: next[idx].quantite + qte };
+        return next;
+      }
+      return [
+        ...prev,
+        {
+          id,
+          produit,
+          nom: produit.nom ?? 'Produit',
+          prixUnitaire: prix,
+          quantite: qte,
+          statut: 'attente',
+        },
+      ];
+    });
+
+    setSearchInput('');
+    setSuggestions([]);
+    setQuantite(1);
+  }, []);
+
+  const handleRemoveProduit = useCallback((id: string) => {
+    setRows(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  const routeInfo: RouteInfo | null = useMemo(() => {
+    if (!user) return null;
+    if (user.role === 'AdminPointVente' || user.role === 'Logisticien') {
+      const pv = user.pointVente as PointVente | undefined;
+      const reg = pv?.region as Region | undefined;
+      return {
+        requestedPointVente: pv?._id,
+        region: reg?._id,
+        display: { source: pv?.nom, destination: reg?.nom },
+      };
+    }
+    if (user.role === 'AdminRegion') {
+      const srcRegion = user.region as Region;
+      const destRegion = selectedRegion ?? undefined;
+      return {
+        requestedRegion: srcRegion?._id,
+        region: selectedFournisseur ? undefined : destRegion?._id,
+        fournisseur: selectedFournisseur?._id,
+        depotCentral: !selectedRegion && !selectedFournisseur,
+        display: {
+          source: srcRegion?.nom,
+          destination: selectedFournisseur ? selectedFournisseur.nom : destRegion?.nom || 'Central',
+        },
+      };
+    }
+    if (user.role === 'SuperAdmin') {
+      const dest = selectedFournisseur?.nom ?? selectedRegion?.nom ?? selectedPointVente?.nom ?? 'Non défini';
+      return {
+        depotCentral: true,
+        region: selectedRegion?._id,
+        pointVente: selectedPointVente?._id,
+        fournisseur: selectedFournisseur?._id,
+        display: { source: 'Central', destination: dest },
+      };
+    }
+    return null;
+  }, [user, selectedRegion, selectedPointVente, selectedFournisseur]);
+
+  const totalCommande = useMemo(() => {
+    return rows.reduce((acc, r) => acc + safeNumber(r.prixUnitaire) * safeNumber(r.quantite), 0);
+  }, [rows]);
+
+  const canSubmit = useMemo(() => rows.length > 0 && !!routeInfo && status !== 'loading', [rows, routeInfo, status]);
 
   const handleSubmit = useCallback(async () => {
-    if (commandeProduits.length === 0) {
+    if (!routeInfo || rows.length === 0) {
       toast.current?.show({
         severity: 'warn',
-        summary: 'Commande vide',
-        detail: 'Veuillez ajouter au moins un produit',
+        summary: 'Erreur',
+        detail: 'Champs requis manquants',
         life: 3000,
       });
       return;
     }
-    if (!selectedRegion && !selectedPointVente) {
-      toast.current?.show({
-        severity: 'warn',
-        summary: 'Localisation requise',
-        detail: 'Choisissez une région ou un point de vente.',
-        life: 3000,
-      });
-      return;
-    }
-
     setStatus('loading');
-
-    const produitsPourAPI = commandeProduits.map((item) => ({
-      produit: typeof item.produit === 'object' ? item.produit._id : item.produit,
-      quantite: item.quantite,
+    const produitsPourAPI = rows.map(r => ({
+      produit: r.id,
+      quantite: r.quantite,
     }));
-
-    const payload = {
-      user: user?._id,
-      region: selectedRegion?._id || undefined,
-      pointVente: selectedPointVente?._id || undefined,
-      depotCentral: false,
+    const payload: any = {
+      user: (user as any)?._id,
       produits: produitsPourAPI,
       print: true,
       format: 'pos80',
+      organisation: null,
+      ...routeInfo,
     };
-
     try {
-      //@ts-ignore
-      const resultAction = await dispatch(createCommande(payload));
-
-      if (createCommande.fulfilled.match(resultAction)) {
-        const result = resultAction.payload;
-        if (result.type === 'pdf') {
-          downloadBlob(result.blob, result.filename);
-          toast.current?.show({
-            severity: 'success',
-            summary: 'Succès',
-            detail: 'Commande créée et imprimée avec succès',
-            life: 3000,
-          });
-        } else {
-          toast.current?.show({
-            severity: 'success',
-            summary: 'Succès',
-            detail: 'Commande créée avec succès',
-            life: 3000,
-          });
+      const result: any = await dispatch(createCommande(payload) as any);
+      if (createCommande.fulfilled.match(result)) {
+        const res = result.payload as { type?: string; blob?: Blob; filename?: string };
+        if (res?.type === 'pdf' && res.blob && res.filename) {
+          downloadBlob(res.blob, res.filename);
         }
-        setCommandeProduits([]);
+        toast.current?.show({ severity: 'success', summary: 'Succès', detail: 'Commande créée', life: 3000 });
+        setRows([]);
+        setSearchInput('');
         setSelectedRegion(null);
         setSelectedPointVente(null);
+        setSelectedFournisseur(null);
       } else {
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Erreur',
-          detail: resultAction.payload || 'Erreur lors de la création de la commande',
-          life: 5000,
-        });
+        const errMsg = (result?.payload as any) || 'Erreur de création';
+        toast.current?.show({ severity: 'error', summary: 'Erreur', detail: String(errMsg), life: 5000 });
       }
-    } catch (err) {
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Erreur',
-        detail: (err as Error).message || 'Erreur inconnue',
-        life: 5000,
-      });
+    } catch (err: any) {
+      console.error('Erreur soumission', err);
+      toast.current?.show({ severity: 'error', summary: 'Erreur', detail: err?.message || 'Erreur inconnue', life: 5000 });
     } finally {
       setStatus('idle');
     }
-  }, [commandeProduits, selectedRegion, selectedPointVente, dispatch, user?._id]);
+  }, [dispatch, rows, routeInfo, user]);
 
-  /* ---------------------------------- UI ---------------------------------- */
+  if (!mounted || !initialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <ProgressSpinner />
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full mx-auto p-6 bg-white rounded-xl shadow-lg border border-gray-200">
+    <div className="w-full min-h-screen p-6 bg-gray-50">
       <Toast ref={toast} position="top-right" />
 
-      {/* Header */}
-      <header className="flex items-center mb-8 flex-row justify-between">
-        <div className="flex items-center flex-row gap-3">
-          <i
-            className="pi pi-shopping-cart text-4xl mr-1"
-            style={{ color: '#15803d', fontSize: '26px' }}
-          />
-          <h1 className="text-3xl md:text-4xl font-extrabold" style={{ color: '#15803d' }}>
-            Nouvelle Commande
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <CommandeNotification />
-          <Link
-            href="/generals/commandes/listes"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-700 text-white hover:bg-green-800 transition shadow-sm"
-            title="Voir la liste des commandes"
-          >
-            <List size={18} />
-            <span className="hidden sm:inline">Voir la liste</span>
-          </Link>
-        </div>
-      </header>
-
-      <div className="flex flex-col md:flex-row gap-10">
-        {/* Bloc localisation */}
-        <section className="md:w-1/4 bg-green-50 rounded-lg p-6 shadow-inner border border-green-100">
-          <h2 className="mb-4 text-xl font-semibold text-green-700 border-b border-green-300 pb-3 flex items-center gap-2">
-            <i className="pi pi-map-marker" style={{ color: '#15803d' }} /> Sélection Géographique
-          </h2>
-
-          <div className="space-y-5 mt-6">
-            <div>
-              <label htmlFor="region" className="block text-gray-700 font-medium mb-2">
-                Région
-              </label>
-              <Dropdown
-                id="region"
-                value={selectedRegion}
-                options={regions}
-                onChange={(e) => setSelectedRegion(e.value)}
-                optionLabel="nom"
-                placeholder="Choisir une région"
-                className="w-full shadow-sm border border-gray-300 rounded-md"
-                showClear
-                style={{ borderColor: '#15803d' }}
-                disabled={status === 'loading' || regionsLoading}
-                loading={regionsLoading}
-                filter
-                filterBy="nom"
-                filterPlaceholder="Rechercher..."
-                resetFilterOnHide
-                panelClassName="max-h-72 overflow-auto"
-                panelStyle={{ maxHeight: '18rem' }}
-                emptyFilterMessage="Aucun résultat"
-                emptyMessage="Aucune région"
-              />
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Colonne Gauche */}
+        <div className="lg:col-span-1 space-y-6">
+          <Card className="shadow-lg border-round-lg">
+            <div className="flex align-items-center mb-3">
+              <i className="pi pi-map-marker text-primary text-xl mr-2" />
+              <h3 className="text-lg font-semibold text-900">Informations de livraison</h3>
             </div>
+            
+            {routeInfo?.display ? (
+              <div className="grid">
+                <div className="col-6 text-500">Source:</div>
+                <div className="col-6 font-medium">{routeInfo.display.source ?? '—'}</div>
+                
+                <div className="col-6 text-500">Destination:</div>
+                <div className="col-6 font-medium">{routeInfo.display.destination ?? '—'}</div>
+                
+                <div className="col-6 text-500">Date:</div>
+                <div className="col-6">{new Date().toLocaleDateString()}</div>
+              </div>
+            ) : (
+              <p className="text-500 italic">Sélectionnez une destination</p>
+            )}
+          </Card>
 
-            <div>
-              <label htmlFor="pointVente" className="block text-gray-700 font-medium mb-2">
-                Point de vente
-              </label>
-              <Dropdown
-                id="pointVente"
-                value={selectedPointVente}
-                options={pointsVente}
-                onChange={(e) => setSelectedPointVente(e.value)}
-                optionLabel="nom"
-                placeholder="Choisir un point de vente"
-                className="w-full shadow-sm border border-gray-300 rounded-md"
-                showClear
-                style={{ borderColor: '#15803d' }}
-                disabled={status === 'loading' || pvLoading}
-                loading={pvLoading}
-                filter
-                filterBy="nom,adresse"
-                filterPlaceholder="Rechercher..."
-                resetFilterOnHide
-                panelClassName="max-h-72 overflow-auto"
-                panelStyle={{ maxHeight: '18rem' }}
-                emptyFilterMessage="Aucun résultat"
-                emptyMessage="Aucun point de vente"
-                itemTemplate={(pv: PointVente) => (
-                  <div className="flex flex-col">
-                    <span className="font-medium text-gray-800">{pv?.nom}</span>
-                    <span className="text-xs text-gray-500">
-                      {(pv as any)?.adresse || '\u00A0'}
-                    </span>
-                  </div>
+          {(user?.role === 'SuperAdmin' || user?.role === 'AdminRegion') && (
+            <Card className="shadow-lg border-round-lg">
+              <div className="flex align-items-center mb-3">
+                <i className="pi pi-globe text-primary text-xl mr-2" />
+                <h3 className="text-lg font-semibold text-900">Destination</h3>
+              </div>
+              
+              <div className="space-y-3">
+                <Dropdown
+                  value={selectedRegion}
+                  options={regions}
+                  onChange={(e: DropdownChangeEvent) => {
+                    setSelectedRegion(e.value as Region | null);
+                    setSelectedPointVente(null);
+                    setSelectedFournisseur(null);
+                  }}
+                  optionLabel="nom"
+                  placeholder="Sélectionnez une région"
+                  showClear
+                  className="w-full"
+                  filter
+                  disabled={regionsLoading}
+                />
+                
+                {user?.role === 'SuperAdmin' && (
+                  <Dropdown
+                    value={selectedPointVente}
+                    options={pointsVente}
+                    onChange={(e: DropdownChangeEvent) => {
+                      setSelectedPointVente(e.value as PointVente | null);
+                      setSelectedRegion(null);
+                      setSelectedFournisseur(null);
+                    }}
+                    optionLabel="nom"
+                    placeholder="Sélectionnez un point de vente"
+                    showClear
+                    className="w-full"
+                    filter
+                    disabled={pvLoading}
+                  />
                 )}
-              />
+                
+                <Dropdown
+                  value={selectedFournisseur}
+                  options={MOCK_FOURNISSEURS}
+                  onChange={(e: DropdownChangeEvent) => {
+                    setSelectedFournisseur(e.value as Fournisseur | null);
+                    setSelectedRegion(null);
+                    setSelectedPointVente(null);
+                  }}
+                  optionLabel="nom"
+                  placeholder="Sélectionnez un fournisseur"
+                  showClear
+                  className="w-full"
+                />
+              </div>
+            </Card>
+          )}
+        </div>
+
+        {/* Colonne Centrale - Formulaire principal */}
+        <div className="lg:col-span-2">
+          <Card className="shadow-lg border-round-lg">
+            <div className="flex align-items-center mb-4">
+              <i className="pi pi-shopping-cart text-primary text-2xl mr-2" />
+              <h2 className="text-2xl font-bold text-900">Nouvelle Commande</h2>
             </div>
-          </div>
-        </section>
 
-        {/* Bloc produits */}
-        <section className="md:w-3/4 flex flex-col gap-8">
-          <Card className="shadow-md p-6 border border-gray-100 rounded-lg">
-            <h2 className="text-2xl font-semibold mb-5 text-green-700 flex items-center gap-2">
-              <i className="pi pi-box text-2xl" style={{ color: '#15803d' }} /> Ajouter un produit
-            </h2>
-
-            <div className="grid grid-cols-12 gap-5 items-end">
-              <div className="col-span-12 md:col-span-7">
-                <label className="block text-gray-700 font-medium mb-2">Produit</label>
+            {/* Recherche et ajout de produits */}
+            <div className="grid grid-nogutter align-items-end gap-3 mb-6">
+              <div className="col-12 md:col-7">
+                <label htmlFor="produit-search" className="block text-500 text-sm mb-1">
+                  Rechercher un produit
+                </label>
                 <AutoComplete
-                  value={selectedProduit ? selectedProduit.nom : searchTerm}
+                  inputId="produit-search"
+                  value={searchInput}
                   suggestions={suggestions}
                   completeMethod={completeProduits}
                   field="nom"
-                  delay={200}
                   dropdown
                   forceSelection={false}
-                  itemTemplate={suggestionItemTemplate}
-                  placeholder="Rechercher un produit..."
-                  className="w-full shadow-sm border border-gray-300 rounded-md"
-                  appendTo={typeof window !== 'undefined' ? document.body : undefined}
-                  panelClassName="z-50"
-                  onChange={(e) => {
-                    if (typeof e.value === 'string') {
-                      setSearchTerm(e.value);
-                      setSelectedProduit(null);
-                      if (!e.value) setSuggestions([]);
-                    } else {
-                      const p = e.value as Produit;
-                      setSelectedProduit(p);
-                      setSearchTerm(p?.nom ?? '');
-                    }
-                  }}
-                  onSelect={(e) => {
-                    const p: Produit = e.value;
-                    setSelectedProduit(p);
-                    setSearchTerm(p?.nom ?? '');
-                  }}
+                  onChange={e => setSearchInput(e.value)}
+                  onSelect={handleSelectProduit}
+                  placeholder="Saisissez le nom du produit..."
+                  className="w-full"
+                  dropdownMode="current"
                 />
               </div>
-
-              <div className="col-span-12 md:col-span-5">
-                <label htmlFor="quantite" className="block text-gray-700 font-medium mb-1">
+              
+              <div className="col-12 md:col-3">
+                <label htmlFor="quantite-input" className="block text-500 text-sm mb-1">
                   Quantité
                 </label>
                 <InputNumber
-                  id="quantite"
+                  inputId="quantite-input"
                   value={quantite}
-                  onValueChange={(e) => setQuantite(e.value || 1)}
+                  onValueChange={(e: InputNumberValueChangeEvent) => setQuantite(e.value ?? 1)}
                   min={1}
                   showButtons
-                  className="w-full shadow-sm border border-gray-300 rounded-md"
+                  className="w-full"
+                />
+              </div>
+              
+              <div className="col-12 md:col-2">
+                <Button
+                  label="Ajouter"
+                  icon="pi pi-plus"
+                  className="w-full p-button-success"
+                  onClick={() => {
+                    const selected = suggestions.find(p => p.nom === searchInput) ?? suggestions[0] ?? null;
+                    handleAddProduit(selected, quantite);
+                  }}
+                  disabled={quantite <= 0 || suggestions.length === 0}
                 />
               </div>
             </div>
 
-            <div className="flex p-3 justify-end">
+            {/* Liste des produits */}
+            <div className="border-round border-1 surface-border">
+              {rows.length === 0 ? (
+                <div className="py-6 text-center">
+                  <i className="pi pi-inbox text-400 text-4xl mb-2" />
+                  <p className="text-500">Aucun produit ajouté à la commande</p>
+                </div>
+              ) : (
+                <DataTable
+                  value={rows}
+                  dataKey="id"
+                  scrollable
+                  scrollHeight="400px"
+                  className="w-full"
+                  responsiveLayout="stack"
+                  rowHover
+                >
+                  <Column header="#" body={(_, { rowIndex }) => rowIndex + 1} style={{ width: '60px' }} />
+                  <Column field="nom" header="Produit" />
+                  <Column field="quantite" header="Quantité" style={{ width: '120px' }} />
+                  <Column
+                    field="prixUnitaire"
+                    header="Prix unitaire"
+                    body={(row: CommandeProduitRow) => formatFc(safeNumber(row.prixUnitaire))}
+                    style={{ width: '160px' }}
+                  />
+                  <Column
+                    header="Total"
+                    body={(row: CommandeProduitRow) =>
+                      formatFc(safeNumber(row.prixUnitaire) * safeNumber(row.quantite))
+                    }
+                    style={{ width: '160px' }}
+                  />
+                  <Column
+                    body={(row: CommandeProduitRow) => (
+                      <Button
+                        icon="pi pi-trash"
+                        className="p-button-rounded p-button-text p-button-danger"
+                        onClick={() => handleRemoveProduit(row.id)}
+                        tooltip="Supprimer"
+                        tooltipOptions={{ position: 'top' }}
+                      />
+                    )}
+                    style={{ width: '80px' }}
+                    headerStyle={{ textAlign: 'center' }}
+                  />
+                </DataTable>
+              )}
+            </div>
+
+            {/* Total et validation */}
+            <div className="mt-6 border-top-1 surface-border pt-4 flex flex-column md:flex-row justify-between align-items-center">
+              <div className="mb-3 md:mb-0">
+                <span className="text-xl font-semibold text-900">Total: </span>
+                <span className="text-xl text-primary font-bold">{formatFc(totalCommande)}</span>
+              </div>
+              
               <Button
-                label="Ajouter un produit"
-                icon="pi pi-plus"
-                className="p-3 font-bold shadow-lg text-white"
-                onClick={handleAddProduit}
-                disabled={!selectedProduit || quantite <= 0}
-                style={{
-                  background: 'linear-gradient(to right, #15803d, #166534)',
-                  border: '1px solid #15803d',
-                  color: 'white',
-                }}
+                label={status === 'loading' ? 'Traitement...' : 'Valider la commande'}
+                icon={status === 'loading' ? 'pi pi-spin pi-spinner' : 'pi pi-check'}
+                className="p-button-lg w-full md:w-auto"
+                onClick={handleSubmit}
+                disabled={!canSubmit}
+                size="large"
               />
             </div>
           </Card>
+        </div>
 
-          <Card className="p-6 shadow-md border border-gray-100 rounded-lg flex flex-col">
-            <h2 className="text-2xl font-semibold mb-5 text-green-700 flex items-center gap-2">
-              <i className="pi pi-list text-xl" style={{ color: '#15803d' }} /> Détails des Produits
-              Sélectionnés
-            </h2>
-
-            <div className="mb-6 flex flex-wrap gap-6 text-green-700 font-medium text-lg">
-              <div className="flex items-center gap-2">
-                <i className="pi pi-map-marker" />
-                <span>Région: {selectedRegion ? selectedRegion.nom : 'Non sélectionnée'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <i className="pi pi-building" />
-                <span>
-                  Point de vente: {selectedPointVente ? selectedPointVente.nom : 'Non sélectionné'}
-                </span>
-              </div>
+        {/* Colonne Droite - Informations supplémentaires */}
+        <div className="lg:col-span-1">
+          <Card className="shadow-lg border-round-lg">
+            <div className="flex align-items-center mb-3">
+              <i className="pi pi-info-circle text-primary text-xl mr-2" />
+              <h3 className="text-lg font-semibold text-900">Résumé</h3>
+            </div>
+            
+            <div className="grid mb-4">
+              <div className="col-6 text-500">Produits:</div>
+              <div className="col-6 text-right font-medium">{rows.length}</div>
+              
+              <div className="col-6 text-500">Quantité totale:</div>
+              <div className="col-6 text-right">{rows.reduce((acc, r) => acc + r.quantite, 0)}</div>
             </div>
 
-            {commandeProduits.length === 0 ? (
-              <p className="text-gray-500 italic text-center py-10">
-                Aucun produit ajouté. Veuillez sélectionner un produit pour commencer.
-              </p>
-            ) : (
-              <>
-                <DataTable
-                  value={commandeProduits}
-                  className="shadow-sm rounded-lg"
-                  scrollable
-                  scrollHeight="280px"
-                  responsiveLayout="scroll"
-                  stripedRows
-                  showGridlines
-                >
-                  <Column
-                    header="#"
-                    body={(_, options) => (options?.rowIndex ?? 0) + 1}
-                    className="w-12"
-                  />
-                  <Column
-                    field="produit.nom"
-                    header="Produit"
-                    body={(data) => (
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-green-600 flex items-center justify-center text-white font-bold text-sm">
-                          {String(data.nom || '?')
-                            .charAt(0)
-                            .toUpperCase()}
-                        </div>
-                        <span className="font-medium">{data.nom}</span>
-                      </div>
-                    )}
-                  />
-                  <Column field="quantite" header="Quantité" />
-                  <Column
-                    field="prixUnitaire"
-                    header="Prix Unitaire"
-                    body={(rowData) => `fc${Number(rowData.prixUnitaire ?? 0).toFixed(2)}`}
-                  />
-                  <Column
-                    field="total"
-                    header="Total"
-                    body={(rowData) =>
-                      `fc${(Number(rowData.prixUnitaire ?? 0) * Number(rowData.quantite ?? 0)).toFixed(2)}`
-                    }
-                  />
-                  <Column
-                    header=""
-                    body={(rowData) => {
-                      const produitId =
-                        typeof rowData.produit === 'object' ? rowData.produit._id : rowData.produit;
-                      return (
-                        <Button
-                          icon="pi pi-trash"
-                          className="p-button-rounded p-button-text p-button-danger"
-                          onClick={() => handleRemoveProduit(produitId)}
-                        />
-                      );
-                    }}
-                  />
-                </DataTable>
-
-                <div className="mt-6 border-t border-gray-200 pt-5 flex justify-end">
-                  <div className="w-full max-w-md bg-green-50 rounded-lg p-4 shadow-inner text-gray-8 00">
-                    <div className="flex justify-between mb-2">
-                      <span>Total produits:</span>
-                      <span className="font-semibold">
-                        {commandeProduits.reduce((acc, p) => acc + (p.quantite ?? 0), 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between mb-2">
-                      <span>Sous-total:</span>
-                      <span className="font-semibold">fc{totalCommande.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between mb-2">
-                      <span>Livraison:</span>
-                      <span className="font-semibold text-green-600">Gratuite</span>
-                    </div>
-                    <div className="flex justify-between mt-4 pt-3 font-bold text-lg border-t border-gray-300">
-                      <span>Total à payer:</span>
-                      <span className="text-green-700">fc{totalCommande.toFixed(2)}</span>
-                    </div>
-                    <Button
-                      label={status === 'loading' ? 'Traitement...' : 'Valider la commande'}
-                      icon={status === 'loading' ? 'pi pi-spin pi-spinner' : 'pi pi-check'}
-                      className="mt-6 w-full font-bold text-white"
-                      style={{
-                        background: 'linear-gradient(to right, #15803d, #166534)',
-                        border: '1px solid #15803d',
-                        color: 'white',
-                      }}
-                      onClick={handleSubmit}
-                      disabled={!canSubmit}
-                      severity="success"
-                    />
-                    {!selectedRegion && !selectedPointVente && (
-                      <div className="text-xs text-red-600 mt-2">
-                        Veuillez choisir une Région ou un Point de vente pour pouvoir valider.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
+            <div className="flex align-items-center mb-3">
+              <i className="pi pi-comment text-primary text-xl mr-2" />
+              <h3 className="text-lg font-semibold text-900">Notes</h3>
+            </div>
+            
+            <textarea
+              placeholder="Ajoutez des notes concernant cette commande..."
+              className="w-full p-3 border-1 surface-border border-round"
+              rows={4}
+              style={{ resize: 'vertical' }}
+            ></textarea>
           </Card>
-        </section>
+        </div>
       </div>
     </div>
   );
