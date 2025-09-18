@@ -49,6 +49,53 @@ const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
   </span>
 );
 
+/* ---- domain helpers ---- */
+const getId = (x: any): string | null => {
+  if (!x) return null;
+  if (typeof x === 'string') return x;
+  return isNonEmptyString(x?._id) ? x._id : null;
+};
+const getName = (x: any, fallback = '-'): string => {
+  if (!x) return fallback;
+  if (typeof x === 'string') return x;
+  return (x?.nom as string) || fallback;
+};
+
+const sourceLabel = (c: any): string => {
+  if (c?.requestedPointVente) return getName(c.requestedPointVente, 'Point de vente');
+  if (c?.requestedRegion) return getName(c.requestedRegion, 'Région');
+  if (c?.depotCentral) return 'Dépôt central';
+  return '-';
+};
+const destinationLabel = (c: any): string => {
+  if (c?.pointVente) return getName(c.pointVente, 'Point de vente');
+  if (c?.region) return getName(c.region, 'Région');
+  if (c?.fournisseur) return getName(c.fournisseur, 'Fournisseur');
+  if (c?.depotCentral) return 'Dépôt central';
+  return '-';
+};
+const isDestCentral = (c: any): boolean =>
+  !!c?.depotCentral && !c?.region && !c?.pointVente && !c?.fournisseur;
+
+/* Permissions livraison */
+const canValidate = (
+  c: any,
+  opts: { isSuperAdmin: boolean; isAdminRegion: boolean; isAdminPointVente: boolean; user: any }
+): boolean => {
+  const { isSuperAdmin, isAdminRegion, isAdminPointVente, user } = opts;
+  if (isAdminPointVente || user?.role === 'Logisticien') return false;
+  if (isSuperAdmin) return isDestCentral(c);
+  if (isAdminRegion) {
+    const myRegionId = getId(user?.region);
+    const destRegionId = getId(c?.region);
+    if (myRegionId && destRegionId && myRegionId === destRegionId) return true;
+    const pvRegionId = getId((c?.pointVente as any)?.region);
+    if (myRegionId && pvRegionId && myRegionId === pvRegionId) return true;
+    return false;
+  }
+  return false;
+};
+
 /* -------------------------------- Page -------------------------------- */
 const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -59,11 +106,11 @@ const Page: React.FC = () => {
   const commandes = useSelector((s: RootState) => asArray<Commande>(selectAllCommandes(s)));
   const loading = useSelector((s: RootState) => selectCommandeStatus(s)) === 'loading';
 
-  // UI state (pagination + tri)
-  const [rows, setRows] = useState(10); // lignes par page
-  const [page, setPage] = useState(1); // 1-based
+  // UI state
+  const [rows, setRows] = useState(10);
+  const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<
-    'numero' | 'region' | 'pointVente' | 'nb' | 'statut' | 'montant' | 'createdAt'
+    'numero' | 'source' | 'destination' | 'nb' | 'statut' | 'montant' | 'createdAt'
   >('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -73,28 +120,27 @@ const Page: React.FC = () => {
   const [produitsLivrables, setProduitsLivrables] = useState<CommandeProduitWithTempChecked[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // menus (références)
+  // menus
   const menuRefs = useRef<MenuMap>({});
 
-  /* ------------------------- Data load (rôle) ------------------------- */
+  /* -------- Data load -------- */
   useEffect(() => {
     let active = true;
     (async () => {
       try {
         if (!user?.role) return;
-
         if (isSuperAdmin) {
-          // @ts-expect-error - compat: external lib types mismatch
-          await dispatch(fetchCommandes());
+          await dispatch(fetchCommandes({} as any));
         } else if (isAdminPointVente && isNonEmptyString((user as any)?.pointVente?._id)) {
-          await dispatch(fetchCommandesByPointVente((user as any).pointVente._id));
+          await dispatch(
+            fetchCommandesByPointVente({ pointVenteId: (user as any).pointVente._id })
+          );
         } else if (isAdminRegion && isNonEmptyString((user as any)?.region?._id)) {
-          await dispatch(fetchCommandesByRegion((user as any).region._id));
+          await dispatch(fetchCommandesByRegion({ regionId: (user as any).region._id }));
         } else if (user?.role === 'Logisticien' && isNonEmptyString(user?._id)) {
-          await dispatch(fetchCommandesByUser(user._id));
+          await dispatch(fetchCommandesByUser({ userId: user._id }));
         } else {
-          // @ts-expect-error - compat: external lib types mismatch
-          await dispatch(fetchCommandes());
+          await dispatch(fetchCommandes({} as any));
         }
       } catch {
         if (!active) return;
@@ -120,17 +166,15 @@ const Page: React.FC = () => {
     isAdminRegion,
   ]);
 
-  /* ------------------------------ Menu actions ------------------------------ */
+  /* -------- Menu actions -------- */
   const setMenuRef = useCallback((id: string, el: MenuRef | null) => {
-    if (!id) return;
-    menuRefs.current[id] = el;
+    if (id) menuRefs.current[id] = el;
   }, []);
-
   const showMenu = useCallback((event: React.MouseEvent, id: string) => {
     menuRefs.current[id]?.toggle(event);
   }, []);
 
-  /* -------------------------- Modal / Produits livrés ----------------------- */
+  /* -------- Modal / Produits -------- */
   const handleOpenModal = useCallback((commande: Commande) => {
     setSelectedCommande(commande);
     const produits = asArray<CommandeProduit>(commande?.produits);
@@ -146,6 +190,15 @@ const Page: React.FC = () => {
 
   const effectuerLivraison = useCallback(async () => {
     if (!selectedCommande) return;
+    if (!canValidate(selectedCommande, { isSuperAdmin, isAdminRegion, isAdminPointVente, user })) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Non autorisé',
+        detail: 'Vous ne pouvez valider que les commandes dont vous êtes destinataire.',
+        life: 3000,
+      });
+      return;
+    }
     setSaving(true);
     try {
       const updatedProduits = asArray<CommandeProduit>(produitsLivrables).map((p) => ({
@@ -154,11 +207,7 @@ const Page: React.FC = () => {
         statut: p._tempChecked ? 'livré' : p.statut,
       }));
 
-      const payload: Commande = {
-        ...selectedCommande,
-        produits: updatedProduits,
-      };
-
+      const payload: Commande = { ...selectedCommande, produits: updatedProduits };
       await dispatch(updateCommande(payload)).unwrap();
 
       toast.current?.show({
@@ -178,9 +227,17 @@ const Page: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  }, [dispatch, selectedCommande, produitsLivrables]);
+  }, [
+    dispatch,
+    selectedCommande,
+    produitsLivrables,
+    isSuperAdmin,
+    isAdminRegion,
+    isAdminPointVente,
+    user,
+  ]);
 
-  /* ----------------------------- Tri + pagination (client) ----------------------------- */
+  /* -------- Tri + pagination -------- */
   const toggleSort = (field: typeof sortBy) => {
     if (sortBy !== field) {
       setSortBy(field);
@@ -197,17 +254,13 @@ const Page: React.FC = () => {
     const cmp = (a: Commande, b: Commande): number => {
       const dir = order === 'asc' ? 1 : -1;
       if (sortBy === 'numero') return (a.numero ?? '').localeCompare(b.numero ?? '') * dir;
-      if (sortBy === 'region')
-        return ((a.region as any)?.nom ?? '').localeCompare((b.region as any)?.nom ?? '') * dir;
-      if (sortBy === 'pointVente')
-        return (
-          ((a.pointVente as any)?.nom ?? '').localeCompare((b.pointVente as any)?.nom ?? '') * dir
-        );
+      if (sortBy === 'source') return sourceLabel(a).localeCompare(sourceLabel(b)) * dir;
+      if (sortBy === 'destination')
+        return destinationLabel(a).localeCompare(destinationLabel(b)) * dir;
       if (sortBy === 'nb') return (asArray(a.produits).length - asArray(b.produits).length) * dir;
       if (sortBy === 'statut') return (a.statut ?? '').localeCompare(b.statut ?? '') * dir;
       if (sortBy === 'montant')
         return (safeNumber((a as any).montant) - safeNumber((b as any).montant)) * dir;
-      // createdAt
       const da = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
       const db = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
       return (da - db) * dir;
@@ -223,7 +276,6 @@ const Page: React.FC = () => {
     () => sorted.slice(firstIndex, firstIndex + rows),
     [sorted, firstIndex, rows]
   );
-
   const goTo = (p: number) => {
     const next = Math.min(Math.max(1, p), totalPages);
     if (next !== page) setPage(next);
@@ -244,7 +296,6 @@ const Page: React.FC = () => {
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow-md">
-        {/* ---------- TABLE TAILWIND (style DataTable) ---------- */}
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="min-w-[70rem] w-full text-sm">
             <thead>
@@ -260,16 +311,16 @@ const Page: React.FC = () => {
 
                 <th
                   className="px-4 py-2 text-left cursor-pointer select-none"
-                  onClick={() => toggleSort('region')}
+                  onClick={() => toggleSort('source')}
                 >
-                  Région <SortIcon order={sortBy === 'region' ? order : null} />
+                  Source <SortIcon order={sortBy === 'source' ? order : null} />
                 </th>
 
                 <th
                   className="px-4 py-2 text-left cursor-pointer select-none"
-                  onClick={() => toggleSort('pointVente')}
+                  onClick={() => toggleSort('destination')}
                 >
-                  Point de vente <SortIcon order={sortBy === 'pointVente' ? order : null} />
+                  Destination <SortIcon order={sortBy === 'destination' ? order : null} />
                 </th>
 
                 <th
@@ -300,6 +351,7 @@ const Page: React.FC = () => {
                   Créée le <SortIcon order={sortBy === 'createdAt' ? order : null} />
                 </th>
 
+                {/* ✅ Actions toujours visibles (AdminPointVente/Logisticien inclus) */}
                 <th className="px-4 py-2 text-left">Actions</th>
               </tr>
             </thead>
@@ -320,8 +372,8 @@ const Page: React.FC = () => {
               ) : (
                 paged.map((row, idx) => {
                   const idxGlobal = firstIndex + idx + 1;
-                  const regionNom = (row?.region as any)?.nom ?? '-';
-                  const pvNom = (row?.pointVente as any)?.nom ?? '-';
+                  const src = sourceLabel(row);
+                  const dest = destinationLabel(row);
                   const nbProduits = asArray<CommandeProduit>(row?.produits).length;
                   const montant = formatCDF((row as any)?.montant);
                   const created = row?.createdAt
@@ -335,6 +387,13 @@ const Page: React.FC = () => {
                         ? 'bg-red-500'
                         : 'bg-amber-500';
 
+                  const allowValidate = canValidate(row, {
+                    isSuperAdmin,
+                    isAdminRegion,
+                    isAdminPointVente,
+                    user,
+                  });
+
                   return (
                     <tr
                       key={row?._id ?? idx}
@@ -342,8 +401,8 @@ const Page: React.FC = () => {
                     >
                       <td className="px-4 py-2">{idxGlobal}</td>
                       <td className="px-4 py-2">{row?.numero ?? '-'}</td>
-                      <td className="px-4 py-2">{regionNom}</td>
-                      <td className="px-4 py-2">{pvNom}</td>
+                      <td className="px-4 py-2">{src}</td>
+                      <td className="px-4 py-2">{dest}</td>
                       <td className="px-4 py-2">{nbProduits}</td>
                       <td className="px-4 py-2">
                         <span className={`px-2 py-1 rounded text-white text-xs ${clsStatut}`}>
@@ -352,6 +411,8 @@ const Page: React.FC = () => {
                       </td>
                       <td className="px-4 py-2">{montant}</td>
                       <td className="px-4 py-2">{created}</td>
+
+                      {/* ✅ Bouton menu visible pour tous les rôles */}
                       <td className="px-4 py-2">
                         <Button
                           icon="pi pi-bars"
@@ -367,6 +428,8 @@ const Page: React.FC = () => {
                               label: 'Voir produits',
                               icon: 'pi pi-eye',
                               command: () => handleOpenModal(row),
+                              // Lecture autorisée pour tous; aucune livraison ici
+                              disabled: !isNonEmptyString(row?._id),
                             },
                           ]}
                           ref={(el) => setMenuRef(row?._id ?? '', el)}
@@ -395,7 +458,6 @@ const Page: React.FC = () => {
               onChange={(e) => {
                 const n = Number(e.target.value);
                 setRows(n);
-                // ajuste la page si besoin
                 const newTotalPages = Math.max(1, Math.ceil(total / n));
                 setPage((p) => Math.min(p, newTotalPages));
               }}
@@ -439,7 +501,7 @@ const Page: React.FC = () => {
         </div>
       </div>
 
-      {/* MODAL (petit tableau => PrimeReact OK) */}
+      {/* MODAL */}
       <Dialog
         header="Détails de la commande"
         visible={visible}
@@ -470,12 +532,20 @@ const Page: React.FC = () => {
                   }
                 >
                   <td className="px-4 py-2">{i + 1}</td>
-                  <td className="px-4 py-2">{row?.produit?.nom ?? '-'}</td>
+                  <td className="px-4 py-2">{(row as any)?.produit?.nom ?? '-'}</td>
                   <td className="px-4 py-2">{safeNumber(row?.quantite).toString()}</td>
                   <td className="px-4 py-2">
                     <Checkbox
                       checked={!!row?._tempChecked}
-                      disabled={row?.statut === 'livré'}
+                      disabled={
+                        row?.statut === 'livré' ||
+                        !canValidate(selectedCommande, {
+                          isSuperAdmin,
+                          isAdminRegion,
+                          isAdminPointVente,
+                          user,
+                        })
+                      }
                       onChange={(e) => handleCheck(!!e.checked, i)}
                     />
                   </td>
@@ -504,7 +574,16 @@ const Page: React.FC = () => {
             icon="pi pi-check"
             onClick={effectuerLivraison}
             loading={saving}
-            disabled={saving}
+            disabled={
+              saving ||
+              !selectedCommande ||
+              !canValidate(selectedCommande, {
+                isSuperAdmin,
+                isAdminRegion,
+                isAdminPointVente,
+                user,
+              })
+            }
             className="p-button-success"
           />
         </div>

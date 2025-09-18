@@ -11,31 +11,29 @@ import {
 import { RootState } from '../../store';
 import { apiClient } from '../../../lib/apiConfig';
 import { Commande } from '@/Models/commandeType';
-import { CommandeProduit } from '@/Models/CommandeProduitType';
 
-// types/commandes.ts (exemple)
 export type CommandeProduitInput = {
-  produit: string; // ObjectId du produit
+  produit: string;
   quantite: number;
 };
 
 export type CommandePayload = {
-  user: string; // ObjectId
-  region?: string; // ObjectId
-  pointVente?: string; // ObjectId
+  user: string;
+  region?: string;
+  pointVente?: string;
+  requestedRegion?: string;
+  requestedPointVente?: string;
   depotCentral?: boolean;
+  fournisseur?: string;
   produits: CommandeProduitInput[];
-
-  // impression immédiate
-  print?: boolean; // si true => PDF
+  print?: boolean;
   format?: 'pos58' | 'pos80' | 'A5' | 'A4';
-  organisation?: any; // si tu veux passer l’orga au controller
+  organisation?: any;
 };
 
-// Réponse discriminée du thunk createCommande
 export type CreateCommandeResult =
-  | { type: 'json'; data: Commande } // création standard
-  | { type: 'pdf'; blob: Blob; filename: string }; // création + PDF
+  | { type: 'json'; data: Commande }
+  | { type: 'pdf'; blob: Blob; filename: string };
 
 interface CommandeState {
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -45,22 +43,6 @@ interface CommandeState {
   limit: number;
 }
 
-// ✅ types d’input pour la création
-// type CommandeProduitInput = {
-//   produit: string; // ObjectId as string
-//   quantite: number;
-//   uniteMesure?: string; // optionnel
-// };
-
-// export interface CommandePayload {
-//   user: string;
-//   region?: string;
-//   pointVente?: string;
-//   depotCentral?: boolean;
-//   produits: CommandeProduitInput[]; // ⬅️ au lieu du Pick<>
-// }
-
-// utils/download.ts
 export function downloadBlob(blob: Blob, filename = 'document.pdf') {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -72,7 +54,6 @@ export function downloadBlob(blob: Blob, filename = 'document.pdf') {
   URL.revokeObjectURL(url);
 }
 
-// utils/http.ts
 export function parseFilenameFromDisposition(cd?: string): string | null {
   if (!cd) return null;
   const match = /filename\*=UTF-8''([^;]+)|filename="?([^\";]+)"?/i.exec(cd);
@@ -96,7 +77,6 @@ const getAuthHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// Helpers pour querystring
 const q = (params?: Record<string, any>) => {
   const usp = new URLSearchParams();
   Object.entries(params || {}).forEach(([k, v]) => {
@@ -106,7 +86,11 @@ const q = (params?: Record<string, any>) => {
   return s ? `?${s}` : '';
 };
 
-// All (paginated)
+// ----------------------
+// Thunks
+// ----------------------
+
+// All
 export const fetchCommandes = createAsyncThunk(
   'commandes/fetchCommandes',
   async ({ page = 1, limit = 10 }: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
@@ -114,7 +98,6 @@ export const fetchCommandes = createAsyncThunk(
       const res = await apiClient.get(`/commandes${q({ page, limit })}`, {
         headers: getAuthHeaders(),
       });
-      // { total, commandes }
       return { ...res.data, page, limit };
     } catch (error: any) {
       return rejectWithValue(error?.message || 'Erreur de récupération des commandes');
@@ -122,7 +105,7 @@ export const fetchCommandes = createAsyncThunk(
   }
 );
 
-// By User (paginated)
+// By User
 export const fetchCommandesByUser = createAsyncThunk(
   'commandes/fetchByUser',
   async (
@@ -140,7 +123,7 @@ export const fetchCommandesByUser = createAsyncThunk(
   }
 );
 
-// By PointVente (paginated)
+// By PointVente
 export const fetchCommandesByPointVente = createAsyncThunk(
   'commandes/fetchByPointVente',
   async (
@@ -161,7 +144,7 @@ export const fetchCommandesByPointVente = createAsyncThunk(
   }
 );
 
-// By Region (paginated côté back = total calculé après filtre)
+// By Region
 export const fetchCommandesByRegion = createAsyncThunk(
   'commandes/fetchByRegion',
   async (
@@ -179,6 +162,81 @@ export const fetchCommandesByRegion = createAsyncThunk(
   }
 );
 
+// By RequestedRegion
+export const fetchCommandesByRequestedRegion = createAsyncThunk(
+  'commandes/fetchByRequestedRegion',
+  async (
+    {
+      requestedRegionId,
+      page = 1,
+      limit = 10,
+    }: { requestedRegionId: string; page?: number; limit?: number },
+    { rejectWithValue }
+  ) => {
+    try {
+      const res = await apiClient.get(
+        `/commandes/by-requested-region/${requestedRegionId}${q({ page, limit })}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+      return { ...res.data, page, limit };
+    } catch (error: any) {
+      return rejectWithValue(error?.message || 'Erreur lors des commandes par région source');
+    }
+  }
+);
+
+// By RequestedPointVente
+export const fetchCommandesByRequestedPointVente = createAsyncThunk(
+  'commandes/fetchByRequestedPointVente',
+  async (
+    {
+      requestedPointVenteId,
+      page = 1,
+      limit = 10,
+    }: { requestedPointVenteId: string; page?: number; limit?: number },
+    { rejectWithValue }
+  ) => {
+    try {
+      const res = await apiClient.get(
+        `/commandes/by-requested-point-vente/${requestedPointVenteId}${q({ page, limit })}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+      return { ...res.data, page, limit };
+    } catch (error: any) {
+      return rejectWithValue(error?.message || 'Erreur lors des commandes par PV source');
+    }
+  }
+);
+
+// By Fournisseur
+export const fetchCommandesByFournisseur = createAsyncThunk(
+  'commandes/fetchByFournisseur',
+  async (
+    {
+      fournisseurId,
+      page = 1,
+      limit = 10,
+    }: { fournisseurId: string; page?: number; limit?: number },
+    { rejectWithValue }
+  ) => {
+    try {
+      const res = await apiClient.get(
+        `/commandes/by-fournisseur/${fournisseurId}${q({ page, limit })}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+      return { ...res.data, page, limit };
+    } catch (error: any) {
+      return rejectWithValue(error?.message || 'Erreur lors des commandes par fournisseur');
+    }
+  }
+);
+
 // By ID
 export const fetchCommandeById = createAsyncThunk(
   'commandes/fetchById',
@@ -187,7 +245,6 @@ export const fetchCommandeById = createAsyncThunk(
       const res = await apiClient.get(`/commandes/${id}`, {
         headers: getAuthHeaders(),
       });
-      // renvoie une commande formatée
       return res.data as Commande;
     } catch (error: any) {
       return rejectWithValue(error?.message || 'Commande introuvable');
@@ -202,7 +259,6 @@ export const createCommande = createAsyncThunk<
   { rejectValue: string }
 >('commandes/createCommande', async (payload, { rejectWithValue }) => {
   try {
-    // impression immédiate -> on utilise ?pdf=1&format=...
     if (payload.print) {
       const { print, format = 'pos80', ...body } = payload;
       const res = await apiClient.post(
@@ -213,7 +269,7 @@ export const createCommande = createAsyncThunk<
             ...getAuthHeaders(),
             Accept: 'application/pdf',
           },
-          responseType: 'blob', // <- important pour récupérer le PDF
+          responseType: 'blob',
         }
       );
 
@@ -224,7 +280,6 @@ export const createCommande = createAsyncThunk<
       return { type: 'pdf', blob: res.data as Blob, filename };
     }
 
-    // création simple -> JSON
     const res = await apiClient.post('/commandes', payload, {
       headers: getAuthHeaders(),
     });
@@ -236,7 +291,7 @@ export const createCommande = createAsyncThunk<
   }
 });
 
-// 2) Imprimer une commande existante
+// Print existing
 export const printCommandeById = createAsyncThunk<
   { blob: Blob; filename: string },
   { id: string; format?: 'pos58' | 'pos80' | 'A5' | 'A4' },
@@ -262,6 +317,7 @@ export const printCommandeById = createAsyncThunk<
     );
   }
 });
+
 // Update
 export const updateCommande = createAsyncThunk(
   'commandes/updateCommande',
@@ -293,13 +349,15 @@ export const deleteCommande = createAsyncThunk(
   }
 );
 
+// ----------------------
+// Slice
+// ----------------------
 const commandeSlice = createSlice({
   name: 'commandes',
   initialState,
   reducers: {},
   extraReducers: (builder) => {
     builder
-      // fetch all
       .addCase(fetchCommandes.pending, (state) => {
         state.status = 'loading';
         state.error = null;
@@ -316,44 +374,53 @@ const commandeSlice = createSlice({
         state.error = action.payload as string;
       })
 
-      // by user
+      // autres fetchBy...
       .addCase(fetchCommandesByUser.fulfilled, (state, action) => {
-        state.status = 'succeeded';
         commandeAdapter.setAll(state, action.payload.commandes);
         state.totalCommandes = action.payload.total ?? 0;
         state.page = action.payload.page ?? 1;
         state.limit = action.payload.limit ?? 10;
       })
-
-      // by pointVente
       .addCase(fetchCommandesByPointVente.fulfilled, (state, action) => {
-        state.status = 'succeeded';
         commandeAdapter.setAll(state, action.payload.commandes);
         state.totalCommandes = action.payload.total ?? 0;
         state.page = action.payload.page ?? 1;
         state.limit = action.payload.limit ?? 10;
       })
-
-      // by region
       .addCase(fetchCommandesByRegion.fulfilled, (state, action) => {
-        state.status = 'succeeded';
+        commandeAdapter.setAll(state, action.payload.commandes);
+        state.totalCommandes = action.payload.total ?? 0;
+        state.page = action.payload.page ?? 1;
+        state.limit = action.payload.limit ?? 10;
+      })
+      .addCase(fetchCommandesByRequestedRegion.fulfilled, (state, action) => {
+        commandeAdapter.setAll(state, action.payload.commandes);
+        state.totalCommandes = action.payload.total ?? 0;
+        state.page = action.payload.page ?? 1;
+        state.limit = action.payload.limit ?? 10;
+      })
+      .addCase(fetchCommandesByRequestedPointVente.fulfilled, (state, action) => {
+        commandeAdapter.setAll(state, action.payload.commandes);
+        state.totalCommandes = action.payload.total ?? 0;
+        state.page = action.payload.page ?? 1;
+        state.limit = action.payload.limit ?? 10;
+      })
+      .addCase(fetchCommandesByFournisseur.fulfilled, (state, action) => {
         commandeAdapter.setAll(state, action.payload.commandes);
         state.totalCommandes = action.payload.total ?? 0;
         state.page = action.payload.page ?? 1;
         state.limit = action.payload.limit ?? 10;
       })
 
-      // by id
       .addCase(fetchCommandeById.fulfilled, (state, action) => {
-        state.status = 'succeeded';
         commandeAdapter.upsertOne(state, action.payload);
       })
-
-      // create / update / delete
       .addCase(createCommande.fulfilled, (state, action) => {
         //@ts-ignore
-        commandeAdapter.addOne(state, action.payload);
-        state.totalCommandes += 1;
+        if (action.payload.type === 'json') {
+          commandeAdapter.addOne(state, action.payload.data);
+          state.totalCommandes += 1;
+        }
       })
       .addCase(updateCommande.fulfilled, (state, action) => {
         commandeAdapter.upsertOne(state, action.payload);
@@ -365,10 +432,11 @@ const commandeSlice = createSlice({
   },
 });
 
-// Reducer
+// ----------------------
+// Export
+// ----------------------
 export const commandeReducer = commandeSlice.reducer;
 
-// Selectors
 export const {
   selectAll: selectAllCommandes,
   selectById: selectCommandeById,
