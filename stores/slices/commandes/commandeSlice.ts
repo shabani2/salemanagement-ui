@@ -137,7 +137,9 @@ export const fetchCommandesByPointVente = createAsyncThunk(
       );
       return { ...res.data, page, limit };
     } catch (error: any) {
-      return rejectWithValue(error?.message || 'Erreur de récupération des commandes du point de vente');
+      return rejectWithValue(
+        error?.message || 'Erreur de récupération des commandes du point de vente'
+      );
     }
   }
 );
@@ -164,13 +166,20 @@ export const fetchCommandesByRegion = createAsyncThunk(
 export const fetchCommandesByRequestedRegion = createAsyncThunk(
   'commandes/fetchByRequestedRegion',
   async (
-    { requestedRegionId, page = 1, limit = 10 }: { requestedRegionId: string; page?: number; limit?: number },
+    {
+      requestedRegionId,
+      page = 1,
+      limit = 10,
+    }: { requestedRegionId: string; page?: number; limit?: number },
     { rejectWithValue }
   ) => {
     try {
-      const res = await apiClient.get(`/commandes/by-requested-region/${requestedRegionId}${q({ page, limit })}`, {
-        headers: getAuthHeaders(),
-      });
+      const res = await apiClient.get(
+        `/commandes/by-requested-region/${requestedRegionId}${q({ page, limit })}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
       return { ...res.data, page, limit };
     } catch (error: any) {
       return rejectWithValue(error?.message || 'Erreur lors des commandes par région source');
@@ -182,13 +191,20 @@ export const fetchCommandesByRequestedRegion = createAsyncThunk(
 export const fetchCommandesByRequestedPointVente = createAsyncThunk(
   'commandes/fetchByRequestedPointVente',
   async (
-    { requestedPointVenteId, page = 1, limit = 10 }: { requestedPointVenteId: string; page?: number; limit?: number },
+    {
+      requestedPointVenteId,
+      page = 1,
+      limit = 10,
+    }: { requestedPointVenteId: string; page?: number; limit?: number },
     { rejectWithValue }
   ) => {
     try {
-      const res = await apiClient.get(`/commandes/by-requested-point-vente/${requestedPointVenteId}${q({ page, limit })}`, {
-        headers: getAuthHeaders(),
-      });
+      const res = await apiClient.get(
+        `/commandes/by-requested-point-vente/${requestedPointVenteId}${q({ page, limit })}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
       return { ...res.data, page, limit };
     } catch (error: any) {
       return rejectWithValue(error?.message || 'Erreur lors des commandes par PV source');
@@ -200,13 +216,20 @@ export const fetchCommandesByRequestedPointVente = createAsyncThunk(
 export const fetchCommandesByFournisseur = createAsyncThunk(
   'commandes/fetchByFournisseur',
   async (
-    { fournisseurId, page = 1, limit = 10 }: { fournisseurId: string; page?: number; limit?: number },
+    {
+      fournisseurId,
+      page = 1,
+      limit = 10,
+    }: { fournisseurId: string; page?: number; limit?: number },
     { rejectWithValue }
   ) => {
     try {
-      const res = await apiClient.get(`/commandes/by-fournisseur/${fournisseurId}${q({ page, limit })}`, {
-        headers: getAuthHeaders(),
-      });
+      const res = await apiClient.get(
+        `/commandes/by-fournisseur/${fournisseurId}${q({ page, limit })}`,
+        {
+          headers: getAuthHeaders(),
+        }
+      );
       return { ...res.data, page, limit };
     } catch (error: any) {
       return rejectWithValue(error?.message || 'Erreur lors des commandes par fournisseur');
@@ -230,35 +253,43 @@ export const fetchCommandeById = createAsyncThunk(
 );
 
 // Create
-export const createCommande = createAsyncThunk<CreateCommandeResult, CommandePayload, { rejectValue: string }>(
-  'commandes/createCommande',
-  async (payload, { rejectWithValue }) => {
-    try {
-      if (payload.print) {
-        const { print, format = 'pos80', ...body } = payload;
-        const res = await apiClient.post(`/commandes?pdf=1&format=${encodeURIComponent(format)}`, body, {
+export const createCommande = createAsyncThunk<
+  CreateCommandeResult,
+  CommandePayload,
+  { rejectValue: string }
+>('commandes/createCommande', async (payload, { rejectWithValue }) => {
+  try {
+    if (payload.print) {
+      const { print, format = 'pos80', ...body } = payload;
+      const res = await apiClient.post(
+        `/commandes?pdf=1&format=${encodeURIComponent(format)}`,
+        body,
+        {
           headers: {
             ...getAuthHeaders(),
             Accept: 'application/pdf',
           },
           responseType: 'blob',
-        });
+        }
+      );
 
-        const cd = (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
-        const filename = parseFilenameFromDisposition(cd) || 'Bon_de_commande.pdf';
+      const cd =
+        (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
+      const filename = parseFilenameFromDisposition(cd) || 'Bon_de_commande.pdf';
 
-        return { type: 'pdf', blob: res.data as Blob, filename };
-      }
-
-      const res = await apiClient.post('/commandes', payload, {
-        headers: getAuthHeaders(),
-      });
-      return { type: 'json', data: res.data as Commande };
-    } catch (error: any) {
-      return rejectWithValue(error?.response?.data?.message || 'Erreur lors de la création de la commande');
+      return { type: 'pdf', blob: res.data as Blob, filename };
     }
+
+    const res = await apiClient.post('/commandes', payload, {
+      headers: getAuthHeaders(),
+    });
+    return { type: 'json', data: res.data as Commande };
+  } catch (error: any) {
+    return rejectWithValue(
+      error?.response?.data?.message || 'Erreur lors de la création de la commande'
+    );
   }
-);
+});
 
 // Print existing
 export const printCommandeById = createAsyncThunk<
@@ -275,12 +306,15 @@ export const printCommandeById = createAsyncThunk<
       responseType: 'blob',
     });
 
-    const cd = (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
+    const cd =
+      (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
     const filename = parseFilenameFromDisposition(cd) || `Bon_de_commande_${id}.pdf`;
 
     return { blob: res.data as Blob, filename };
   } catch (error: any) {
-    return rejectWithValue(error?.response?.data?.message || "Erreur lors de l'impression du bon de commande");
+    return rejectWithValue(
+      error?.response?.data?.message || "Erreur lors de l'impression du bon de commande"
+    );
   }
 });
 
