@@ -1,3 +1,4 @@
+// src/stores/slices/regions/regionSlice.ts
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
@@ -37,7 +38,7 @@ export interface FetchParams {
 }
 
 interface RegionListResponse {
-  data: Region[]; // <— le contrôleur renvoie { data, meta }
+  data: Region[]; // contrôleur liste: { data, meta }
   meta?: PaginationMeta;
 }
 
@@ -207,6 +208,28 @@ export const deleteRegion = createAsyncThunk<string, string, { rejectValue: stri
   }
 );
 
+/** NEW: GET /regions/:id */
+export const fetchRegionById = createAsyncThunk<RegionWithCount, string, { rejectValue: string }>(
+  'regions/fetchRegionById',
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/regions/${id}`, {
+        headers: getAuthHeaders(),
+      });
+
+      // pourquoi: certains contrôleurs renvoient { data }, d'autres l'objet direct
+      const payload = (response.data?.data ?? response.data) as RegionWithCount;
+      if (!payload || !('_id' in payload)) {
+        return rejectWithValue('Réponse invalide pour la région demandée');
+      }
+      return payload;
+    } catch (error: unknown) {
+      if (error instanceof Error) return rejectWithValue(error.message);
+      return rejectWithValue('Erreur lors de la récupération de la région');
+    }
+  }
+);
+
 /** ---------------- Slice ---------------- */
 const regionSlice = createSlice({
   name: 'regions',
@@ -231,7 +254,6 @@ const regionSlice = createSlice({
         regionAdapter.setAll(state, data as RegionWithCount[]);
         state.meta = meta;
 
-        // mémorise la dernière query sans page/limit
         const params = action.meta.arg ?? {};
         const { page, limit, ...rest } = params;
         state.lastQuery = rest ?? null;
@@ -251,7 +273,6 @@ const regionSlice = createSlice({
         const data = action.payload?.data ?? [];
         const meta = action.payload?.meta ?? null;
 
-        // on remplace la liste affichée par les résultats de recherche (même stratégie que produits)
         regionAdapter.setAll(state, data as RegionWithCount[]);
         state.meta = meta;
 
@@ -285,6 +306,20 @@ const regionSlice = createSlice({
           state.meta.total = Math.max(0, state.meta.total - 1);
           state.meta.totalPages = Math.max(1, Math.ceil(state.meta.total / state.meta.limit));
         }
+      })
+
+      /** fetchRegionById */
+      .addCase(fetchRegionById.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(fetchRegionById.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        regionAdapter.upsertOne(state, action.payload);
+      })
+      .addCase(fetchRegionById.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
       });
   },
 });
