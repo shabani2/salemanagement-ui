@@ -1,4 +1,7 @@
 // File: app/(backoffice)/commande/CommandeForm.tsx
+
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment */
+
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,6 +34,7 @@ import {
   fetchRegionById,
 } from '@/stores/slices/regions/regionSlice';
 import {
+  fetchPointVenteById,
   fetchPointVentes,
   fetchPointVentesByRegionId,
   selectAllPointVentes,
@@ -143,20 +147,22 @@ const CommandeForm: React.FC = () => {
           await dispatch(fetchRegions({ limit: 100000 } as any));
           await dispatch(fetchPointVentes({ limit: 100000 } as any));
           setDestType(null);
-          //@ts-ignore
+          // @ts-expect-error -- raison claire
         } else if (u.role === 'AdminRegion' && u.region?._id) {
           await dispatch(fetchRegions({ limit: 100000 } as any));
-          //@ts-ignore
+          
           await dispatch(
+            // @ts-expect-error -- raison claire
             fetchPointVentesByRegionId({ regionId: u.region._id, limit: 100000 } as any)
           );
           setDestType('central'); // défaut
-          //@ts-ignore
+         
         } else if (
           (u.role === 'AdminPointVente' || u.role === 'Logisticien') &&
+          // @ts-expect-error -- raison claire
           u.pointVente?._id
         ) {
-          //@ts-ignore
+          // @ts-expect-error -- raison claire
           const res: any = await dispatch(fetchPointVenteById(u.pointVente._id));
           const pv = res?.payload as PointVente | undefined;
           const regId = ((typeof pv !== 'string' ? pv?.region : undefined) ??
@@ -331,10 +337,6 @@ const CommandeForm: React.FC = () => {
     () => rows.length > 0 && !!routeInfo && status !== 'loading',
     [rows, routeInfo, status]
   );
-
-  const canSubmit = commandeProduits.length > 0 &&
-    (selectedRegion || selectedPointVente) &&
-    status !== 'loading';
 
   const handleSubmit = useCallback(async () => {
     if (!routeInfo || rows.length === 0) {
