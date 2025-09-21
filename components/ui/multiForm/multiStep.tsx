@@ -66,7 +66,11 @@ const MultiStepForm: React.FC = () => {
           style={{ width: progressWidth }}
         ></div>
         {step === 1 && <UserForm onNext={handleNextUser} />}
-        {step === 2 && <OrganisationForm onNext={handleNextOrganisation} />}
+        {step === 2 && (
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-expect-error - compat: external lib types mismatch
+          <OrganisationForm onNext={handleNextOrganisation} user={user} />
+        )}
 
         {step === 3 && (
           <TarifsAbonnement

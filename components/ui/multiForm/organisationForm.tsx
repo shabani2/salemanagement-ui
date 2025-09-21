@@ -1,13 +1,24 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { FileUpload } from 'primereact/fileupload';
 import { Button } from 'primereact/button';
 import { FileUploadSelectEvent } from 'primereact/fileupload';
-import { Organisation } from '@/stores/slices/organisation/organisationSlice';
+import { Organisation, addOrganisation } from '@/stores/slices/organisation/organisationSlice';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '@/stores/store';
+import { Toast } from 'primereact/toast';
+import { User } from '@/Models/UserType';
 
-const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void }> = ({ onNext }) => {
+const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void; user: User }> = ({
+  onNext,
+  user,
+}) => {
+  const dispatch = useDispatch<AppDispatch>();
+  const toast = useRef<Toast>(null);
+  const [uploadKey, setUploadKey] = useState(0);
+  console.log('user in organisation form : ', user);
   const [formData, setFormData] = useState({
     _id: '',
     nom: '',
@@ -17,34 +28,30 @@ const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void }> = ({ o
     devise: '',
     pays: '',
     emailEntreprise: '',
-    logo: undefined,
-    superAdmin: '',
+    idNat: 'non affecté',
+    numeroImpot: 'non affecté',
+    superAdmin: user._id || '',
+    logo: null as File | null,
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
-  const [uploadKey, setUploadKey] = useState(0);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
     setErrors((prev) => ({ ...prev, [name]: '' }));
   };
+
   const handleFileSelect = (e: FileUploadSelectEvent) => {
     const file = e.files?.[0];
     if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        //@ts-ignore
-        setFormData((prev) => ({ ...prev, logo: reader.result as string }));
-        setUploadKey((prev) => prev + 1);
-      };
-      reader.readAsDataURL(file);
+      setFormData((prev) => ({ ...prev, logo: file }));
+      setUploadKey((prev) => prev + 1);
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const newErrors: { [key: string]: string } = {};
-    console.log('handle organisation');
     Object.entries(formData).forEach(([key, value]) => {
       if (
         key !== 'logo' &&
@@ -54,19 +61,31 @@ const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void }> = ({ o
         newErrors[key] = 'Ce champ est requis';
       }
     });
-    console.log('form data : ', formData);
+
     // if (Object.keys(newErrors).length > 0) {
     //   setErrors(newErrors);
     //   return;
     // }
 
-    console.log('form data : ', formData);
-    //@ts-ignore
-    onNext(formData);
+    const data = new FormData();
+    Object.entries(formData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        data.append(key, value);
+      }
+    });
+
+    try {
+      const response = await dispatch(addOrganisation(data));
+
+      onNext(response.payload);
+    } catch (error: unknown) {
+      console.error("Erreur lors de la création de l'organisation:", (error as Error).message);
+    }
   };
 
   return (
     <div className="h-8/10 flex items-center justify-center bg-gray-50 px-4">
+      <Toast ref={toast} />
       <div className="w-3/5 bg-white p-8 rounded-xl shadow-md">
         <h1 className="text-2xl font-semibold text-center mb-6 text-gray-700">
           Informations sur l&apos;organisation
@@ -76,6 +95,8 @@ const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void }> = ({ o
           {[
             { name: 'nom', label: 'Nom' },
             { name: 'rccm', label: 'RCCM' },
+            { name: 'idNat', label: 'ID National' },
+            { name: 'numeroImpot', label: "Numéro d'impôt" },
             { name: 'contact', label: 'Contact' },
             { name: 'siegeSocial', label: 'Siège social' },
             { name: 'devise', label: 'Devise' },
@@ -86,8 +107,8 @@ const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void }> = ({ o
               <input
                 name={name}
                 placeholder={`${label} *`}
-                //@ts-ignore
-                value={formData[name as keyof Organisation] || ''}
+                // @ts-expect-error - compat: external lib types mismatch
+                value={formData[name as keyof Organisation] as string}
                 onChange={handleChange}
                 className="p-inputtext p-component w-full border rounded-md px-3 py-2"
               />
@@ -109,7 +130,7 @@ const OrganisationForm: React.FC<{ onNext: (org: Organisation) => void }> = ({ o
               />
               {formData.logo ? (
                 <img
-                  src={formData.logo}
+                  src={formData.logo instanceof File ? URL.createObjectURL(formData.logo) : ''}
                   alt="Aperçu logo"
                   className="h-16 w-16 object-contain border rounded"
                 />

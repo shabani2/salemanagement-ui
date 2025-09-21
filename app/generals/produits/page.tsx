@@ -1,595 +1,898 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @next/next/no-img-element */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable react-hooks/rules-of-hooks */
 'use client';
 
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+
+import { AppDispatch, RootState } from '@/stores/store';
 import { fetchCategories, selectAllCategories } from '@/stores/slices/produits/categoriesSlice';
+
 import {
   addProduit,
-  deleteProduit,
+  deleteProduit as deleteProduitThunk,
   fetchProduits,
-  updateProduit,
+  searchProduits, // 👈 import
+  selectAllProduits,
+  selectProduitMeta,
+  selectProduitSearchMeta, // 👈 import
+  selectProduitStatus,
+  updateProduit as updateProduitThunk,
 } from '@/stores/slices/produits/produitsSlice';
-import { AppDispatch, RootState } from '@/stores/store';
+
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { Button } from 'primereact/button';
-import { Column } from 'primereact/column';
-import { DataTable } from 'primereact/datatable';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
 import { InputText } from 'primereact/inputtext';
 import { Menu } from 'primereact/menu';
-import React, { useEffect, useRef, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { Toast } from 'primereact/toast';
 
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { Categorie, Produit } from '@/Models/produitsType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-//import { saveAs } from 'file-saver';
-import { Toast } from 'primereact/toast';
 import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
+
+import { Categorie, Produit } from '@/Models/produitsType';
+import { API_URL } from '@/lib/apiConfig';
+
 import {
   downloadExportedFile,
   exportFile,
 } from '@/stores/slices/document/importDocuments/exportDoc';
-const page = () => {
-  const menuRef = useRef<any>(null);
-  const dispatch = useDispatch<AppDispatch>();
-  const [produits, setProduits] = useState<Produit[]>([]); //useSelector((state: RootState) => selectAllProduits(state));
-  const [allProduits, setAllProduits] = useState<Produit[]>([]);
-  const categories = useSelector((state: RootState) => selectAllCategories(state));
 
-  const [dialogType, setDialogType] = useState<string | null>(null);
-  const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
+/* ----------------------------- Utils ----------------------------- */
 
-  const selectedRowDataRef = useRef<any>(null);
-  const [isDeleteProduit, setIsDeleteProduit] = useState<boolean>(false);
+type ProduitForm = {
+  nom: string;
+  categorie: string;
+  prix: number;
+  prixVente: number;
+  tva: number;
+  marge: number;
+  seuil: number;
+  netTopay: number;
+  unite: string;
+};
 
-  const [newProduit, setNewProduit] = useState<Produit>({
-    nom: '',
-    categorie: '',
-    prix: 0,
-    prixVente: 0,
-    tva: 0,
-    marge: 0,
-    seuil: 0,
-    netTopay: 0,
-    unite: '',
-  });
+const INITIAL_FORM: ProduitForm = {
+  nom: '',
+  categorie: '',
+  prix: 0,
+  prixVente: 0,
+  tva: 0,
+  marge: 0,
+  seuil: 0,
+  netTopay: 0,
+  unite: '',
+};
 
-  //@ts-ignore
-  // const [newCategory, setNewCategory] = useState<Categorie | null>(null);
-  useEffect(() => {
-    dispatch(fetchCategories());
-    dispatch(fetchProduits()).then((resp) => {
-      setAllProduits(resp.payload); // garde la version complète
-      setProduits(resp.payload); // version visible (filtrée ou pas)
-    });
-  }, [dispatch]);
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const safeNumber = (v: unknown, fallback = 0) => {
+  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : fallback;
+};
+const isCategorieObject = (c: unknown): c is Categorie =>
+  !!c && typeof c === 'object' && '_id' in (c as any);
+const toCategorieId = (c: unknown): string =>
+  typeof c === 'string' ? c : isCategorieObject(c) ? (c._id ?? '') : '';
 
-  const handleAction = (action: string, rowData: Produit) => {
-    console.log('Produit cliqué :', rowData);
-    setSelectedProduit(rowData);
-    setDialogType(action);
-    if (action === 'delete') {
-      setIsDeleteProduit(true);
-    }
+function computePrices(prix: number, marge: number, tva: number) {
+  const p = safeNumber(prix);
+  const m = safeNumber(marge);
+  const t = safeNumber(tva);
+  const netTopay = p + (p * m) / 100;
+  const prixVente = netTopay + (netTopay * t) / 100;
+  return {
+    netTopay: Number(netTopay.toFixed(2)),
+    prixVente: Number(prixVente.toFixed(2)),
   };
+}
 
-  //@ts-ignore
+function produitToForm(produit: Produit | null | undefined): ProduitForm {
+  if (!produit) return { ...INITIAL_FORM };
+  const prix = safeNumber(produit.prix);
+  const marge = safeNumber(produit.marge);
+  const tva = safeNumber(produit.tva);
+  const { netTopay, prixVente } = computePrices(prix, marge, tva);
+  return {
+    nom: isNonEmptyString(produit.nom) ? produit.nom : '',
+    categorie: toCategorieId(produit.categorie),
+    prix,
+    tva,
+    marge,
+    seuil: safeNumber(produit.seuil),
+    netTopay: safeNumber(produit.netTopay, netTopay),
+    prixVente: safeNumber(produit.prixVente, prixVente),
+    unite: isNonEmptyString(produit.unite) ? produit.unite : '',
+  };
+}
 
-  const actionBodyTemplate = (rowData: Produit) => (
-    <div>
-      <Menu
-        model={[
-          {
-            label: 'Détails',
-            command: () => handleAction('details', selectedRowDataRef.current),
-          },
-          {
-            label: 'Modifier',
-            command: () => handleAction('edit', selectedRowDataRef.current),
-          },
-          {
-            label: 'Supprimer',
-            command: () => handleAction('delete', selectedRowDataRef.current),
-          },
-        ]}
-        popup
-        ref={menuRef}
-      />
-      <Button
-        icon="pi pi-bars"
-        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-        onClick={(event) => {
-          selectedRowDataRef.current = rowData; // 👈 on stocke ici le bon rowData
-          menuRef.current.toggle(event);
-        }}
-        aria-haspopup
-        severity={undefined}
-      />
-    </div>
+/* ------------------------- Petit composant d’icône tri --------------------- */
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => {
+  return (
+    <span className="inline-block align-middle ml-1">
+      {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+    </span>
+  );
+};
+
+/* --------------------------------- Page ---------------------------------- */
+
+const Page: React.FC = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const toast = useRef<Toast>(null);
+  const [loading1, setLoading1] = useState(false);
+
+  // Menu actions
+  const menuRef = useRef<Menu>(null);
+  const selectedRowDataRef = useRef<Produit | null>(null);
+  const menuModel = useMemo(
+    () => [
+      {
+        label: 'Détails',
+        command: () =>
+          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
+      },
+      {
+        label: 'Modifier',
+        command: () =>
+          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
+      },
+      {
+        label: 'Supprimer',
+        command: () =>
+          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
+      },
+    ],
+    []
   );
 
-  const handleSubmitProduit = async () => {
-    if (newProduit._id) {
-      // Cas modification
-      //@ts-ignore
-      await dispatch(updateProduit(newProduit)).then((resp) => {
-        console.log('resp ', resp.payload);
-      }); // updateProduit doit prendre l'objet complet
-    } else {
-      // Cas création
-      await dispatch(addProduit(newProduit));
-    }
+  // Store
+  const produits = useSelector((state: RootState) => asArray<Produit>(selectAllProduits(state)));
+  const meta = useSelector(selectProduitMeta);
+  const searchMeta = useSelector(selectProduitSearchMeta); // 👈 meta de la recherche
+  const status = useSelector(selectProduitStatus);
+  const categories = useSelector((state: RootState) =>
+    asArray<Categorie>(selectAllCategories(state))
+  );
+  const loading = status === 'loading';
 
-    await dispatch(fetchProduits()).then((resp) => {
-      setProduits(resp.payload);
-    });
+  // États serveur : page/rows/tri/filtres
+  const [page, setPage] = useState(1); // 1-based
+  const [rows, setRows] = useState(10);
+  const [sortBy, setSortBy] = useState<string>('updatedAt');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchText, setSearchText] = useState('');
+  const [categorieFilter, setCategorieFilter] = useState<Categorie | null>(null);
 
-    setNewProduit({
-      nom: '',
-      categorie: '',
-      prix: 0,
-      prixVente: 0,
-      tva: 0,
-    }); // reset le form
+  // Meta effective selon mode recherche ou non
+  const inSearch = isNonEmptyString(searchText);
+  const effectiveMeta = inSearch ? searchMeta : meta;
 
-    setDialogType(null);
-  };
+  // Modals
+  const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
+  const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
+  const [isDeleteProduit, setIsDeleteProduit] = useState<boolean>(false);
+
+  // Form
+  const [form, setForm] = useState<ProduitForm>({ ...INITIAL_FORM });
 
   useEffect(() => {
-    if (dialogType === 'edit' && selectedProduit) {
-      setNewProduit({
-        nom: selectedProduit.nom || '',
-        //@ts-ignore
-        categorie: selectedProduit.categorie?._id || selectedProduit.categorie || '',
-        prix: selectedProduit.prix || 0,
-        prixVente: selectedProduit.prixVente || 0,
-        tva: selectedProduit.tva || 0,
-        marge: selectedProduit.marge || 0,
-        seuil: selectedProduit?.seuil || 0,
-        unite: selectedProduit.unite || '',
+    dispatch(fetchCategories());
+  }, [dispatch]);
 
-        _id: selectedProduit._id, // si tu en as besoin pour l'update
-      });
+  // ---- FETCH unique (liste ou recherche) ----
+  const fetchServer = useCallback(() => {
+    const base = {
+      page,
+      limit: rows,
+      categorie: categorieFilter?._id || undefined,
+      sortBy,
+      order,
+      includeTotal: true,
+    } as const;
+
+    if (inSearch) {
+      dispatch(
+        searchProduits({
+          ...base,
+          q: searchText,
+        })
+      );
+    } else {
+      dispatch(fetchProduits(base));
+    }
+  }, [dispatch, page, rows, categorieFilter, sortBy, order, inSearch, searchText]);
+
+  // Refetch quand page/rows/sort/order changent
+  useEffect(() => {
+    fetchServer();
+  }, [fetchServer]);
+
+  const handleAction = useCallback((action: 'details' | 'edit' | 'delete', rowData: Produit) => {
+    setSelectedProduit(rowData ?? null);
+    if (action === 'delete') {
+      setIsDeleteProduit(true);
+      setDialogType(null);
+    } else {
+      setDialogType(action);
+    }
+  }, []);
+
+  // Form model
+  useEffect(() => {
+    if ((dialogType === 'edit' || dialogType === 'details') && selectedProduit) {
+      setForm(produitToForm(selectedProduit));
+    } else if (dialogType === 'create') {
+      setForm({ ...INITIAL_FORM });
     }
   }, [dialogType, selectedProduit]);
 
-  const handleInputChange = (field: keyof Produit, value: number | string) => {
-    const updated = { ...newProduit, [field]: value };
-    if (typeof updated.prix === 'number' && typeof updated.marge === 'number') {
-      updated.netTopay = updated.prix + (updated.prix * updated.marge) / 100;
-    }
-    if (typeof updated.netTopay === 'number' && typeof updated.tva === 'number') {
-      updated.prixVente = updated.netTopay + (updated.netTopay * updated.tva) / 100;
-    }
-    setNewProduit(updated);
-  };
-
-  //gestion de variable de categorie
-
-  // traitement de la recherche de produit
-  const [searchProd, setSearchProd] = useState('');
-  const [filteredProduits, setFilteredProduits] = useState(produits || []);
-  const [first, setFirst] = useState(0);
-  const [categorie, setCategorie] = useState<Categorie | null>(null);
-  useEffect(() => {
-    const filtered = produits.filter((p) => {
-      const query = searchProd.toLowerCase();
-      return (
-        p.nom?.toLowerCase().includes(query) ||
-        String(p.prix).includes(query) ||
-        String(p.marge).includes(query) ||
-        String(p.netTopay).includes(query) ||
-        String(p.tva).includes(query) ||
-        String(p.prixVente).includes(query) ||
-        p.unite?.toLowerCase().includes(query)
-      );
+  const handleInputChange = useCallback((field: keyof ProduitForm, value: any) => {
+    setForm((prev) => {
+      const updated = { ...prev };
+      if (field === 'nom' || field === 'unite') {
+        updated[field] = typeof value === 'string' ? value : '';
+      } else if (field === 'categorie') {
+        updated.categorie = typeof value === 'string' ? value : '';
+      } else {
+        const num = safeNumber(value, 0);
+        (updated as any)[field] = num;
+        if (field === 'prix' || field === 'marge' || field === 'tva') {
+          const { netTopay, prixVente } = computePrices(
+            field === 'prix' ? num : updated.prix,
+            field === 'marge' ? num : updated.marge,
+            field === 'tva' ? num : updated.tva
+          );
+          updated.netTopay = netTopay;
+          updated.prixVente = prixVente;
+        }
+      }
+      return updated;
     });
-    setFilteredProduits(filtered);
-  }, [searchProd, produits]);
+  }, []);
 
-  //file management
-  const toast = useRef<Toast>(null);
-  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
+  const resetForm = useCallback(() => {
+    setForm({ ...INITIAL_FORM });
+    setDialogType(null);
+    setSelectedProduit(null);
+  }, []);
 
-  const handleFileManagement = async ({
-    type,
-    format,
-    file,
-  }: {
-    type: 'import' | 'export';
-    format: 'csv' | 'pdf' | 'excel';
-    file?: File;
-  }) => {
-    if (type === 'import' && file) {
-      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
+  // CRUD
+  const handleSubmitProduit = useCallback(async () => {
+    if (!isNonEmptyString(form.nom)) {
       toast.current?.show({
-        severity: 'info',
-        summary: `Import ${format.toUpperCase()}`,
-        detail: `File imported: ${file.name}`,
+        severity: 'warn',
+        summary: 'Champ requis',
+        detail: 'Le nom est obligatoire',
         life: 3000,
       });
       return;
     }
-
-    if (type === 'export') {
-      // Only allow "csv" or "xlsx" as fileType
-      if (format === 'pdf') {
-        toast.current?.show({
-          severity: 'warn',
-          summary: 'Export PDF non supporté',
-          detail: "L'export PDF n'est pas disponible pour ce module.",
-          life: 3000,
-        });
-        return;
+    try {
+      setLoading1(true);
+      let r;
+      if (selectedProduit?._id) {
+        r = await dispatch(updateProduitThunk({ _id: selectedProduit._id, ...form }));
+      } else {
+        r = await dispatch(addProduit(form));
       }
-      // Map "excel" to "xlsx" for backend compatibility
-      const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : format;
-      const result = await dispatch(
-        exportFile({
-          url: '/export/produits',
-          mouvements: filteredProduits,
-          fileType: exportFileType,
-        })
-      );
-
-      if (exportFile.fulfilled.match(result)) {
-        const filename = `produits.${format === 'csv' ? 'csv' : 'xlsx'}`;
-        downloadExportedFile(result.payload, filename);
-
+      setLoading1(false);
+      if (addProduit.fulfilled.match(r) || updateProduitThunk.fulfilled.match(r)) {
+        fetchServer();
         toast.current?.show({
           severity: 'success',
-          summary: `Export ${format.toUpperCase()}`,
-          detail: `File downloaded: ${filename}`,
+          summary: 'Succès',
+          detail: selectedProduit?._id ? 'Produit mis à jour' : 'Produit créé',
           life: 3000,
         });
+        resetForm();
       } else {
         toast.current?.show({
           severity: 'error',
-          summary: `Export ${format.toUpperCase()} Échoué`,
-          detail: String(result.payload || 'Une erreur est survenue.'),
+          summary: 'Erreur',
+          detail: "Échec de l'opération",
           life: 3000,
         });
       }
+    } catch {
+      setLoading1(false);
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: "Échec de l'opération",
+        life: 3000,
+      });
+    }
+  }, [dispatch, form, selectedProduit, fetchServer, resetForm]);
+
+  const handleDeleteProduit = useCallback(async () => {
+    const id = selectedProduit?._id ?? '';
+    if (!isNonEmptyString(id)) {
+      setIsDeleteProduit(false);
+      setSelectedProduit(null);
+      return;
+    }
+    try {
+      const r = await dispatch(deleteProduitThunk(id));
+      if (deleteProduitThunk.fulfilled.match(r)) {
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Supprimé',
+          detail: 'Produit supprimé',
+          life: 3000,
+        });
+        const total = effectiveMeta?.total ?? 0; // 👈 meta effective
+        const countAfter = total - 1;
+        const lastPage = Math.max(1, Math.ceil(countAfter / rows));
+        const nextPage = Math.min(page, lastPage);
+        setPage(nextPage);
+        // l'effet fetchServer() repartira avec la bonne page
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Erreur',
+          detail: 'Échec de la suppression',
+          life: 3000,
+        });
+      }
+    } finally {
+      setIsDeleteProduit(false);
+      setSelectedProduit(null);
+    }
+  }, [dispatch, selectedProduit, effectiveMeta?.total, rows, page]);
+
+  // Export
+  const handleFileManagement = useCallback(
+    async ({
+      type,
+      format,
+      file,
+    }: {
+      type: 'import' | 'export';
+      format: 'csv' | 'pdf' | 'excel';
+      file?: File;
+    }) => {
+      if (type === 'export') {
+        if (format === 'pdf') {
+          toast.current?.show({
+            severity: 'warn',
+            summary: 'Export non supporté',
+            detail: "L'export PDF n'est pas disponible",
+            life: 3000,
+          });
+          return;
+        }
+        try {
+          const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : 'csv';
+          const r = await dispatch(
+            exportFile({
+              url: '/export/produits',
+              mouvements: produits,
+              fileType: exportFileType,
+            })
+          );
+          if (exportFile.fulfilled.match(r)) {
+            const filename = `produits.${exportFileType === 'csv' ? 'csv' : 'xlsx'}`;
+            downloadExportedFile(r.payload, filename);
+            toast.current?.show({
+              severity: 'success',
+              summary: 'Export réussi',
+              detail: filename,
+              life: 3000,
+            });
+          } else {
+            throw new Error('Export non abouti');
+          }
+        } catch {
+          toast.current?.show({
+            severity: 'error',
+            summary: 'Erreur',
+            detail: "Échec de l'export",
+            life: 3000,
+          });
+        }
+      }
+    },
+    [dispatch, produits]
+  );
+
+  // Rendu image catégorie
+  const renderCategoryImage = useCallback(
+    (rowData: Produit) => {
+      const catId = toCategorieId(rowData?.categorie);
+      if (!isNonEmptyString(catId)) return null;
+      const found = categories.find((c) => c._id === catId);
+      const label = found?.nom ?? '';
+      const img = found?.image;
+      const src =
+        isNonEmptyString(img) && isNonEmptyString(API_URL())
+          ? `${API_URL()}/${img.replace('../', '')}`
+          : '';
+      if (!isNonEmptyString(src)) return null;
+      return (
+        <img
+          src={src}
+          alt={label}
+          className="w-8 h-8 rounded-full object-cover border border-gray-100"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+      );
+    },
+    [categories]
+  );
+
+  /* ----------------------------- Tri au clic ----------------------------- */
+  const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
+  const toggleSort = (field: string) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
+      setPage(1);
+    } else {
+      const next: 'asc' | 'desc' = order === 'asc' ? 'desc' : 'asc';
+      setOrder(next);
+      setPage(1);
     }
   };
+
+  /* --------------------------- Pagination custom -------------------------- */
+  const total = effectiveMeta?.total ?? 0; // 👈 meta effective
+  const totalPages = effectiveMeta?.totalPages ?? Math.max(1, Math.ceil(total / rows));
+  const currentPage = effectiveMeta?.page ?? page;
+  const canPrev = Boolean(effectiveMeta?.hasPrev ?? currentPage > 1);
+  const canNext = Boolean(effectiveMeta?.hasNext ?? currentPage < totalPages);
+  const firstIndex = (page - 1) * rows;
+
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
+  const onChangeRows = (n: number) => {
+    setRows(n);
+    const newTotalPages = Math.max(1, Math.ceil(total / n));
+    const fixedPage = Math.min(page, newTotalPages);
+    setPage(fixedPage);
+  };
+
+  // Appliquer filtres (remet à 1 et laisse l'effet refetch)
+  const applyFilters = useCallback(() => {
+    setPage(1);
+  }, []);
+
+  /* ---------------------------------- UI ----------------------------------- */
   return (
-    <div className="min-h-screen ">
-      <div className="flex items-center justify-between mt-3 mb-3 ">
+    <div className="min-h-screen">
+      <Toast ref={toast} position="top-right" />
+      <Menu model={menuModel} popup ref={menuRef} />
+
+      <div className="flex items-center justify-between mt-3 mb-3">
         <BreadCrumb
           model={[{ label: 'Accueil', url: '/' }, { label: 'Produits' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold text-gray-5000">Gestion des Produits</h2>
+        <h2 className="text-2xl font-bold text-gray-700">Gestion des Produits</h2>
       </div>
-      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row w-full ">
-        <div className=" bg-white p-2 rounded-lg w-full ">
-          <div className="gap-4 mb-4 w-full  flex justify-between">
-            <div className="relative w-2/3 flex flex-row gap-2">
+
+      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row w-full">
+        <div className="bg-white p-4 rounded-lg w-full">
+          <div className="gap-4 mb-4 w-full flex justify-between flex-wrap">
+            <div className="relative w-full md:w-2/3 flex flex-row gap-2 flex-wrap">
               <InputText
-                className="p-2 pl-10 border rounded w-full"
+                className="p-2 border rounded w-full md:w-1/3"
                 placeholder="Rechercher un produit..."
-                value={searchProd}
-                onChange={(e) => setSearchProd(e.target.value)}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value ?? '')}
+                onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
               />
 
-              <DropdownCategorieFilter
-                onSelect={(categorie) => {
-                  setCategorie(categorie);
-                  if (categorie === null) {
-                    setFilteredProduits(allProduits);
-                  }
-                  const filtered = allProduits.filter((p) => {
-                    if (!categorie) return true;
-                    return typeof p.categorie === 'object' &&
-                      p.categorie !== null &&
-                      '_id' in p.categorie
-                      ? p.categorie._id === categorie._id
-                      : p.categorie === categorie._id;
-                  });
-                  setFilteredProduits(filtered);
-                }}
-                // @ts-ignore
+              <DropdownCategorieFilter onSelect={(cat) => setCategorieFilter(cat ?? null)} />
+
+              <Button
+                label="Filtrer"
+                icon="pi pi-search"
+                className="!bg-green-700 text-white"
+                onClick={applyFilters}
               />
+
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
-            <div className="ml-3 flex gap-2 w-2/5"></div>
+
             <Button
-              label="nouveau"
+              label="Nouveau"
               icon="pi pi-plus"
               className="!bg-green-700 text-white p-2 rounded"
               onClick={() => setDialogType('create')}
-              severity={undefined}
             />
           </div>
-          <div>
-            <DataTable
-              value={filteredProduits}
-              paginator
-              size="small"
-              rows={10}
-              className="rounded-lg text-[11px] text-gray-900 w-full"
-              tableStyle={{ minWidth: '70rem' }}
-              rowClassName={(rowData, options) => {
-                // @ts-ignore
-                const index = options?.index ?? 0;
-                const globalIndex = first + index;
-                return globalIndex % 2 === 0
-                  ? '!bg-gray-300 !text-gray-900'
-                  : '!bg-green-900 !text-white';
-              }}
-            >
-              <Column
-                field="_id"
-                header="#"
-                body={(_, options) => options.rowIndex + 1}
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-                className="text-[11px]"
+
+          {/* ---------- TABLE TAILWIND ----------- */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-[70rem] w-full text-sm">
+              <thead>
+                <tr className="bg-green-800 text-white">
+                  <th className="px-4 py-2 text-left">N°</th>
+
+                  <th className="px-4 py-2 text-left"> </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('nom')}
+                    title="Trier"
+                  >
+                    Nom <SortIcon order={sortedOrderFor('nom')} />
+                  </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('prix')}
+                    title="Trier"
+                  >
+                    Prix/U <SortIcon order={sortedOrderFor('prix')} />
+                  </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('marge')}
+                    title="Trier"
+                  >
+                    Marge (%) <SortIcon order={sortedOrderFor('marge')} />
+                  </th>
+
+                  <th className="px-4 py-2 text-left">Valeur Marge</th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('netTopay')}
+                    title="Trier"
+                  >
+                    Prix de vente/U <SortIcon order={sortedOrderFor('netTopay')} />
+                  </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('tva')}
+                    title="Trier"
+                  >
+                    TVA (%) <SortIcon order={sortedOrderFor('tva')} />
+                  </th>
+
+                  <th className="px-4 py-2 text-left">Valeur TVA</th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('prixVente')}
+                    title="Trier"
+                  >
+                    TTC/U <SortIcon order={sortedOrderFor('prixVente')} />
+                  </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('seuil')}
+                    title="Trier"
+                  >
+                    Seuil <SortIcon order={sortedOrderFor('seuil')} />
+                  </th>
+
+                  <th className="px-4 py-2 text-left">Unité</th>
+                  <th className="px-4 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading && produits.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={13}>
+                      Chargement...
+                    </td>
+                  </tr>
+                ) : produits.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={13}>
+                      Aucun produit trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  produits.map((r, idx) => (
+                    <tr
+                      key={r._id}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{(currentPage - 1) * rows + idx + 1}</td>
+
+                      <td className="px-4 py-2">{renderCategoryImage(r)}</td>
+
+                      <td className="px-4 py-2">{r?.nom ?? '-'}</td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.prix).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.marge).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">
+                        {((safeNumber(r?.prix) * safeNumber(r?.marge)) / 100).toFixed(2)}
+                      </td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.netTopay).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.tva).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">
+                        {((safeNumber(r?.netTopay) * safeNumber(r?.tva)) / 100).toFixed(2)}
+                      </td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.prixVente).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">{safeNumber(r?.seuil).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">{isNonEmptyString(r?.unite) ? r.unite : '-'}</td>
+
+                      <td className="px-4 py-2">
+                        <Button
+                          icon="pi pi-bars"
+                          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                          onClick={(event) => {
+                            selectedRowDataRef.current = r ?? null;
+                            menuRef.current?.toggle(event);
+                          }}
+                          aria-haspopup
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ---------- PAGINATION TAILWIND ----------- */}
+          <div className="flex items-center justify-between mt-3">
+            <div className="text-sm text-gray-700">
+              Page <span className="font-semibold">{currentPage}</span> / {totalPages} —{' '}
+              <span className="font-semibold">{total}</span> éléments
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={rows}
+                onChange={(e) => onChangeRows(Number(e.target.value))}
+              >
+                {[5, 10, 20, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+
+              <Button
+                label="«"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(1)}
+                disabled={!canPrev}
               />
-              <Column
-                // field="produit.categorie.nom"
-                header=""
-                body={(rowData: Produit) => {
-                  const categorie = rowData?.categorie;
-                  if (!categorie) return <span className="text-[11px]">—</span>;
-                  let imageUrl = '';
-                  if (
-                    typeof categorie === 'object' &&
-                    categorie !== null &&
-                    'image' in categorie &&
-                    categorie.image
-                  ) {
-                    imageUrl = `http://localhost:8000/${categorie.image.replace('../', '')}`;
-                  }
-                  return (
-                    <div className="flex items-center gap-2 text-[11px]">
-                      {typeof categorie === 'object' &&
-                        categorie !== null &&
-                        'image' in categorie &&
-                        categorie.image && (
-                          <img
-                            src={imageUrl}
-                            alt={categorie.nom}
-                            className="w-8 h-8 rounded-full object-cover border border-gray-100"
-                          />
-                        )}
-                      {/* <span>{categorie.nom}</span> */}
-                    </div>
-                  );
-                }}
-                className="px-4 py-1 text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
+              <Button
+                label="‹"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(currentPage - 1)}
+                disabled={!canPrev}
               />
-              <Column
-                field="nom"
-                header="Nom"
-                sortable
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
+              <Button
+                label="›"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(currentPage + 1)}
+                disabled={!canNext}
               />
-              <Column
-                field="prix"
-                header="prix/U"
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
+              <Button
+                label="»"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(totalPages)}
+                disabled={!canNext}
               />
-              <Column
-                field="marge"
-                header="Marge (%)"
-                body={(rowData: Produit) => rowData.marge ?? 'N/A'}
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-              />
-              <Column
-                header="Valeur Marge"
-                body={(rowData: Produit) =>
-                  rowData.prix && rowData.marge !== undefined
-                    ? ((rowData.prix * rowData.marge) / 100).toFixed(2)
-                    : 'N/A'
-                }
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-              />
-              <Column
-                field="netTopay"
-                header="prix de vente/U"
-                body={(rowData: Produit) => rowData.netTopay?.toFixed(2) ?? 'N/A'}
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-              />
-              <Column
-                field="tva"
-                header="TVA (%)"
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-              />
-              <Column
-                header="Valeur TVA"
-                body={(rowData: Produit) =>
-                  rowData.netTopay && rowData.tva !== undefined
-                    ? ((rowData.netTopay * rowData.tva) / 100).toFixed(2)
-                    : 'N/A'
-                }
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-              />
-              <Column
-                field="prixVente"
-                header="TTC/U"
-                body={(rowData: Produit) => rowData.prixVente?.toFixed(2) ?? 'N/A'}
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-              />
-              <Column
-                field="seuil"
-                header="Seuil de stock"
-                body={(rowData: Produit) => rowData.seuil?.toFixed(2) ?? 'N/A'}
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-              />
-              <Column
-                field="unite"
-                header="Unité"
-                body={(rowData: Produit) => rowData.unite || 'N/A'}
-                className="text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-              />
-              <Column
-                body={actionBodyTemplate}
-                header="Actions"
-                className="px-4 py-1 text-[11px]"
-                headerClassName="text-[11px] !bg-green-900 !text-white"
-              />
-            </DataTable>
+            </div>
           </div>
         </div>
       </div>
-      {/* dialog pour la creation d'un produit */}
+
+      {/* Dialog Create/Edit */}
       <Dialog
         visible={dialogType === 'create' || dialogType === 'edit'}
         header={dialogType === 'edit' ? 'Modifier le produit' : 'Ajouter un produit'}
-        onHide={() => setDialogType(null)}
-        style={{ width: '50vw' }}
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
         modal
       >
         <div className="p-4 space-y-4">
-          {/* Ligne 1: nom et catégorie */}
-          <div className="flex gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
-              <label className="block mb-1 text-sm font-medium">Nom</label>
+              <label className="block mb-1 text-sm font-medium">Nom*</label>
               <InputText
-                type="text"
-                value={newProduit.nom}
-                onChange={(e) => handleInputChange('nom', e.target.value)}
+                value={form.nom}
+                onChange={(e) => handleInputChange('nom', e.target.value ?? '')}
                 required
                 className="w-full p-2 border rounded"
               />
             </div>
+
             <div className="flex-1">
               <label className="block mb-1 text-sm font-medium">Catégorie</label>
               <Dropdown
-                value={
-                  typeof newProduit.categorie === 'string'
-                    ? newProduit.categorie
-                    : newProduit.categorie?._id
-                }
-                options={categories.map((cat) => ({ label: cat.nom, value: cat._id }))}
+                value={form.categorie}
+                options={[
+                  { label: 'Sélectionner...', value: '' },
+                  ...asArray<Categorie>(categories).map((cat) => ({
+                    label: cat?.nom ?? '—',
+                    value: cat?._id ?? '',
+                  })),
+                ]}
                 onChange={(e) => handleInputChange('categorie', e.value)}
-                placeholder="Sélectionner une catégorie"
                 className="w-full border rounded"
               />
             </div>
           </div>
 
-          {/* Ligne 2: prix, marge, tva */}
-          <div className="flex gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
-              <label className="block mb-1 text-sm font-medium">Prix d&apos;acquisition/Prod</label>
+              <label className="block mb-1 text-sm font-medium">Prix d&apos;acquisition</label>
               <InputText
                 type="number"
-                //@ts-ignore
-                value={newProduit.prix}
-                onChange={(e) => handleInputChange('prix', parseFloat(e.target.value) || 0)}
+                value={String(form.prix)}
+                onChange={(e) => handleInputChange('prix', e.target.value)}
                 className="w-full p-2 border rounded"
+                inputMode="decimal"
               />
             </div>
+
             <div className="flex-1">
               <label className="block mb-1 text-sm font-medium">Marge (%)</label>
               <InputText
                 type="number"
-                //@ts-ignore
-                value={newProduit.marge}
-                onChange={(e) => handleInputChange('marge', parseFloat(e.target.value) || 0)}
+                value={String(form.marge)}
+                onChange={(e) => handleInputChange('marge', e.target.value)}
                 className="w-full p-2 border rounded"
+                inputMode="decimal"
               />
             </div>
+          </div>
 
+          <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <label className="block mb-1 text-sm font-medium">TVA (%)</label>
               <InputText
                 type="number"
-                //@ts-ignore
-                value={newProduit.tva}
-                onChange={(e) => handleInputChange('tva', parseFloat(e.target.value) || 0)}
+                value={String(form.tva)}
+                onChange={(e) => handleInputChange('tva', e.target.value)}
                 className="w-full p-2 border rounded"
+                inputMode="decimal"
               />
             </div>
+
             <div className="flex-1">
               <label className="block mb-1 text-sm font-medium">Seuil de stock</label>
               <InputText
                 type="number"
-                //@ts-ignore
-                value={newProduit.seuil}
-                onChange={(e) => handleInputChange('seuil', parseFloat(e.target.value) || 0)}
+                value={String(form.seuil)}
+                onChange={(e) => handleInputChange('seuil', e.target.value)}
                 className="w-full p-2 border rounded"
+                inputMode="numeric"
               />
             </div>
           </div>
 
-          {/* Ligne 3: unité */}
           <div>
             <label className="block mb-1 text-sm font-medium">Unité</label>
             <InputText
-              type="text"
-              value={newProduit.unite}
-              onChange={(e) => handleInputChange('unite', e.target.value)}
-              placeholder="Unité (ex: kg, l, pièce)"
+              value={form.unite}
+              onChange={(e) => handleInputChange('unite', e.target.value ?? '')}
+              placeholder="kg, l, pièce..."
               className="w-full p-2 border rounded"
             />
           </div>
 
-          {/* Ligne 4: valeurs calculées */}
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block text-sm">
-                Valeur Marge: {((newProduit.prix * (newProduit.marge || 0)) / 100).toFixed(2)}{' '}
-              </label>
-              <label className="block text-sm">
-                Valeur TVA:{' '}
-                {(((newProduit.netTopay || 0) * (newProduit.tva || 0)) / 100).toFixed(2)}
-              </label>
+          <div className="grid grid-cols-2 gap-4 p-3 bg-gray-50 rounded">
+            <div>
+              <label className="block text-sm text-gray-600">Valeur Marge:</label>
+              <span className="font-medium">
+                {((safeNumber(form.prix) * safeNumber(form.marge)) / 100).toFixed(2)}
+              </span>
             </div>
-            <div className="flex-1 text-right">
-              <label className="block text-sm font-medium">
-                Net à payer: {newProduit.netTopay?.toFixed(2)}
-              </label>
-              <label className="block text-sm font-medium">
-                Prix de vente: {newProduit.prixVente?.toFixed(2)}
-              </label>
+
+            <div>
+              <label className="block text-sm text-gray-600">Valeur TVA:</label>
+              <span className="font-medium">
+                {((safeNumber(form.netTopay) * safeNumber(form.tva)) / 100).toFixed(2)}
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600">Net à payer:</label>
+              <span className="font-medium">{safeNumber(form.netTopay).toFixed(2)}</span>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600">Prix de vente:</label>
+              <span className="font-medium">{safeNumber(form.prixVente).toFixed(2)}</span>
             </div>
           </div>
 
-          {/* Bouton action */}
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
+
             <Button
-              label={dialogType === 'edit' ? 'Modifier' : 'Ajouter'}
+              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              icon={loading1 ? 'pi pi-spinner pi-spin' : undefined}
+              disabled={loading1}
               className="!bg-green-700 text-white"
               onClick={handleSubmitProduit}
-              severity={undefined}
             />
           </div>
         </div>
       </Dialog>
 
-      {/* delete dialog pour produit */}
+      {/* Dialog Details */}
+      <Dialog
+        visible={dialogType === 'details'}
+        header="Détails du produit"
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
+        modal
+      >
+        <div className="p-4 space-y-3 text-sm">
+          <div className="flex justify-between">
+            <span className="font-medium">Nom</span>
+            <span>{selectedProduit?.nom}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Catégorie</span>
+            <span>
+              {categories.find((c) => c._id === toCategorieId(selectedProduit?.categorie))?.nom ??
+                '—'}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Prix achat</span>
+            <span>{safeNumber(selectedProduit?.prix).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Marge (%)</span>
+            <span>{safeNumber(selectedProduit?.marge).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">TVA (%)</span>
+            <span>{safeNumber(selectedProduit?.tva).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Net à payer</span>
+            <span>{safeNumber(selectedProduit?.netTopay).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">TTC/U</span>
+            <span>{safeNumber(selectedProduit?.prixVente).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Seuil</span>
+            <span>{safeNumber(selectedProduit?.seuil).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Unité</span>
+            <span>{selectedProduit?.unite || '—'}</span>
+          </div>
+        </div>
+      </Dialog>
 
+      {/* Confirm Delete */}
       <ConfirmDeleteDialog
         visible={isDeleteProduit}
         onHide={() => setIsDeleteProduit(false)}
-        onConfirm={(item) => {
-          dispatch(deleteProduit(item._id)).then(() => {
-            dispatch(fetchProduits()).then((resp) => {
-              setAllProduits(resp.payload); // garde la version complète
-              setProduits(resp.payload); // version visible (filtrée ou pas)
-            });
-            setIsDeleteProduit(false);
-          });
-        }}
-        item={selectedProduit}
+        onConfirm={handleDeleteProduit}
+        item={selectedProduit || ({ _id: '', nom: '' } as any)}
         objectLabel="le produit"
         displayField="nom"
       />
@@ -597,4 +900,4 @@ const page = () => {
   );
 };
 
-export default page;
+export default Page;

@@ -2,450 +2,500 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable react-hooks/rules-of-hooks */
 'use client';
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+
 import DropdownCategorieFilter from '@/components/ui/dropdowns/DropdownCategories';
 import DropdownPointVenteFilter from '@/components/ui/dropdowns/DropdownPointventeFilter';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-import { OperationType } from '@/lib/operationType';
-import { MouvementStock } from '@/Models/mouvementStockType';
-import { PointVente } from '@/Models/pointVenteType';
-import { Stock } from '@/Models/stock';
+
+import { API_URL } from '@/lib/apiConfig';
+import { AppDispatch, RootState } from '@/stores/store';
+
+import {
+  fetchStocks,
+  selectAllStocks,
+  selectStockMeta,
+  selectStockStatus,
+} from '@/stores/slices/stock/stockSlice';
+
 import {
   downloadExportedFile,
   exportFile,
 } from '@/stores/slices/document/importDocuments/exportDoc';
-import {
-  fetchStockByPointVenteId,
-  fetchStockByRegionId,
-  fetchStocks,
-  selectAllStocks,
-} from '@/stores/slices/stock/stockSlice';
-import { AppDispatch, RootState } from '@/stores/store';
-import { Badge } from 'primereact/badge';
-import { BreadCrumb } from 'primereact/breadcrumb';
-import { Button } from 'primereact/button';
-import { Column } from 'primereact/column';
-import { DataTable } from 'primereact/datatable';
-import { Dropdown } from 'primereact/dropdown';
-import { InputText } from 'primereact/inputtext';
-import { Menu } from 'primereact/menu';
-import { Toast } from 'primereact/toast';
-import React, { SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+
 import { useDispatch, useSelector } from 'react-redux';
+import { BreadCrumb } from 'primereact/breadcrumb';
+import { InputText } from 'primereact/inputtext';
+import { Toast } from 'primereact/toast';
 
-const typeOptions = Object.values(OperationType).map((op) => ({
-  label: op,
-  value: op,
-}));
+import type { Stock } from '@/Models/stock';
+import type { PointVente } from '@/Models/pointVenteType';
+import type { Categorie } from '@/Models/produitsType';
 
-const page = () => {
-  const [selectedType, setSelectedType] = useState(null);
+/* ----------------------------- Helpers ----------------------------- */
+const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+const safeNumber = (v: unknown, fallback = 0) => {
+  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : fallback;
+};
+const safeApiImage = (rel?: string) =>
+  isNonEmptyString(rel) ? `${API_URL()}/${rel.replace('../', '').replace(/^\/+/, '')}` : '';
+
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
+  <span className="inline-block align-middle ml-1">
+    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+  </span>
+);
+
+// type guard: assure qu'on affiche bien un objet stock (et pas un point de vente par erreur)
+const isStockRow = (row: any): row is Stock =>
+  row && typeof row === 'object' && row.produit && (row.quantite ?? row.quantite === 0);
+
+/* -------------------------------- Component -------------------------------- */
+const Page: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const stocks = useSelector((state: RootState) => selectAllStocks(state));
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState(10);
-  // const [rowIndexes, setRowIndexes] = useState<{ [key: string]: number }>({});
-  const [first, setFirst] = useState(0);
-  const onPageChange = (event: { first: SetStateAction<number>; rows: SetStateAction<number> }) => {
-    setFirst(event.first);
-    setRows(event.rows);
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleAction = (action: string) => {
-    console.log();
-    // setDialogType(action);
-  };
+  const toast = useRef<any>(null);
 
   const user =
-    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
+    typeof window !== 'undefined'
+      ? (() => {
+          try {
+            return JSON.parse(localStorage.getItem('user-agricap') || 'null');
+          } catch {
+            return null;
+          }
+        })()
+      : null;
 
-  // useEffect(() => {
-  //   if (user?.role !== 'SuperAdmin' && user?.role !== 'AdminRegion') {
-  //     dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
-  //   } else {
-  //     dispatch(fetchStocks());
-  //   }
-  // }, [dispatch, user?.role]);
+  const stocks = useSelector((s: RootState) => asArray<Stock>(selectAllStocks(s)));
+  const meta = useSelector(selectStockMeta);
+  const status = useSelector(selectStockStatus);
+  const loading = status === 'loading';
 
-  // traitement de la recherche dans le stock
+  /* ------------------------------ pagination/tri (custom) ------------------- */
+  const [page, setPage] = useState(1); // 1-based
+  const [rows, setRows] = useState(10);
+  const [sortBy, setSortBy] = useState<string>('updatedAt'); // défaut updatedAt
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+
+  /* --------------------------------- Filtres UI ----------------------------- */
   const [search, setSearch] = useState('');
-  const [filteredBase, setFilteredBase] = useState<Stock[]>(stocks);
-  const [categorie, setCategorie] = useState<any>(null);
+  const [selectedCategorie, setSelectedCategorie] = useState<Categorie | null>(null);
+  const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(null);
 
-  const filteredStocks = useMemo(() => {
-    const lowerSearch = search.toLowerCase();
-    return filteredBase.filter((s) => {
-      const cat =
-        typeof s.produit?.categorie === 'object' &&
-        s.produit?.categorie !== null &&
-        'nom' in s.produit.categorie
-          ? (s.produit.categorie.nom as string)?.toLowerCase()
-          : '';
-      const prod = s.produit?.nom?.toLowerCase() || '';
-      const pv = s.pointVente?.nom?.toLowerCase() || 'depot central';
-      const quantite = String(s.quantite || '').toLowerCase();
-      const montant = String(s.montant || '').toLowerCase();
-      const date = new Date(s.createdAt || '').toLocaleDateString().toLowerCase();
-      return [cat, prod, pv, quantite, montant, date].some((field) => field.includes(lowerSearch));
+  /* --------------------------- Construction des filtres envoyés ------------- */
+  const first = useMemo(() => Math.max(0, (page - 1) * rows), [page, rows]);
+
+  const serverFilters = useMemo(() => {
+    const roleFilters: Record<string, any> = {};
+    if (user?.role === 'AdminPointVente' && isNonEmptyString((user as any)?.pointVente?._id)) {
+      roleFilters.pointVente = (user as any).pointVente._id;
+    } else if (user?.role === 'AdminRegion' && isNonEmptyString((user as any)?.region?._id)) {
+      roleFilters.region = (user as any).region._id;
+    }
+
+    // La sélection PV dans l'UI override le filtre rôle région
+    if (selectedPointVente?._id) {
+      roleFilters.pointVente = selectedPointVente._id;
+      delete roleFilters.region;
+    }
+
+    return {
+      first, // offset géré côté client par le slice
+      limit: rows, // taille de page côté client
+      q: search || undefined,
+      sortBy,
+      order,
+      // ⚠️ pas besoin de includeTotal/includeRefs côté stocks, on laisse le slice paginer en client
+      ...roleFilters,
+    };
+  }, [
+    first,
+    rows,
+    search,
+    sortBy,
+    order,
+    selectedPointVente?._id,
+    user?.role,
+    (user as any)?.pointVente?._id,
+    (user as any)?.region?._id,
+  ]);
+
+  /* ------------------------------ Chargement data --------------------------- */
+  useEffect(() => {
+    // un seul thunk: fetchStocks route automatiquement vers /stocks/point-vente/:id si pointVente est fourni
+    dispatch(fetchStocks(serverFilters));
+  }, [dispatch, serverFilters]);
+
+  // fallback si pas de rôle connu au 1er rendu
+  useEffect(() => {
+    if (!user?.role) {
+      dispatch(fetchStocks(serverFilters));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch, user?.role]);
+
+  /* --------------------------------- Filtrage client (catégorie) ----------- */
+  const visibleStocks = useMemo(() => {
+    // on ne rend QUE des lignes ayant le shape “stock”
+    const onlyStocks = (stocks || []).filter(isStockRow);
+
+    if (!selectedCategorie) return onlyStocks;
+    return onlyStocks.filter((s) => {
+      const catObj = (s?.produit as any)?.categorie;
+      const catId =
+        typeof catObj === 'object' && catObj ? catObj._id : (s?.produit as any)?.categorie;
+      return catId === selectedCategorie._id;
     });
-  }, [search, filteredBase]);
+  }, [stocks, selectedCategorie]);
 
-  //file management
-  const toast = useRef<Toast>(null);
+  /* ----------------------------- Tri + Pagination UI ------------------------ */
+  const total = meta?.total ?? visibleStocks.length; // fallback si meta pas à jour
+  const totalPages = Math.max(1, Math.ceil(total / rows));
+  const firstIndex = (page - 1) * rows;
 
-  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
-
-  // 1. Charger les données une seule fois au mount
-  useEffect(() => {
-    if (user?.role === 'AdminPointVente') {
-      dispatch(fetchStockByPointVenteId(user?.pointVente?._id));
-    } else if (user?.role === 'AdminRegion') {
-      dispatch(fetchStockByRegionId(user?.region?._id));
+  const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
+  const toggleSort = (field: string) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
+      setPage(1);
     } else {
-      dispatch(fetchStocks());
-    }
-  }, [dispatch, user?.pointVente?._id, user?.region?._id, user?.role]);
-
-  // 2. Initialiser filteredBase après que stocks ait été rempli
-  useEffect(() => {
-    if (stocks.length > 0) {
-      setFilteredBase(stocks);
-    }
-  }, [stocks]);
-
-  // console.log('filteredBase');
-  const handlePointVenteSelect = (pointVente: PointVente | null) => {
-    if (!pointVente) {
-      setFilteredBase(stocks);
-      return;
-    }
-
-    const filtered = stocks.filter((s) => s.pointVente?._id === pointVente._id);
-    setFilteredBase(filtered);
-  };
-  const handleFileManagement = async ({
-    type,
-    format,
-    file,
-  }: {
-    type: 'import' | 'export';
-    format: 'csv' | 'excel';
-    file?: File;
-  }) => {
-    if (type === 'import' && file) {
-      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
-      toast.current?.show({
-        severity: 'info',
-        summary: `Import ${format.toUpperCase()}`,
-        detail: `File imported: ${file.name}`,
-        life: 3000,
-      });
-      return;
-    }
-
-    if (type === 'export') {
-      // Map "excel" to "xlsx" to satisfy the type requirement
-      const exportFileType = format === 'excel' ? 'xlsx' : format;
-      const result = await dispatch(
-        exportFile({
-          url: '/export/stock',
-          mouvements: filteredStocks,
-          fileType: exportFileType,
-        })
-      );
-
-      if (exportFile.fulfilled.match(result)) {
-        const filename = `stock.${format === 'csv' ? 'csv' : 'xlsx'}`;
-        downloadExportedFile(result.payload, filename);
-
-        toast.current?.show({
-          severity: 'success',
-          summary: `Export ${format.toUpperCase()}`,
-          detail: `File downloaded: ${filename}`,
-          life: 3000,
-        });
-      } else {
-        toast.current?.show({
-          severity: 'error',
-          summary: `Export ${format.toUpperCase()} Échoué`,
-          detail: String(result.payload || 'Une erreur est survenue.'),
-          life: 3000,
-        });
-      }
+      setOrder(order === 'asc' ? 'desc' : 'asc');
+      setPage(1);
     }
   };
-  console.log('filteredStocks', filteredStocks);
 
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== page) setPage(next);
+  };
+
+  const onChangeRows = (n: number) => {
+    setRows(n);
+    const newTotalPages = Math.max(1, Math.ceil(total / n));
+    const fixed = Math.min(page, newTotalPages);
+    setPage(fixed);
+  };
+
+  console.log('stock : ', visibleStocks);
+
+  /* ---------------------------------- UI ----------------------------------- */
   return (
-    <div className=" min-h-screen ">
+    <div className="min-h-screen">
+      <Toast ref={toast} />
+
       <div className="flex items-center justify-between pb-6 pt-6">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des stock' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion du stock' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des stock</h2>
+        <h2 className="text-2xl font-bold text-gray-700">Gestion du stock</h2>
       </div>
+
       <div className="bg-white p-4 rounded-lg shadow-md">
-        <div className="flex mb-4 gap-4">
-          {/* Partie gauche - champ de recherche */}
-          <div className="w-2/3 flex flex-row items-center gap-2">
+        <div className="flex mb-4 gap-4 justify-between items-center flex-wrap md:flex-nowrap">
+          {/* Gauche */}
+          <div className="flex flex-row items-center gap-2 flex-wrap md:flex-nowrap w-full md:w-auto">
             <InputText
-              className="p-2 pl-10 border rounded w-full"
+              className="p-2 pl-10 border rounded w-full md:w-72"
               placeholder="Rechercher..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setPage(1);
+                setSearch(e.target.value ?? '');
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && setPage(1)}
             />
-            <DropdownPointVenteFilter onSelect={handlePointVenteSelect} />
-            <DropdownCategorieFilter
-              onSelect={(categorie) => {
-                setCategorie(categorie);
 
-                if (categorie === null) {
-                  setFilteredBase(stocks); // doit repartir de stocks (pas filteredBase !)
-                  return;
-                }
-
-                const filtered = stocks.filter((p) => {
-                  return (
-                    typeof p.produit.categorie === 'object' &&
-                    p.produit.categorie !== null &&
-                    '_id' in p.produit.categorie &&
-                    p.produit.categorie._id === categorie._id
-                  );
-                });
-
-                setFilteredBase(filtered);
+            <DropdownPointVenteFilter
+              onSelect={(pv) => {
+                setPage(1);
+                setSelectedPointVente(pv);
               }}
             />
 
-            <DropdownImportExport onAction={handleFileManagement} />
+            <DropdownCategorieFilter
+              onSelect={(cat) => {
+                setPage(1);
+                setSelectedCategorie(cat);
+              }}
+            />
+          </div>
+
+          {/* Droite */}
+          <div className="flex justify-end items-center gap-2 w-full md:w-auto">
+            <DropdownImportExport
+              onAction={async ({ type, format, file }) => {
+                if (type === 'import' && file) {
+                  toast.current?.show({
+                    severity: 'info',
+                    summary: `Import ${format.toUpperCase()}`,
+                    detail: `Fichier importé: ${file.name}`,
+                    life: 3000,
+                  });
+                  return;
+                }
+                if (type === 'export') {
+                  const fileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : 'csv';
+                  try {
+                    const r = await dispatch(
+                      exportFile({
+                        url: '/export/stock',
+                        mouvements: visibleStocks, // exporte ce qui est affiché
+                        fileType,
+                      }) as any
+                    );
+                    if ((exportFile as any).fulfilled.match(r)) {
+                      const filename = `stock.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
+                      downloadExportedFile((r as any).payload, filename);
+                      toast.current?.show({
+                        severity: 'success',
+                        summary: `Export ${format.toUpperCase()}`,
+                        detail: `Fichier téléchargé: ${filename}`,
+                        life: 3000,
+                      });
+                    } else {
+                      throw new Error('Export non abouti');
+                    }
+                  } catch {
+                    toast.current?.show({
+                      severity: 'error',
+                      summary: `Export ${format.toUpperCase()} échoué`,
+                      detail: 'Une erreur est survenue.',
+                      life: 3000,
+                    });
+                  }
+                }
+              }}
+            />
           </div>
         </div>
 
-        {/* dataTable */}
-        <DataTable
-          value={Array.isArray(filteredStocks[0]) ? filteredStocks.flat() : filteredStocks}
-          dataKey="_id"
-          paginator
-          loading={loading}
-          rows={rows}
-          first={first}
-          onPage={onPageChange}
-          className="rounded-lg custom-datatable text-[11px]"
-          // tableStyle={{ minWidth: '60rem' }}
-          size="small"
-          rowClassName={(_rowData: Stock, options) => {
-            //@ts-ignore
-            const rowIndex = options?.rowIndex ?? 0;
-            const globalIndex = first + rowIndex;
-            return globalIndex % 2 === 0
-              ? '!bg-gray-300 !text-gray-900'
-              : '!bg-green-900 !text-white';
-          }}
-        >
-          <Column
-            field="_id"
-            header="#"
-            body={(_, options) => options.rowIndex + 1}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
+        {/* -------- TABLE -------- */}
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-[70rem] w-full text-sm">
+            <thead>
+              <tr className="bg-green-800 text-white">
+                <th className="px-4 py-2 text-left">N°</th>
+                <th className="px-4 py-2 text-left"> </th>
 
-          <Column
-            field="produit.categorie.nom"
-            header=""
-            body={(rowData: Stock) => {
-              const categorie = rowData?.produit?.categorie;
-              if (!categorie) return <span className="text-[11px]">—</span>;
-              const imageUrl =
-                typeof categorie === 'object' &&
-                categorie !== null &&
-                'image' in categorie &&
-                categorie.image
-                  ? `http://localhost:8000/${(categorie.image as string).replace('../', '')}`
-                  : '';
-              return (
-                <div className="flex items-center gap-2 text-[11px]">
-                  {typeof categorie === 'object' &&
-                    categorie !== null &&
-                    'image' in categorie &&
-                    categorie.image && (
-                      <img
-                        src={imageUrl}
-                        alt={categorie.nom}
-                        className="w-8 h-8 rounded-full object-cover border border-gray-100"
-                      />
-                    )}
-                </div>
-              );
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
-
-          <Column
-            field="produit.nom"
-            header="Produit"
-            filter
-            body={(rowData: Stock) => rowData.produit?.nom || '—'}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
-          <Column
-            field="pointVente.nom"
-            header="stock"
-            body={(rowData: Stock) => (
-              <span className="text-[11px]">
-                {rowData?.region
-                  ? rowData?.region.nom
-                  : rowData?.pointVente?.nom
-                    ? rowData.pointVente.nom
-                    : 'Depot Central'}
-              </span>
-            )}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
-
-          <Column
-            field="quantite"
-            header="Quantité"
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
-          <Column
-            field="stock.produit.seuil"
-            header="quantite seuil"
-            filter
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-            body={(rowData: Stock) => {
-              const isValide = (rowData?.produit?.seuil ?? 0) < rowData.quantite;
-              return (
-                <span
-                  className="flex items-center gap-1 text-sm px-2 py-1 text-[11px]"
-                  style={{
-                    backgroundColor: isValide ? '#4caf50' : '#f44336',
-                    borderRadius: '9999px',
-                    color: '#fff',
-                  }}
-                  title={isValide ? 'Stock suffisant' : 'Stock insuffisant'}
-                  data-testid="stock-severity-badge"
-                  data-severity={isValide ? 'success' : 'warning'}
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('produit.nom')}
+                  title="Trier par produit"
                 >
-                  <i
-                    className={isValide ? 'pi pi-check' : 'pi pi-exclamation-triangle'}
-                    style={{ fontSize: '0.75rem' }}
-                  />
-                  <span style={{ fontSize: '0.75rem' }}>{rowData?.produit?.seuil || 'N/A'}</span>
-                  <span style={{ fontSize: '0.75rem', marginLeft: '0.25rem' }}>
-                    {isValide ? 'Suffisant' : 'Insuffisant'}
-                  </span>
-                </span>
-              );
-            }}
-          />
+                  Produit <SortIcon order={sortedOrderFor('produit.nom')} />
+                </th>
 
-          <Column
-            header="Prix/U"
-            body={(rowData) => (
-              <span className="text-blue-700 font-semibold text-[11px]">
-                {rowData.produit?.prix?.toLocaleString() ?? 'N/A'}
-              </span>
-            )}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
+                <th className="px-4 py-2 text-left">Stock</th>
 
-          <Column
-            field="montant"
-            header="Cout Total"
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-            body={(rowData: Stock) => rowData.montant.toLocaleString()}
-          />
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('quantite')}
+                  title="Trier par quantité"
+                >
+                  Quantité <SortIcon order={sortedOrderFor('quantite')} />
+                </th>
 
-          {/* <Column
-            header="Valeur Marge"
-            body={(rowData: MouvementStock) => {
-              const prix = rowData.produit?.prix;
-              const marge = rowData.produit?.marge;
-              const valeur =
-                prix && marge !== undefined ? ((prix * marge) / 100).toFixed(2) : 'N/A';
-              return <span className="text-orange-600 font-medium text-[11px]">{valeur}</span>;
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          /> */}
+                <th className="px-4 py-2 text-left">Seuil</th>
+                <th className="px-4 py-2 text-left">Prix/U</th>
+                <th className="px-4 py-2 text-left">Coût Total</th>
+                <th className="px-4 py-2 text-left">Prix de vente Total</th>
+                <th className="px-4 py-2 text-left">Valeur TVA Total</th>
+                <th className="px-4 py-2 text-left">TTC</th>
 
-          <Column
-            header="Prix de vente Total"
-            body={(rowData: Stock) => {
-              const net = rowData.produit?.netTopay ?? 0;
-              const quantite = rowData.quantite ?? 0;
-              const totalNet = net * quantite;
-              return (
-                <span className="text-purple-700 font-semibold text-[11px]">
-                  {totalNet.toFixed(2)}
-                </span>
-              );
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
+                <th
+                  className="px-4 py-2 text-left cursor-pointer select-none"
+                  onClick={() => toggleSort('updatedAt')}
+                  title="Trier par date de mise à jour"
+                >
+                  Mis à jour le <SortIcon order={sortedOrderFor('updatedAt')} />
+                </th>
+              </tr>
+            </thead>
 
-          <Column
-            header="Valeur TVA Total"
-            body={(rowData: Stock) => {
-              const net = rowData.produit?.netTopay ?? 0;
-              const tva = rowData.produit?.tva ?? 0;
-              const quantite = rowData.quantite ?? 0;
-              const valeurTVA = ((net * tva) / 100) * quantite;
-              return (
-                <span className="text-yellow-600 font-medium text-[11px]">
-                  {valeurTVA.toFixed(2)}
-                </span>
-              );
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
+            <tbody>
+              {loading && visibleStocks.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={12}>
+                    Chargement...
+                  </td>
+                </tr>
+              ) : visibleStocks.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={12}>
+                    {selectedPointVente
+                      ? 'Aucun produit en stock pour ce point de vente'
+                      : 'Aucun produit en stock'}
+                  </td>
+                </tr>
+              ) : (
+                visibleStocks.map((row, idx) => {
+                  const cat = (row?.produit as any)?.categorie;
+                  const imageUrl =
+                    typeof cat === 'object' && cat !== null && isNonEmptyString(cat?.image)
+                      ? safeApiImage(cat.image)
+                      : '';
+                  const q = Number(row?.quantite) || 0;
+                  const seuil = Number((row?.produit as any)?.seuil);
+                  const seuilKnown = Number.isFinite(seuil);
+                  const ok = seuilKnown ? q > seuil : null;
 
-          <Column
-            header="TTC"
-            body={(rowData: Stock) => {
-              //@ts-ignore
-              const prix = ['Entrée', 'Livraison', 'Commande'].includes(rowData.type)
-                ? rowData.produit?.prix
-                : rowData.produit?.prixVente;
-              const prixVente = rowData.produit?.prixVente ?? 0;
-              const quantite = rowData.quantite ?? 0;
-              const totalVente = prixVente * quantite;
-              let colorClass = 'text-blue-600';
-              if (prixVente > prix) colorClass = 'text-green-600 font-bold';
-              else if (prixVente < prix) colorClass = 'text-red-600 font-bold';
-              return <span className={`${colorClass} text-[11px]`}>{totalVente.toFixed(2)}</span>;
-            }}
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-          />
+                  const prixAchat = Number((row?.produit as any)?.prix) || 0;
+                  const prixVente = Number((row?.produit as any)?.prixVente) || 0;
+                  const totalVente = prixVente * q;
+                  let ttcCls = 'text-blue-600';
+                  if (prixVente > prixAchat) ttcCls = 'text-green-600 font-bold';
+                  else if (prixVente < prixAchat) ttcCls = 'text-red-600 font-bold';
 
-          <Column
-            field="createdAt"
-            filter
-            header="Créé le"
-            className="px-4 py-1 text-[11px]"
-            headerClassName="text-[11px] !bg-green-900 !text-white"
-            body={(rowData: Stock) => new Date(rowData.createdAt || '').toLocaleDateString()}
-            sortable
-          />
-        </DataTable>
+                  const net = Number((row?.produit as any)?.netTopay) || 0;
+                  const tva = Number((row?.produit as any)?.tva) || 0;
+
+                  return (
+                    <tr
+                      key={row._id}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{firstIndex + idx + 1}</td>
+
+                      <td className="px-4 py-2">
+                        {imageUrl ? (
+                          <img
+                            src={imageUrl}
+                            alt={cat?.nom ?? ''}
+                            className="w-8 h-8 rounded-full object-cover border border-gray-100"
+                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                          />
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-2">{row?.produit?.nom ?? '—'}</td>
+
+                      <td className="px-4 py-2">
+                        {row?.pointVente?.nom ?? row?.region?.nom ?? 'Depot Central'}
+                      </td>
+
+                      <td className="px-4 py-2">{q.toString()}</td>
+
+                      <td className="px-4 py-2">
+                        {seuilKnown ? (
+                          <span
+                            className="flex items-center gap-1 text-xs px-2 py-1"
+                            style={{
+                              backgroundColor: ok ? '#4caf50' : '#f44336',
+                              borderRadius: '9999px',
+                              color: '#fff',
+                            }}
+                            title={ok ? 'Stock suffisant' : 'Stock insuffisant'}
+                          >
+                            <i className={ok ? 'pi pi-check' : 'pi pi-exclamation-triangle'} />
+                            <span>{seuil}</span>
+                            <span className="ml-1">{ok ? 'Suffisant' : 'Insuffisant'}</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500">—</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-2">
+                        {Number.isFinite(prixAchat)
+                          ? prixAchat.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })
+                          : 'N/A'}
+                      </td>
+
+                      <td className="px-4 py-2">{(Number(row?.montant) || 0).toLocaleString()}</td>
+
+                      <td className="px-4 py-2">{(net * q).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">{(((net * tva) / 100) * q).toFixed(2)}</td>
+
+                      <td className="px-4 py-2">
+                        <span className={ttcCls}>{totalVente.toFixed(2)}</span>
+                      </td>
+
+                      <td className="px-4 py-2">
+                        {(() => {
+                          try {
+                            return new Date(
+                              (row as any)?.updatedAt || (row as any)?.createdAt || ''
+                            ).toLocaleDateString();
+                          } catch {
+                            return '—';
+                          }
+                        })()}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* -------- PAGINATION -------- */}
+        <div className="flex items-center justify-between mt-3">
+          <div className="text-sm text-gray-700">
+            Page <span className="font-semibold">{page}</span> / {totalPages} —{' '}
+            <span className="font-semibold">{total}</span> éléments
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+            <select
+              className="border rounded px-2 py-1 text-sm"
+              value={rows}
+              onChange={(e) => onChangeRows(Number(e.target.value))}
+            >
+              {[10, 20, 30, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(1)}
+              disabled={page <= 1}
+            >
+              «
+            </button>
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(page - 1)}
+              disabled={page <= 1}
+            >
+              ‹
+            </button>
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(page + 1)}
+              disabled={page >= totalPages}
+            >
+              ›
+            </button>
+            <button
+              className="px-2 py-1 rounded bg-gray-200 text-gray-800 disabled:opacity-50"
+              onClick={() => goTo(totalPages)}
+              disabled={page >= totalPages}
+            >
+              »
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
-export default page;
+export default Page;

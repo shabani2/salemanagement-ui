@@ -25,7 +25,7 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
 
   const handleSwitchChange = (categorie: Categorie | null) => {
     const id = categorie ? categorie._id : 'all';
-    //@ts-ignore
+    // @ts-expect-error - compat: external lib types mismatch
     const updated: Record<string, boolean> = { [id]: true };
     setActiveSwitches(updated);
 
@@ -57,7 +57,7 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
             >
               <div className="flex items-center gap-4">
                 {/* <InputSwitch
-                  //@ts-ignore
+                  // @ts-expect-error - compat: external lib types mismatch
                   checked={!!activeSwitches[categorie._id]}
                   onChange={() => handleSwitchChange(categorie)}
                 /> */}
@@ -65,10 +65,7 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
                 <div className="relative w-12 h-12 rounded-full overflow-hidden">
                   {categorie.image && (
                     <img
-                      src={
-                        //@ts-ignore
-                        `http://localhost:8000/${categorie.image.replace('../', '')}`
-                      }
+                      src={`http://localhost:8000/${categorie.image.replace('../', '')}`}
                       alt={categorie.nom}
                       className="object-cover w-full h-full"
                     />
@@ -82,7 +79,7 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
                 model={menuItems}
                 popup
                 ref={(el) => {
-                  //@ts-ignore
+                  // @ts-expect-error - compat: external lib types mismatch
                   menuRefs.current[categorie?._id] = el;
                 }}
               />
@@ -91,7 +88,7 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
                 icon="pi pi-ellipsis-h"
                 className="p-button-text"
                 onClick={(e) =>
-                  //@ts-ignore
+                  // @ts-expect-error - compat: external lib types mismatch
                   menuRefs.current[categorie._id]?.toggle?.(e)
                 }
                 severity={undefined}

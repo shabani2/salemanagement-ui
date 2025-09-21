@@ -2,434 +2,761 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
-import { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { BreadCrumb } from 'primereact/breadcrumb';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
-import { DataTable } from 'primereact/datatable';
-import { Column } from 'primereact/column';
 import { Dialog } from 'primereact/dialog';
 import { Menu } from 'primereact/menu';
 import { Dropdown } from 'primereact/dropdown';
+import { Toast } from 'primereact/toast';
+
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '@/stores/store';
-//import { addPointVente, deletePointVente, fetchPointsVente, selectAllPointsVente } from "@/stores/slices/pointVenteSlice";
-import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
+
 import {
   addPointVente,
-  deletePointVente,
+  deletePointVente as deletePointVenteThunk,
   fetchPointVentes,
   fetchPointVentesByRegionId,
+  searchPointVentes, // 👈 import recherche
   selectAllPointVentes,
-  updatePointVente,
+  selectPointVenteMeta,
+  selectPointVenteStatus,
+  updatePointVente as updatePointVenteThunk,
 } from '@/stores/slices/pointvente/pointventeSlice';
+
+import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
+
 import { PointVente } from '@/Models/pointVenteType';
 import DropdownImportExport from '@/components/ui/FileManagement/DropdownImportExport';
-//import { saveAs } from 'file-saver';
-import { Toast } from 'primereact/toast';
 import {
   downloadExportedFile,
   exportFile,
 } from '@/stores/slices/document/importDocuments/exportDoc';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+
+/* ----------------------------- Helpers ----------------------------- */
+const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+
+type RegionLite = { _id: string; nom: string };
+type PVForm = { nom: string; adresse: string; region: string };
+
+/* --------- Petit composant d’icône de tri --------- */
+const SortIcon: React.FC<{ order: 'asc' | 'desc' | null }> = ({ order }) => (
+  <span className="inline-block align-middle ml-1">
+    {order === 'asc' ? '▲' : order === 'desc' ? '▼' : '↕'}
+  </span>
+);
 
 export default function PointVenteManagement() {
   const dispatch = useDispatch<AppDispatch>();
-  const pointsVente = useSelector((state: RootState) => selectAllPointVentes(state));
-  const regions = useSelector((state: RootState) => selectAllRegions(state));
-  // @ts-ignore
-  const [importedFiles, setImportedFiles] = useState<{ name: string; format: string }[]>([]);
-  const [dialogType, setDialogType] = useState<string | null>(null);
-  const [selectedPointVente, setSelectedPointVente] = useState<any>(null);
-  const [newPointVente, setNewPointVente] = useState<{
-    nom: string;
-    adresse: string;
-    region: string | null;
-  }>({ nom: '', adresse: '', region: null });
-  const menuRef = useRef<any>(null);
-  const user =
-    typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
-
-  useEffect(() => {
-    if (user?.role === 'AdminRegion') {
-      dispatch(fetchPointVentesByRegionId(user?.region._id)).then((resp) => {
-        console.log('donnees recu : ', resp.payload);
-      });
-    } else {
-      dispatch(fetchPointVentes());
-    }
-    //dispatch(fetchRegions());
-  }, [dispatch, user?.role, user?.region?._id]);
-
-  const handleAction = (action: string, rowData: any) => {
-    console.log('Action:', action, 'Row Data:', rowData);
-    if (action === 'details' || action === 'edit') {
-      // On stocke la ligne sélectionnée dans selectedPointVente
-      setSelectedPointVente(rowData);
-      setDialogType(action);
-    }
-  };
-
-  const handleCreate = () => {
-    //@ts-ignore
-    dispatch(addPointVente(newPointVente));
-    setDialogType(null);
-  };
-  //@ts-ignore
-  const handleDelete = () => {
-    if (selectedPointVente) {
-      dispatch(deletePointVente(selectedPointVente._id));
-      setDialogType(null);
-    }
-  };
-  const selectedRowDataRef = useRef<any>(null);
-  const actionBodyTemplate = (rowData: PointVente) => (
-    <div>
-      <Menu
-        model={[
-          {
-            label: 'Détails',
-            command: () => handleAction('details', selectedRowDataRef.current),
-          },
-          {
-            label: 'Modifier',
-            command: () => handleAction('edit', selectedRowDataRef.current),
-          },
-          {
-            label: 'Supprimer',
-            command: () => handleAction('delete', selectedRowDataRef.current),
-          },
-        ]}
-        popup
-        ref={menuRef}
-      />
-      <Button
-        icon="pi pi-bars"
-        className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
-        onClick={(event) => {
-          selectedRowDataRef.current = rowData; // 👈 on stocke ici le bon rowData
-          menuRef.current.toggle(event);
-        }}
-        aria-haspopup
-        severity={undefined}
-      />
-    </div>
-  );
-
-  const handleUpdate = () => {
-    dispatch(
-      updatePointVente({ id: selectedPointVente?._id, updateData: selectedPointVente })
-    ).then(() => {
-      dispatch(fetchPointVentes());
-    });
-    setSelectedPointVente(null);
-    setDialogType(null);
-  };
-
-  // console.log('point de vente = ', pointsVente);
-
-  // traitement de la recherche
-  const [searchPV, setSearchPV] = useState('');
-  const [filteredPointsVente, setFilteredPointsVente] = useState(pointsVente || []);
-
-  useEffect(() => {
-    const filtered = pointsVente.filter((pv) => {
-      const query = searchPV.toLowerCase();
-      return (
-        pv.nom?.toLowerCase().includes(query) ||
-        pv.adresse?.toLowerCase().includes(query) ||
-        (typeof pv.region === 'object' && pv.region !== null && 'nom' in pv.region
-          ? (pv.region.nom as string)?.toLowerCase().includes(query)
-          : false)
-      );
-    });
-    setFilteredPointsVente(filtered);
-  }, [searchPV, pointsVente]);
-
-  //file management
   const toast = useRef<Toast>(null);
 
-  const handleFileManagement = async ({
-    type,
-    format,
-    file,
-  }: {
-    type: 'import' | 'export';
-    format: 'csv' | 'pdf' | 'excel';
-    file?: File;
-  }) => {
-    if (type === 'import' && file) {
-      setImportedFiles((prev) => [...prev, { name: file.name, format }]);
-      toast.current?.show({
-        severity: 'info',
-        summary: `Import ${format.toUpperCase()}`,
-        detail: `File imported: ${file.name}`,
-        life: 3000,
-      });
-      return;
+  // Store
+  const pointsVente = useSelector((state: RootState) =>
+    asArray<PointVente>(selectAllPointVentes(state))
+  );
+  const regions = useSelector((state: RootState) => asArray<RegionLite>(selectAllRegions(state)));
+  const meta = useSelector(selectPointVenteMeta);
+  const status = useSelector(selectPointVenteStatus);
+  const loading = status === 'loading';
+  const [isLoadingRegions, setIsLoadingRegions] = useState(false);
+
+  // Requête serveur (params)
+  const [page, setPage] = useState(1); // 1-based
+  const [rows, setRows] = useState(10);
+  const [sortBy, setSortBy] = useState<string>('updatedAt');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchText, setSearchText] = useState('');
+  const [regionFilter, setRegionFilter] = useState<string>('');
+
+  // Modals / sélection
+  const [dialogType, setDialogType] = useState<'create' | 'edit' | 'details' | null>(null);
+  const [selectedPV, setSelectedPV] = useState<PointVente | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState<boolean>(false);
+
+  // Formulaire création/édition
+  const [form, setForm] = useState<PVForm>({ nom: '', adresse: '', region: '' });
+  const [loading1, setLoading1] = useState(false);
+
+  // ✅ Un seul Menu global pour corriger le bug de sélection
+  const menuRef = useRef<Menu>(null);
+  const selectedRowDataRef = useRef<PointVente | null>(null);
+  const handleAction = useCallback((action: 'details' | 'edit' | 'delete', row: PointVente) => {
+    setSelectedPV(row ?? null);
+    if (action === 'delete') {
+      setIsDeleteOpen(true);
+      setDialogType(null);
+    } else {
+      setDialogType(action);
     }
+  }, []);
+  const menuModel = useMemo(
+    () => [
+      {
+        label: 'Détails',
+        command: () =>
+          selectedRowDataRef.current && handleAction('details', selectedRowDataRef.current),
+      },
+      {
+        label: 'Modifier',
+        command: () =>
+          selectedRowDataRef.current && handleAction('edit', selectedRowDataRef.current),
+      },
+      {
+        label: 'Supprimer',
+        command: () =>
+          selectedRowDataRef.current && handleAction('delete', selectedRowDataRef.current),
+      },
+    ],
+    [handleAction]
+  );
 
-    if (type === 'export') {
-      // Only allow "csv" or "xlsx" as fileType
-      if (format === 'pdf') {
-        toast.current?.show({
-          severity: 'warn',
-          summary: 'Export PDF non supporté',
-          detail: "L'export PDF n'est pas disponible pour ce module.",
-          life: 3000,
-        });
-        return;
-      }
-      // Map "excel" to "xlsx" for backend compatibility
-      const exportFileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : format;
-      const result = await dispatch(
-        exportFile({
-          url: '/export/point-ventes',
-          mouvements: pointsVente,
-          fileType: exportFileType,
-        })
-      );
+  /* ----------------------------- Chargement initial ---------------------------- */
+  useEffect(() => {
+    dispatch(fetchRegions());
+  }, [dispatch]);
 
-      if (exportFile.fulfilled.match(result)) {
-        const filename = `pointVente.${format === 'csv' ? 'csv' : 'xlsx'}`;
-        downloadExportedFile(result.payload, filename);
+  // Récupération rôle/region utilisateur (localStorage)
+  const user = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem('user-agricap');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+  const isAdminRegion = !!(user?.role === 'AdminRegion' && user?.region?._id);
+  const forcedRegionId: string | null = isAdminRegion ? user.region._id : null;
 
-        toast.current?.show({
-          severity: 'success',
-          summary: `Export ${format.toUpperCase()}`,
-          detail: `File downloaded: ${filename}`,
-          life: 3000,
-        });
+  // Si AdminRegion, on fige le filtre région
+  useEffect(() => {
+    if (isAdminRegion && forcedRegionId) {
+      setRegionFilter(forcedRegionId);
+    }
+  }, [isAdminRegion, forcedRegionId]);
+
+  /* ------------------------------ Fetch serveur ----------------------------- */
+  const inSearch = isNonEmptyString(searchText);
+
+  // helper pour fetch à une page précise (utile après suppression ou "Filtrer")
+  const fetchAtPage = useCallback(
+    (targetPage: number) => {
+      const common = {
+        page: targetPage,
+        limit: rows,
+        sortBy,
+        order,
+        includeTotal: true,
+        includeStock: false,
+      } as const;
+
+      if (isAdminRegion && forcedRegionId) {
+        // AdminRegion : route /region/:id (gère aussi q)
+        dispatch(
+          fetchPointVentesByRegionId({
+            regionId: forcedRegionId,
+            q: searchText || undefined,
+            ...common,
+          }) as any
+        );
+      } else if (inSearch) {
+        // Recherche globale : /pointventes/search
+        dispatch(
+          searchPointVentes({
+            q: searchText,
+            region: regionFilter || undefined,
+            ...common,
+          }) as any
+        );
       } else {
-        toast.current?.show({
-          severity: 'error',
-          summary: `Export ${format.toUpperCase()} Échoué`,
-          detail: String(result.payload || 'Une erreur est survenue.'),
-          life: 3000,
-        });
+        // Liste globale : /pointventes
+        dispatch(
+          fetchPointVentes({
+            q: undefined,
+            region: regionFilter || undefined,
+            ...common,
+          }) as any
+        );
       }
+    },
+    [
+      dispatch,
+      isAdminRegion,
+      forcedRegionId,
+      rows,
+      sortBy,
+      order,
+      searchText,
+      inSearch,
+      regionFilter,
+    ]
+  );
+
+  // fetch "courant" basé sur l'état `page`
+  const fetchServer = useCallback(() => {
+    fetchAtPage(page);
+  }, [fetchAtPage, page]);
+
+  // 1) premier fetch & à chaque changement de dépendances (un seul effet)
+  useEffect(() => {
+    fetchServer();
+  }, [fetchServer]);
+
+  /* ------------------------------- Tri custom ------------------------------- */
+  const sortedOrderFor = (field: string) => (sortBy === field ? order : null);
+  const toggleSort = (field: string) => {
+    if (sortBy !== field) {
+      setSortBy(field);
+      setOrder('asc');
+      setPage(1);
+      fetchAtPage(1);
+    } else {
+      const nextOrder = order === 'asc' ? 'desc' : 'asc';
+      setOrder(nextOrder);
+      setPage(1);
+      fetchAtPage(1);
     }
   };
-  //@ts-ignore
-  const [first] = useState(0);
+
+  /* --------------------------- Pagination custom ---------------------------- */
+  const total = meta?.total ?? 0;
+  const totalPages = meta?.totalPages ?? Math.max(1, Math.ceil(total / rows));
+  const currentPage = meta?.page ?? page;
+  const canPrev = Boolean(meta?.hasPrev ?? currentPage > 1);
+  const canNext = Boolean(meta?.hasNext ?? currentPage < totalPages);
+  const firstIndex = (currentPage - 1) * rows;
+
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    if (next !== currentPage) {
+      setPage(next);
+      fetchAtPage(next);
+    }
+  };
+
+  const onChangeRows = (n: number) => {
+    const newRows = Number(n);
+    setRows(newRows);
+    const newTotalPages = Math.max(1, Math.ceil(total / newRows));
+    const fixedPage = Math.min(currentPage, newTotalPages);
+    setPage(fixedPage);
+    fetchAtPage(fixedPage);
+  };
+
+  /* ------------------------------- Handlers UI ------------------------------ */
+  const applyFilters = useCallback(() => {
+    setPage(1);
+    fetchAtPage(1);
+  }, [fetchAtPage]);
+
+  // Remplir form en fonction de la modal
+  useEffect(() => {
+    if (dialogType === 'edit' || dialogType === 'details') {
+      const regionId =
+        typeof selectedPV?.region === 'string'
+          ? selectedPV?.region
+          : ((selectedPV?.region as any)?._id ?? '');
+      setForm({
+        nom: selectedPV?.nom ?? '',
+        adresse: selectedPV?.adresse ?? '',
+        region: regionId,
+      });
+    } else if (dialogType === 'create') {
+      setForm({
+        nom: '',
+        adresse: '',
+        region: isAdminRegion ? forcedRegionId || '' : regionFilter || '',
+      });
+    }
+  }, [dialogType, selectedPV, regionFilter, isAdminRegion, forcedRegionId]);
+
+  const resetForm = useCallback(() => {
+    setForm({ nom: '', adresse: '', region: '' });
+    setDialogType(null);
+    setSelectedPV(null);
+  }, []);
+
+  /* ------------------------------ CRUD Handlers ----------------------------- */
+  const handleCreate = useCallback(async () => {
+    setLoading1(true);
+    if (
+      !isNonEmptyString(form.nom) ||
+      !isNonEmptyString(form.adresse) ||
+      !isNonEmptyString(form.region)
+    ) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Champs requis',
+        detail: 'Nom, Adresse et Région sont obligatoires',
+        life: 2500,
+      });
+      setLoading1(false);
+      return;
+    }
+    const r = await dispatch(addPointVente(form as any) as any);
+    if ((addPointVente as any).fulfilled.match(r)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Ajouté',
+        detail: 'Point de vente créé',
+        life: 2000,
+      });
+      setLoading1(false);
+      resetForm();
+      fetchServer();
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: "Échec de l'ajout",
+        life: 3000,
+      });
+      setLoading1(false);
+    }
+  }, [dispatch, form, fetchServer, resetForm]);
+
+  const handleUpdate = useCallback(async () => {
+    setLoading1(true);
+    if (!selectedPV?._id) {
+      setLoading1(false);
+      return;
+    }
+    if (
+      !isNonEmptyString(form.nom) ||
+      !isNonEmptyString(form.adresse) ||
+      !isNonEmptyString(form.region)
+    ) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Champs requis',
+        detail: 'Nom, Adresse et Région sont obligatoires',
+        life: 2500,
+      });
+      setLoading1(false);
+      return;
+    }
+    const r = await dispatch(
+      updatePointVenteThunk({
+        id: selectedPV._id,
+        updateData: {
+          nom: form.nom.trim(),
+          adresse: form.adresse.trim(),
+          region: form.region,
+        },
+      }) as any
+    );
+    if ((updatePointVenteThunk as any).fulfilled.match(r)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Modifié',
+        detail: 'Point de vente mis à jour',
+        life: 2000,
+      });
+      resetForm();
+      fetchServer();
+      setLoading1(false);
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la modification',
+        life: 3000,
+      });
+      setLoading1(false);
+    }
+  }, [dispatch, selectedPV, form, fetchServer, resetForm]);
+
+  const handleDelete = useCallback(async () => {
+    if (!selectedPV?._id) return;
+    const r = await dispatch(deletePointVenteThunk(selectedPV._id) as any);
+    if ((deletePointVenteThunk as any).fulfilled.match(r)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Supprimé',
+        detail: 'Point de vente supprimé',
+        life: 2000,
+      });
+      const nextPage =
+        pointsVente.length === 1 && (meta?.page ?? 1) > 1
+          ? (meta!.page as number) - 1
+          : (meta?.page ?? page);
+      setPage(nextPage);
+      fetchAtPage(nextPage);
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Échec de la suppression',
+        life: 3000,
+      });
+    }
+  }, [dispatch, selectedPV, pointsVente.length, meta, page, fetchAtPage]);
+
+  /* ----------------------------- Import / Export ---------------------------- */
+  const handleFileManagement = useCallback(
+    async ({
+      type,
+      format,
+      file,
+    }: {
+      type: 'import' | 'export';
+      format: 'csv' | 'pdf' | 'excel';
+      file?: File;
+    }) => {
+      if (type === 'export') {
+        if (format === 'pdf') {
+          toast.current?.show({
+            severity: 'warn',
+            summary: 'Export non supporté',
+            detail: "L'export PDF n'est pas disponible",
+            life: 3000,
+          });
+          return;
+        }
+        const fileType: 'csv' | 'xlsx' = format === 'excel' ? 'xlsx' : 'csv';
+        try {
+          const r = await dispatch(
+            exportFile({
+              url: '/export/pointventes',
+              mouvements: pointsVente,
+              fileType,
+            }) as any
+          );
+          if ((exportFile as any).fulfilled.match(r)) {
+            const filename = `pointventes.${fileType === 'csv' ? 'csv' : 'xlsx'}`;
+            downloadExportedFile((r as any).payload, filename);
+            toast.current?.show({
+              severity: 'success',
+              summary: `Export ${format.toUpperCase()}`,
+              detail: `Fichier téléchargé: ${filename}`,
+              life: 3000,
+            });
+          } else {
+            throw new Error('Export non abouti');
+          }
+        } catch {
+          toast.current?.show({
+            severity: 'error',
+            summary: `Export ${format.toUpperCase()} échoué`,
+            detail: 'Une erreur est survenue.',
+            life: 3000,
+          });
+        }
+      }
+    },
+    [dispatch, pointsVente]
+  );
+
+  /* ------------------------------- Options UI ------------------------------- */
+  const regionOptions = useMemo(
+    () => [
+      { label: 'Toutes les régions', value: '' },
+      ...regions.map((r) => ({ label: r.nom, value: r._id })),
+    ],
+    [regions]
+  );
+
+  /* ---------------------------------- UI ----------------------------------- */
   return (
-    <div className="  min-h-screen ">
-      <div className="flex items-center justify-between mt-5 mb-5">
+    <div className="min-h-screen">
+      <Toast ref={toast} position="top-right" />
+      {/* Menu global */}
+      <Menu model={menuModel} popup ref={menuRef} />
+
+      <div className="flex items-center justify-between mt-3 mb-3">
         <BreadCrumb
-          model={[{ label: 'Accueil', url: '/' }, { label: 'Gestion des points de vente' }]}
+          model={[{ label: 'Accueil', url: '/' }, { label: 'Points de vente' }]}
           home={{ icon: 'pi pi-home', url: '/' }}
           className="bg-none"
         />
-        <h2 className="text-2xl font-bold  text-gray-5000">Gestion des Points de Vente</h2>
+        <h2 className="text-2xl font-bold text-gray-700">Gestion des Points de Vente</h2>
       </div>
-      <div className="bg-white p-4 rounded-lg shadow-md">
-        <div className="gap-4 mb-4   flex justify-between">
-          <div className="relative w-2/3 flex flex-row ">
-            <InputText
-              className="p-2 pl-10 border rounded w-full"
-              placeholder="Rechercher ..."
-              value={searchPV}
-              onChange={(e) => setSearchPV(e.target.value)}
-            />
 
-            <div className="ml-3 flex w-2/5 ">
+      <div className="gap-3 rounded-lg shadow-md flex justify-between flex-row w-full">
+        <div className="bg-white p-4 rounded-lg w-full">
+          <div className="gap-4 mb-4 w-full flex justify-between flex-wrap">
+            <div className="relative w-full md:w-2/3 flex flex-row gap-2 flex-wrap">
+              <InputText
+                className="p-2 border rounded w-full md:w-1/3"
+                placeholder="Rechercher (nom, adresse, région, ville…)"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value ?? '')}
+                onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+              />
+
+              <Dropdown
+                value={isAdminRegion ? (forcedRegionId ?? '') : regionFilter}
+                options={regionOptions}
+                onChange={(e) => {
+                  if (isAdminRegion) return; // AdminRegion ne change pas de région
+                  setRegionFilter(e.value);
+                }}
+                disabled={!!isAdminRegion}
+                className="p-0 w-full md:w-1/3"
+                placeholder="Filtrer par région"
+              />
+
+              <Button
+                label="Filtrer"
+                icon="pi pi-search"
+                className="!bg-green-700 text-white"
+                onClick={applyFilters}
+              />
+
               <DropdownImportExport onAction={handleFileManagement} />
             </div>
+
+            <Button
+              label="Nouveau"
+              icon="pi pi-plus"
+              className="!bg-green-700 text-white p-2 rounded"
+              onClick={() => setDialogType('create')}
+            />
           </div>
-          <Button
-            icon="pi pi-plus"
-            label="nouveau"
-            className=" text-white p-2 rounded !bg-green-700"
-            onClick={() => setDialogType('create')}
-            severity={undefined}
-          />
+
+          {/* ---------- TABLE TAILWIND (sans DataTable) ----------- */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-[60rem] w-full text-sm">
+              <thead>
+                <tr className="bg-green-800 text-white">
+                  <th className="px-4 py-2 text-left">N°</th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('region.nom')}
+                    title="Trier"
+                  >
+                    Région <SortIcon order={sortedOrderFor('region.nom')} />
+                  </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('nom')}
+                    title="Trier"
+                  >
+                    Nom <SortIcon order={sortedOrderFor('nom')} />
+                  </th>
+
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort('adresse')}
+                    title="Trier"
+                  >
+                    Adresse <SortIcon order={sortedOrderFor('adresse')} />
+                  </th>
+
+                  <th className="px-4 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading && pointsVente.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
+                      Chargement...
+                    </td>
+                  </tr>
+                ) : pointsVente.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
+                      Aucun point de vente trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  pointsVente.map((row, idx) => (
+                    <tr
+                      key={row._id}
+                      className={(idx % 2 === 0 ? 'bg-gray-100' : 'bg-green-50') + ' text-gray-900'}
+                    >
+                      <td className="px-4 py-2">{firstIndex + idx + 1}</td>
+
+                      <td className="px-4 py-2">
+                        {(() => {
+                          const reg = row?.region as any;
+                          return reg && typeof reg === 'object'
+                            ? (reg?.nom ?? '—')
+                            : (regions.find((r) => r._id === reg)?.nom ?? '—');
+                        })()}
+                      </td>
+
+                      <td className="px-4 py-2">{row?.nom ?? '—'}</td>
+                      <td className="px-4 py-2">{row?.adresse ?? '—'}</td>
+
+                      <td className="px-4 py-2">
+                        <Button
+                          icon="pi pi-bars"
+                          className="w-8 h-8 flex items-center justify-center p-1 rounded text-white !bg-green-700"
+                          onClick={(event) => {
+                            selectedRowDataRef.current = row ?? null;
+                            menuRef.current?.toggle(event);
+                          }}
+                          aria-haspopup
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ---------- PAGINATION TAILWIND ----------- */}
+          <div className="flex items-center justify-between mt-3">
+            <div className="text-sm text-gray-700">
+              Page <span className="font-semibold">{currentPage}</span> / {totalPages} —{' '}
+              <span className="font-semibold">{total}</span> éléments
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700 mr-2">Lignes:</label>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={rows}
+                onChange={(e) => onChangeRows(Number(e.target.value))}
+              >
+                {[5, 10, 20, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+
+              <Button
+                label="«"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(1)}
+                disabled={!canPrev}
+              />
+              <Button
+                label="‹"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(currentPage - 1)}
+                disabled={!canPrev}
+              />
+              <Button
+                label="›"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(currentPage + 1)}
+                disabled={!canNext}
+              />
+              <Button
+                label="»"
+                className="!bg-gray-200 !text-gray-800 px-2 py-1"
+                onClick={() => goTo(totalPages)}
+                disabled={!canNext}
+              />
+            </div>
+          </div>
         </div>
-        <DataTable
-          value={filteredPointsVente}
-          size="small"
-          paginator
-          rows={10}
-          className="rounded-lg text-[11px] "
-          tableStyle={{ minWidth: '50rem' }}
-          rowClassName={(rowData, options) => {
-            //@ts-ignore
-            const index = options?.index ?? 0;
-            const globalIndex = first + index;
-            return globalIndex % 2 === 0
-              ? '!bg-gray-300 !text-gray-900'
-              : '!bg-green-900 !text-white';
-          }}
-        >
-          <Column
-            field="_id"
-            header="#"
-            body={(_, options) => options.rowIndex + 1}
-            className="text-[11px]"
-            headerClassName="!bg-green-900 !text-white text-[11px]"
-          />
-          <Column
-            field="region"
-            header="Région"
-            body={(rowData) => rowData.region?.nom || 'N/A'}
-            sortable
-            className="text-[11px] !p-[2px]"
-            headerClassName="!bg-green-900 !text-white text-[11px]"
-          />
-          <Column
-            field="nom"
-            header="Nom"
-            sortable
-            className="text-[11px] !p-[2px]"
-            headerClassName="!bg-green-900 !text-white text-[11px]"
-          />
-          <Column
-            field="adresse"
-            header="Adresse"
-            sortable
-            className="text-[11px] !p-[2px]"
-            headerClassName="!bg-green-900 !text-white text-[11px]"
-          />
-          <Column
-            body={actionBodyTemplate}
-            header="Actions"
-            className="!p-[2px] text-[11px]"
-            headerClassName="!bg-green-900 !text-white text-[11px]"
-          />
-        </DataTable>
       </div>
 
+      {/* Dialog Create/Edit */}
       <Dialog
-        visible={dialogType === 'create'}
-        header="Ajouter un point de vente"
-        onHide={() => setDialogType(null)}
-        style={{ width: '40vw' }}
+        visible={dialogType === 'create' || dialogType === 'edit'}
+        header={dialogType === 'edit' ? 'Modifier le point de vente' : 'Ajouter un point de vente'}
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
         modal
       >
-        <div className="p-4">
-          {[
-            { name: 'nom', placeholder: 'Nom' },
-            { name: 'adresse', placeholder: 'Adresse' },
-          ].map(({ name, placeholder }) => (
-            <div key={name} className="mb-4">
+        <div className="p-4 space-y-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Nom*</label>
               <InputText
-                type="text"
-                placeholder={placeholder}
-                value={newPointVente[name as keyof typeof newPointVente]}
-                onChange={(e) => setNewPointVente({ ...newPointVente, [name]: e.target.value })}
+                value={form.nom}
+                onChange={(e) => setForm((p) => ({ ...p, nom: e.target.value ?? '' }))}
                 required
                 className="w-full p-2 border rounded"
               />
             </div>
-          ))}
-          <div className="mb-4">
-            <Dropdown
-              value={newPointVente.region}
-              options={regions.map((r) => ({ label: r.nom, value: r._id }))}
-              onChange={(e) => setNewPointVente({ ...newPointVente, region: e.value })}
-              placeholder="Sélectionner une région"
-              className="w-full p-2 border rounded"
-            />
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Adresse*</label>
+              <InputText
+                value={form.adresse}
+                onChange={(e) => setForm((p) => ({ ...p, adresse: e.target.value ?? '' }))}
+                required
+                className="w-full p-2 border rounded"
+              />
+            </div>
           </div>
-          <div className="flex justify-end mt-4">
+
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block mb-1 text-sm font-medium">Région*</label>
+              <Dropdown
+                value={form.region}
+                options={[
+                  { label: 'Sélectionner...', value: '' },
+                  ...regions.map((r) => ({ label: r.nom, value: r._id })),
+                ]}
+                onChange={(e) => setForm((p) => ({ ...p, region: e.value ?? '' }))}
+                className="w-full border rounded"
+                disabled={!!isAdminRegion} // ⬅️ AdminRegion : région imposée
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button label="Annuler" className="!bg-gray-500 text-white" onClick={resetForm} />
             <Button
-              label="Ajouter"
+              label={dialogType === 'edit' ? 'Modifier' : 'Créer'}
+              icon={loading1 ? 'pi pi-spinner pi-spin' : undefined}
+              disabled={loading1}
               className="!bg-green-700 text-white"
-              onClick={handleCreate}
-              severity={undefined}
+              onClick={dialogType === 'edit' ? handleUpdate : handleCreate}
             />
           </div>
         </div>
       </Dialog>
 
-      <Dialog
-        visible={dialogType === 'delete'}
-        header="Confirmation"
-        onHide={() => setDialogType(null)}
-        style={{ width: '30vw' }}
-        modal
-      >
-        <div className="p-4">
-          <p>Voulez-vous vraiment supprimer ce point de vente ?</p>
-          <div className="flex justify-end mt-4 gap-2">
-            <Button
-              severity={undefined}
-              label="Annuler"
-              className="p-button-secondary"
-              onClick={() => setDialogType(null)}
-            />
-            <Button
-              label="Supprimer"
-              className="bg-red-700 text-white"
-              onClick={handleDelete}
-              severity={undefined}
-            />
-          </div>
-        </div>
-      </Dialog>
+      {/* Dialog Details */}
       <Dialog
         visible={dialogType === 'details'}
         header="Détails du point de vente"
-        onHide={() => setDialogType(null)}
-        style={{ width: '40vw' }}
+        onHide={resetForm}
+        style={{ width: '90vw', maxWidth: '600px' }}
         modal
       >
-        <div className="p-4">
-          <p>
-            <strong>Nom:</strong> {selectedPointVente?.nom}
-          </p>
-          <p>
-            <strong>Adresse:</strong> {selectedPointVente?.adresse}
-          </p>
-          <p>
-            <strong>Région:</strong>{' '}
-            {regions.find((r) => r._id === selectedPointVente?.region)?.nom || 'Non défini'}
-          </p>
-        </div>
-      </Dialog>
-      <Dialog
-        visible={dialogType === 'edit'}
-        header="Modifier le point de vente"
-        onHide={() => setDialogType(null)}
-        style={{ width: '40vw' }}
-        modal
-      >
-        <div className="p-4">
-          <div className="mb-2">
-            <label htmlFor="nom">nom</label>
-            <InputText
-              placeholder="Nom"
-              value={selectedPointVente?.nom || ''}
-              onChange={(e) =>
-                setSelectedPointVente({
-                  ...selectedPointVente,
-                  nom: e.target.value,
-                })
-              }
-              className="w-full p-2 border rounded mb-4"
-            />
+        <div className="p-4 space-y-3 text-sm">
+          <div className="flex justify-between">
+            <span className="font-medium">Nom</span>
+            <span>{selectedPV?.nom ?? '—'}</span>
           </div>
-          <div className="mb-2">
-            <label htmlFor="adresse">lAdresse</label>
-            <InputText
-              placeholder="Adresse"
-              value={selectedPointVente?.adresse || ''}
-              onChange={(e) =>
-                setSelectedPointVente({
-                  ...selectedPointVente,
-                  adresse: e.target.value,
-                })
-              }
-              className="w-full p-2 border rounded mb-4"
-            />
+          <div className="flex justify-between">
+            <span className="font-medium">Adresse</span>
+            <span>{selectedPV?.adresse ?? '—'}</span>
           </div>
-          <div className="mb-2 flex justify-end">
-            <Button
-              label="Mettre à jour"
-              className="!bg-green-700 text-white"
-              onClick={handleUpdate}
-            />
+          <div className="flex justify-between">
+            <span className="font-medium">Région</span>
+            <span>
+              {(() => {
+                const reg = selectedPV?.region as any;
+                return reg && typeof reg === 'object'
+                  ? (reg?.nom ?? '—')
+                  : (regions.find((r) => r._id === reg)?.nom ?? '—');
+              })()}
+            </span>
           </div>
         </div>
       </Dialog>
+
+      {/* Confirm Delete */}
+      <ConfirmDeleteDialog
+        visible={isDeleteOpen}
+        onHide={() => setIsDeleteOpen(false)}
+        onConfirm={() => {
+          setIsDeleteOpen(false);
+          handleDelete();
+        }}
+        item={selectedPV ?? ({ _id: '', nom: '' } as any)}
+        objectLabel="le point de vente"
+        displayField="nom"
+      />
     </div>
   );
 }

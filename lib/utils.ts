@@ -1,3 +1,4 @@
+import { Region } from '@/Models/regionTypes';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -83,4 +84,16 @@ export function formatNombre(value: number): string {
   })
     .format(value)
     .replace(/\u202f/g, '.');
+}
+
+export const safeUrlJoin = (...parts: Array<string | undefined | null>) => {
+  const joined = parts.filter(Boolean).join('/');
+  // supprime les doubles //, puis le trailing slash
+  const normalized = joined.replace(/([^:]\/)\/+/g, '$1');
+  return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+};
+
+export function getRegionId(region?: string | Region): string | undefined {
+  if (!region) return undefined;
+  return typeof region === 'string' ? region : region._id;
 }

@@ -1,18 +1,24 @@
 import { Region } from './regionTypes';
 import { PointVente } from './pointVenteType';
-import { UserModel } from './UserType';
+import { User, UserModel } from './UserType';
 import { CommandeProduit } from './CommandeProduitType';
+
 export interface Commande {
-  _id?: string;
+  _id: string;
   numero: string;
-  user: UserModel | string;
+  user: User;
   region?: Region;
-  pointVente?: PointVente | string;
-  depotCentral?: boolean;
-  statut: 'attente' | 'livrée' | 'annulée';
+  pointVente?: PointVente;
+  depotCentral: boolean;
   produits: CommandeProduit[];
-  createdAt?: Date;
-  updatedAt?: Date;
+  statut: 'attente' | 'livrée' | 'annulée';
+  createdAt: string;
+  updatedAt: string;
+
+  // Champs enrichis backend
+  montant?: number;
+  nombreCommandeProduit?: number;
+  tauxLivraison?: number;
 }
 
 export interface CommandeModel {

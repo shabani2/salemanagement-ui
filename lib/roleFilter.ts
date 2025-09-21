@@ -10,7 +10,7 @@ export function filterRoutesByRole(role: UserRole) {
 
     case 'adminregion':
       return base.concat(
-        menuItems.filter((r) => !['Paramètres', 'Zones', 'Dashboard'].includes(r.title))
+        menuItems.filter((r) => !['Paramètres', 'Regions', 'Dashboard'].includes(r.title))
       );
 
     case 'adminpointvente':
@@ -28,9 +28,7 @@ export function filterRoutesByRole(role: UserRole) {
       );
 
     case 'logisticien':
-      return base.concat(
-        menuItems.filter((r) => ['Stock', 'Rapports', 'Commandes'].includes(r.title))
-      );
+      return base.concat(menuItems.filter((r) => ['Stock', 'Commandes'].includes(r.title)));
 
     default:
       return base;

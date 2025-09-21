@@ -2,16 +2,20 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // components/finance/CurrencyManager.tsx
+
+'use client';
+
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { Button } from 'primereact/button';
 import { Dialog } from 'primereact/dialog';
-import { useEffect, useRef, useState } from 'react';
 import { Dropdown } from 'primereact/dropdown';
 import { Card } from 'primereact/card';
 import { Toast } from 'primereact/toast';
 import { TabPanel, TabView } from 'primereact/tabview';
-import { DiscountType } from '@/Models/FinanceModel';
 import { Tag } from 'primereact/tag';
 import { FilterMatchMode } from 'primereact/api';
 import { Calendar } from 'primereact/calendar';
@@ -19,416 +23,490 @@ import { Checkbox } from 'primereact/checkbox';
 import { InputNumber } from 'primereact/inputnumber';
 import { InputText } from 'primereact/inputtext';
 
-interface Discount {
-  //@ts-ignore
-  _id: string;
-  name: string;
+import { AppDispatch, RootState } from '@/stores/store';
+
+// --- Slices (Finance) ---
+import {
+  fetchDiscounts,
+  addDiscount,
+  selectAllDiscounts,
+  selectDiscountsStatus,
+  selectDiscountsError,
+} from '../../stores/slices/finances/discountSlice';
+
+import { fetchBaseCurrency, selectBaseCurrency } from '@/stores/slices/finances/currencySlice';
+
+// --- Types ---
+import { DiscountType } from '@/Models/FinanceModel';
+
+/* -------------------------------- Types VM -------------------------------- */
+
+type DiscountVM = {
+  _id?: string;
+  name?: string;
   code: string;
-  type: DiscountType;
+  type: DiscountType | string;
   value: number;
-  startDate: string;
+  startDate?: string;
   endDate?: string;
   maxAmount?: number;
   minPurchase?: number;
-  appliesTo: 'ALL' | 'CATEGORY' | 'PRODUCT';
+  appliesTo?: 'ALL' | 'CATEGORY' | 'PRODUCT'; // tolérant
   targetIds?: string[];
-  isActive: boolean;
-}
+  isActive?: boolean;
+};
 
-const DiscountCenter = () => {
-  const [discounts, setDiscounts] = useState<Discount[]>([]);
-  const [activeDiscount, setActiveDiscount] = useState<Discount | null>(null);
+type CurrencyVM = {
+  _id?: string;
+  code?: string;
+  name?: string;
+  symbol?: string;
+  isBase?: boolean;
+};
+
+/* ------------------------------ Utils affichage ----------------------------- */
+
+const formatDate = (dateString?: string) => {
+  if (!dateString) return '-';
+  try {
+    return new Date(dateString).toLocaleDateString('fr-FR');
+  } catch {
+    return '-';
+  }
+};
+
+const discountTypeLabel = (type?: DiscountType | string) => {
+  if (type === DiscountType.PERCENTAGE) return 'Pourcentage';
+  if (type === DiscountType.FIXED_AMOUNT) return 'Montant Fixe';
+  return typeof type === 'string' ? type : '-';
+};
+
+const discountTypeTag = (type?: DiscountType | string) => {
+  if (type === DiscountType.PERCENTAGE) return <Tag severity="info" value="%" />;
+  if (type === DiscountType.FIXED_AMOUNT) return <Tag severity="success" value="€" />;
+  return <Tag value={discountTypeLabel(type)} />;
+};
+
+const appliesToLabel = (scope?: string) => {
+  switch (scope) {
+    case 'ALL':
+      return 'Tous produits';
+    case 'CATEGORY':
+      return 'Catégorie';
+    case 'PRODUCT':
+      return 'Produit';
+    default:
+      return '-';
+  }
+};
+
+const statusSeverity = (isActive?: boolean) => (isActive ? 'success' : 'danger');
+const statusLabel = (isActive?: boolean) => (isActive ? 'Active' : 'Inactive');
+
+/* ================================ Page ==================================== */
+
+export default function DiscountCenter() {
+  const dispatch = useDispatch<AppDispatch>();
+  const toast = useRef<Toast>(null);
+
+  // --- Store ---
+  const discounts = useSelector((s: RootState) => selectAllDiscounts(s)) as DiscountVM[];
+  const dStatus = useSelector(selectDiscountsStatus);
+  const dError = useSelector(selectDiscountsError);
+  const baseCurrency = useSelector(selectBaseCurrency) as CurrencyVM | null;
+
+  const loading = dStatus === 'loading';
+
+  // --- UI State ---
   const [visibleDialog, setVisibleDialog] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [filters, setFilters] = useState({
+  const [activeDiscount, setActiveDiscount] = useState<DiscountVM | null>(null);
+
+  const [filters, setFilters] = useState<any>({
     global: { value: null, matchMode: FilterMatchMode.CONTAINS },
     type: { value: null, matchMode: FilterMatchMode.EQUALS },
     isActive: { value: null, matchMode: FilterMatchMode.EQUALS },
   });
-  const toast = useRef<Toast>(null);
+
+  // --- Fetch ---
+  useEffect(() => {
+    // sécurise: évite rerenders infinis
+    dispatch(fetchDiscounts());
+    dispatch(fetchBaseCurrency());
+  }, [dispatch]);
 
   useEffect(() => {
-    fetchDiscounts();
-  });
-
-  const fetchDiscounts = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/finance/discounts');
-      const data = await response.json();
-      setDiscounts(data);
-    } catch (error) {
-      showError('Erreur de chargement des réductions');
-    } finally {
-      setLoading(false);
+    if (dStatus === 'failed' && dError) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: dError,
+        life: 3500,
+      });
     }
+  }, [dStatus, dError]);
+
+  // --- Actions ---
+  const openCreate = () => {
+    setActiveDiscount(null);
+    setVisibleDialog(true);
   };
 
-  const showError = (message: string) => {
+  const openEdit = (row: DiscountVM) => {
+    // NB: pas d’endpoint PUT sur /finance/discounts pour l’instant.
+    // On traite "Modifier" comme "Dupliquer" -> re-crée une remise similaire.
+    setActiveDiscount(row);
+    setVisibleDialog(true);
     toast.current?.show({
-      severity: 'error',
-      summary: 'Erreur',
-      detail: message,
+      severity: 'info',
+      summary: 'Info',
+      detail: "Les modifications créeront une nouvelle réduction (pas d'édition API).",
       life: 3000,
     });
   };
 
-  const showSuccess = (message: string) => {
-    toast.current?.show({
-      severity: 'success',
-      summary: 'Succès',
-      detail: message,
-      life: 3000,
-    });
-  };
+  const handleCreateOrDuplicate = async (payload: DiscountFormValue) => {
+    // Adapter dates -> strings (backend tolère string/Date selon le schema, on force string ISO)
+    const toISO = (d?: Date) => (d ? new Date(d).toISOString() : undefined);
 
-  const handleFormSubmit = async (discount: Discount) => {
-    try {
-      const url = discount._id ? `/finance/discounts/${discount._id}` : '/finance/discounts';
+    const newDiscount = {
+      code: payload.code.trim(),
+      name: payload.name?.trim(),
+      type: payload.type,
+      value: Number(payload.value ?? 0),
+      startDate: toISO(payload.startDate),
+      endDate: toISO(payload.endDate),
+      maxAmount: payload.maxAmount ?? undefined,
+      minPurchase: payload.minPurchase ?? undefined,
+      appliesTo: payload.appliesTo ?? 'ALL',
+      targetIds: payload.targetIds ?? [],
+      isActive: !!payload.isActive,
+    } as any;
 
-      const method = discount._id ? 'PUT' : 'POST';
+    const res = await dispatch(addDiscount(newDiscount) as any);
 
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...discount,
-          startDate: discount.startDate.toString(),
-          endDate: discount.endDate?.toString(),
-        }),
+    if ((addDiscount as any).fulfilled.match(res)) {
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Succès',
+        detail: activeDiscount ? 'Réduction dupliquée' : 'Réduction créée',
+        life: 2500,
       });
-
-      if (response.ok) {
-        const updatedDiscount = await response.json();
-
-        if (discount._id) {
-          setDiscounts(discounts.map((d) => (d._id === updatedDiscount._id ? updatedDiscount : d)));
-        } else {
-          setDiscounts([...discounts, updatedDiscount]);
-        }
-
-        setVisibleDialog(false);
-        showSuccess(discount._id ? 'Réduction mise à jour' : 'Réduction créée avec succès');
-      } else {
-        const errorData = await response.json();
-        showError(errorData.message || "Erreur lors de l'opération");
-      }
-    } catch (error: unknown) {
-      //@ts-ignore
-      showError('Erreur réseau');
-    }
-  };
-
-  const handleDeleteDiscount = async (id: string) => {
-    try {
-      const response = await fetch(`/finance/discounts/${id}`, {
-        method: 'DELETE',
+      setVisibleDialog(false);
+      setActiveDiscount(null);
+      // refresh (optionnel — fetchDiscounts déjà géré par le reducer)
+      dispatch(fetchDiscounts());
+    } else {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Erreur',
+        detail: (res?.payload as string) ?? "Échec de l'opération",
+        life: 3500,
       });
-
-      if (response.ok) {
-        setDiscounts(discounts.filter((d) => d._id !== id));
-        showSuccess('Réduction supprimée avec succès');
-      } else {
-        showError('Erreur lors de la suppression');
-      }
-    } catch (error) {
-      showError('Erreur réseau');
     }
   };
 
-  const handleToggleStatus = async (id: string, currentStatus: boolean) => {
-    try {
-      const response = await fetch(`/finance/discounts/${id}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !currentStatus }),
-      });
-
-      if (response.ok) {
-        const updatedDiscount = await response.json();
-        setDiscounts(discounts.map((d) => (d._id === id ? updatedDiscount : d)));
-        showSuccess(`Réduction ${!currentStatus ? 'activée' : 'désactivée'}`);
-      } else {
-        showError('Erreur lors de la mise à jour');
-      }
-    } catch (error) {
-      //@ts-ignore
-      showError('Erreur réseau');
-    }
-  };
-
-  const getDiscountTypeLabel = (type: DiscountType) => {
-    switch (type) {
-      case DiscountType.PERCENTAGE:
-        return 'Pourcentage';
-      case DiscountType.FIXED_AMOUNT:
-        return 'Montant Fixe';
-      default:
-        return type;
-    }
-  };
-
-  const getDiscountTypeTag = (type: DiscountType) => {
-    switch (type) {
-      case DiscountType.PERCENTAGE:
-        return <Tag severity="info" value="%" />;
-      case DiscountType.FIXED_AMOUNT:
-        return <Tag severity="success" value="€" />;
-      default:
-        return <Tag value={type} />;
-    }
-  };
-
-  const getAppliesToLabel = (scope: string) => {
-    switch (scope) {
-      case 'ALL':
-        return 'Tous produits';
-      case 'CATEGORY':
-        return 'Catégorie';
-      case 'PRODUCT':
-        return 'Produit';
-      default:
-        return scope;
-    }
-  };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('fr-FR');
-  };
-
-  const getStatusSeverity = (isActive: boolean) => {
-    return isActive ? 'success' : 'danger';
-  };
-
-  const getStatusLabel = (isActive: boolean) => {
-    return isActive ? 'Active' : 'Inactive';
-  };
+  // --- Memos ---
+  const activeDiscounts = useMemo(() => (discounts ?? []).filter((d) => d?.isActive), [discounts]);
+  const fixedAmountDiscounts = useMemo(
+    () => (discounts ?? []).filter((d) => d?.type === DiscountType.FIXED_AMOUNT),
+    [discounts]
+  );
+  const loyaltyDiscounts = useMemo(
+    () =>
+      (discounts ?? []).filter((d) => {
+        const name = (d?.name ?? d?.code ?? '').toString().toLowerCase();
+        return name.includes('fidélité') || name.includes('fidelite');
+      }),
+    [discounts]
+  );
 
   return (
     <div className="discount-center">
       <Toast ref={toast} position="top-right" />
 
-      <Card title="Centre de Gestion des Réductions" className="shadow-2">
-        <div className="flex justify-content-between align-items-center mb-4">
-          <h2 className="text-xl font-semibold">Gestion des promotions et réductions</h2>
-          <Button
-            label="Nouvelle Réduction"
-            icon="pi pi-plus"
-            className="p-button-success"
-            onClick={() => {
-              setActiveDiscount(null);
-              setVisibleDialog(true);
-            }}
-          />
-        </div>
+      <Card
+        title={
+          <div className="flex items-center justify-between">
+            <span>Centre Finance</span>
+            <div className="flex items-center gap-2">
+              {/* Base currency badge */}
+              <span className="text-sm text-gray-600">
+                Devise de base:&nbsp;
+                <Tag
+                  value={
+                    baseCurrency?.code
+                      ? `${baseCurrency.code}${baseCurrency.symbol ? ` (${baseCurrency.symbol})` : ''}`
+                      : '—'
+                  }
+                  severity="info"
+                />
+              </span>
+              <Button
+                label="Nouvelle Réduction"
+                icon="pi pi-plus"
+                className="p-button-success"
+                onClick={openCreate}
+              />
+            </div>
+          </div>
+        }
+        className="shadow-2"
+      >
+        <p className="text-gray-600 mt-0">
+          Gérez vos <strong>réductions</strong>, visualisez les remises actives, et filtrez par
+          type/statut.
+        </p>
 
         <TabView className="custom-tabview">
+          {/* -------------------------- Toutes les Réductions -------------------------- */}
           <TabPanel header="Toutes les Réductions">
-            <div className="mb-4">
-              <DataTable
-                value={discounts}
-                loading={loading}
-                paginator
-                rows={10}
-                filters={filters}
-                filterDisplay="row"
-                emptyMessage="Aucune réduction trouvée"
-                className="p-datatable-sm"
-              >
-                <Column field="name" header="Nom" filter filterPlaceholder="Rechercher par nom" />
-                <Column field="code" header="Code" filter filterPlaceholder="Rechercher par code" />
-                <Column
-                  field="type"
-                  header="Type"
-                  body={(data) => (
-                    <div className="flex align-items-center gap-2">
-                      {getDiscountTypeTag(data.type)}
-                      <span>{getDiscountTypeLabel(data.type)}</span>
-                    </div>
-                  )}
-                  filter
-                  filterField="type"
-                  filterMenuStyle={{ width: '14rem' }}
-                  filterElement={(options) => (
-                    <Dropdown
-                      value={options.value}
-                      options={[
-                        { label: 'Pourcentage', value: DiscountType.PERCENTAGE },
-                        { label: 'Montant Fixe', value: DiscountType.FIXED_AMOUNT },
-                      ]}
-                      onChange={(e) => options.filterCallback(e.value, options.index)}
-                      placeholder="Tous types"
-                      className="p-column-filter"
+            <DataTable
+              value={discounts ?? []}
+              loading={loading}
+              paginator
+              rows={10}
+              filters={filters}
+              filterDisplay="row"
+              emptyMessage="Aucune réduction trouvée"
+              className="p-datatable-sm"
+              scrollable
+              scrollHeight="60vh"
+            >
+              <Column
+                field="name"
+                header="Nom"
+                body={(d: DiscountVM) => d?.name ?? d?.code ?? '—'}
+                filter
+                filterPlaceholder="Rechercher par nom"
+                showFilterMatchModes={false}
+              />
+              <Column
+                field="code"
+                header="Code"
+                filter
+                filterPlaceholder="Rechercher par code"
+                showFilterMatchModes={false}
+              />
+              <Column
+                field="type"
+                header="Type"
+                body={(data: DiscountVM) => (
+                  <div className="flex align-items-center gap-2">
+                    {discountTypeTag(data?.type)}
+                    <span>{discountTypeLabel(data?.type)}</span>
+                  </div>
+                )}
+                filter
+                filterField="type"
+                filterMenuStyle={{ width: '14rem' }}
+                filterElement={(options) => (
+                  <Dropdown
+                    value={options.value}
+                    options={[
+                      { label: 'Pourcentage', value: DiscountType.PERCENTAGE },
+                      { label: 'Montant Fixe', value: DiscountType.FIXED_AMOUNT },
+                    ]}
+                    onChange={(e) => options.filterCallback(e.value, options.index)}
+                    placeholder="Tous types"
+                    className="p-column-filter w-full"
+                  />
+                )}
+              />
+              <Column
+                field="value"
+                header="Valeur"
+                body={(data: DiscountVM) => (
+                  <div className="text-right font-bold">
+                    {data?.type === DiscountType.PERCENTAGE
+                      ? `${Number(data?.value ?? 0)}%`
+                      : `${Number(data?.value ?? 0).toFixed(2)} ${baseCurrency?.symbol ?? '€'}`}
+                  </div>
+                )}
+                className="text-right"
+              />
+              <Column
+                field="appliesTo"
+                header="Applicable à"
+                body={(data: DiscountVM) => appliesToLabel(data?.appliesTo)}
+              />
+              <Column
+                field="startDate"
+                header="Début"
+                body={(d: DiscountVM) => formatDate(d?.startDate)}
+              />
+              <Column
+                field="endDate"
+                header="Fin"
+                body={(d: DiscountVM) => formatDate(d?.endDate)}
+              />
+              <Column
+                field="isActive"
+                header="Statut"
+                body={(data: DiscountVM) => (
+                  <Tag
+                    value={statusLabel(!!data?.isActive)}
+                    severity={statusSeverity(!!data?.isActive)}
+                  />
+                )}
+                filter
+                filterField="isActive"
+                filterElement={(options) => (
+                  <Dropdown
+                    value={options.value}
+                    options={[
+                      { label: 'Actif', value: true },
+                      { label: 'Inactif', value: false },
+                    ]}
+                    onChange={(e) => options.filterCallback(e.value, options.index)}
+                    placeholder="Tous statuts"
+                    className="p-column-filter w-full"
+                  />
+                )}
+              />
+              <Column
+                header="Actions"
+                body={(rowData: DiscountVM) => (
+                  <div className="flex gap-1">
+                    <Button
+                      icon="pi pi-copy"
+                      className="p-button-rounded p-button-text p-button-info"
+                      tooltip="Dupliquer"
+                      tooltipOptions={{ position: 'top' }}
+                      onClick={() => openEdit(rowData)}
                     />
-                  )}
-                />
-                <Column
-                  field="value"
-                  header="Valeur"
-                  body={(data) => (
-                    <div className="text-right font-bold">
-                      {data.type === DiscountType.PERCENTAGE
-                        ? `${data.value}%`
-                        : `${data.value.toFixed(2)} €`}
-                    </div>
-                  )}
-                />
-                <Column
-                  field="appliesTo"
-                  header="Applicable à"
-                  body={(data) => getAppliesToLabel(data.appliesTo)}
-                />
-                <Column
-                  field="startDate"
-                  header="Début"
-                  body={(data) => formatDate(data.startDate)}
-                />
-                <Column field="endDate" header="Fin" body={(data) => formatDate(data.endDate)} />
-                <Column
-                  field="isActive"
-                  header="Statut"
-                  body={(data) => (
-                    <Tag
-                      value={getStatusLabel(data.isActive)}
-                      severity={getStatusSeverity(data.isActive)}
+                    {/* Désactivés car pas d’API DELETE/PUT sur /finance/discounts */}
+                    <Button
+                      icon="pi pi-pencil"
+                      className="p-button-rounded p-button-text p-button-secondary"
+                      disabled
+                      tooltip="Éditer (non disponible)"
+                      tooltipOptions={{ position: 'top' }}
                     />
-                  )}
-                  filter
-                  filterField="isActive"
-                  filterElement={(options) => (
-                    <Dropdown
-                      value={options.value}
-                      options={[
-                        { label: 'Actif', value: true },
-                        { label: 'Inactif', value: false },
-                      ]}
-                      onChange={(e) => options.filterCallback(e.value, options.index)}
-                      placeholder="Tous statuts"
-                      className="p-column-filter"
+                    <Button
+                      icon="pi pi-trash"
+                      className="p-button-rounded p-button-text p-button-danger"
+                      disabled
+                      tooltip="Supprimer (non disponible)"
+                      tooltipOptions={{ position: 'top' }}
                     />
-                  )}
-                />
-                <Column
-                  header="Actions"
-                  body={(rowData) => (
-                    <div className="flex gap-1">
-                      <Button
-                        icon="pi pi-pencil"
-                        className="p-button-rounded p-button-text p-button-success"
-                        tooltip="Modifier"
-                        tooltipOptions={{ position: 'top' }}
-                        onClick={() => {
-                          setActiveDiscount(rowData);
-                          setVisibleDialog(true);
-                        }}
-                      />
-                      <Button
-                        icon={rowData.isActive ? 'pi pi-ban' : 'pi pi-check'}
-                        className={`p-button-rounded p-button-text ${rowData.isActive ? 'p-button-warning' : 'p-button-info'}`}
-                        tooltip={rowData.isActive ? 'Désactiver' : 'Activer'}
-                        tooltipOptions={{ position: 'top' }}
-                        onClick={() => handleToggleStatus(rowData._id, rowData.isActive)}
-                      />
-                      <Button
-                        icon="pi pi-trash"
-                        className="p-button-rounded p-button-text p-button-danger"
-                        tooltip="Supprimer"
-                        tooltipOptions={{ position: 'top' }}
-                        onClick={() => handleDeleteDiscount(rowData._id)}
-                      />
-                    </div>
-                  )}
-                />
-              </DataTable>
-            </div>
+                  </div>
+                )}
+              />
+            </DataTable>
           </TabPanel>
 
+          {/* ----------------------------- Actives ------------------------------ */}
           <TabPanel header="Remises Actives">
             <DataTable
-              value={discounts.filter((d) => d.isActive)}
+              value={activeDiscounts}
               loading={loading}
               paginator
               rows={10}
               emptyMessage="Aucune réduction active"
+              scrollable
+              scrollHeight="60vh"
             >
-              <Column field="name" header="Nom" />
+              <Column
+                field="name"
+                header="Nom"
+                body={(d: DiscountVM) => d?.name ?? d?.code ?? '—'}
+              />
               <Column field="code" header="Code" />
-              <Column field="type" header="Type" body={(data) => getDiscountTypeLabel(data.type)} />
+              <Column
+                field="type"
+                header="Type"
+                body={(d: DiscountVM) => discountTypeLabel(d?.type)}
+              />
               <Column
                 field="value"
                 header="Valeur"
-                body={(data) =>
-                  data.type === DiscountType.PERCENTAGE
-                    ? `${data.value}%`
-                    : `${data.value.toFixed(2)} €`
+                body={(d: DiscountVM) =>
+                  d?.type === DiscountType.PERCENTAGE
+                    ? `${Number(d?.value ?? 0)}%`
+                    : `${Number(d?.value ?? 0).toFixed(2)} ${baseCurrency?.symbol ?? '€'}`
                 }
                 className="text-right"
               />
               <Column
                 field="endDate"
                 header="Expire le"
-                body={(data) => (data.endDate ? formatDate(data.endDate) : 'Illimité')}
+                body={(d: DiscountVM) => (d?.endDate ? formatDate(d?.endDate) : 'Illimité')}
               />
             </DataTable>
           </TabPanel>
 
+          {/* ----------------------------- Rabais ------------------------------ */}
           <TabPanel header="Rabais">
             <DataTable
-              value={discounts.filter((d) => d.type === DiscountType.FIXED_AMOUNT)}
+              value={fixedAmountDiscounts}
               loading={loading}
               paginator
               rows={10}
               emptyMessage="Aucun rabais configuré"
+              scrollable
+              scrollHeight="60vh"
             >
-              <Column field="name" header="Nom" />
+              <Column
+                field="name"
+                header="Nom"
+                body={(d: DiscountVM) => d?.name ?? d?.code ?? '—'}
+              />
               <Column field="code" header="Code" />
               <Column
                 field="value"
                 header="Montant"
-                body={(data) => `${data.value.toFixed(2)} €`}
+                body={(d: DiscountVM) =>
+                  `${Number(d?.value ?? 0).toFixed(2)} ${baseCurrency?.symbol ?? '€'}`
+                }
                 className="text-right"
               />
               <Column
                 field="minPurchase"
                 header="Achat min."
-                body={(data) => (data.minPurchase ? `${data.minPurchase.toFixed(2)} €` : '-')}
+                body={(d: DiscountVM) =>
+                  d?.minPurchase
+                    ? `${Number(d.minPurchase).toFixed(2)} ${baseCurrency?.symbol ?? '€'}`
+                    : '-'
+                }
                 className="text-right"
               />
               <Column
                 field="isActive"
                 header="Statut"
-                body={(data) => (
+                body={(d: DiscountVM) => (
                   <Tag
-                    value={getStatusLabel(data.isActive)}
-                    severity={getStatusSeverity(data.isActive)}
+                    value={statusLabel(!!d?.isActive)}
+                    severity={statusSeverity(!!d?.isActive)}
                   />
                 )}
               />
             </DataTable>
           </TabPanel>
 
+          {/* ---------------------------- Fidélité ------------------------------ */}
           <TabPanel header="Fidélité">
             <DataTable
-              value={discounts.filter(
-                (d) =>
-                  d.name.toLowerCase().includes('fidélité') ||
-                  d.name.toLowerCase().includes('fidelite')
-              )}
+              value={loyaltyDiscounts}
               loading={loading}
               paginator
               rows={10}
               emptyMessage="Aucune réduction fidélité"
+              scrollable
+              scrollHeight="60vh"
             >
-              <Column field="name" header="Nom" />
+              <Column
+                field="name"
+                header="Nom"
+                body={(d: DiscountVM) => d?.name ?? d?.code ?? '—'}
+              />
               <Column field="code" header="Code" />
               <Column
                 field="value"
                 header="Valeur"
-                body={(data) =>
-                  data.type === DiscountType.PERCENTAGE
-                    ? `${data.value}%`
-                    : `${data.value.toFixed(2)} €`
+                body={(d: DiscountVM) =>
+                  d?.type === DiscountType.PERCENTAGE
+                    ? `${Number(d?.value ?? 0)}%`
+                    : `${Number(d?.value ?? 0).toFixed(2)} ${baseCurrency?.symbol ?? '€'}`
                 }
                 className="text-right"
               />
@@ -438,10 +516,11 @@ const DiscountCenter = () => {
         </TabView>
       </Card>
 
+      {/* ----------------------------- Dialog ------------------------------ */}
       <Dialog
         visible={visibleDialog}
         onHide={() => setVisibleDialog(false)}
-        header={activeDiscount ? 'Modifier Réduction' : 'Créer une Nouvelle Réduction'}
+        header={activeDiscount ? 'Dupliquer la Réduction' : 'Créer une Nouvelle Réduction'}
         style={{ width: '50vw' }}
         className="discount-dialog"
         draggable={false}
@@ -449,59 +528,51 @@ const DiscountCenter = () => {
         breakpoints={{ '960px': '75vw', '640px': '100vw' }}
       >
         <DiscountForm
-          discount={activeDiscount}
-          onSubmit={handleFormSubmit}
+          discount={activeDiscount ? mapDiscountToForm(activeDiscount) : undefined}
+          currencySymbol={baseCurrency?.symbol ?? '€'}
+          onSubmit={handleCreateOrDuplicate}
           onCancel={() => setVisibleDialog(false)}
         />
       </Dialog>
 
       <style jsx>{`
         .discount-center :global(.p-card) {
-          border-radius: 12px;
+          border-radius: 16px;
           overflow: hidden;
         }
-
+        .discount-center :global(.p-card .p-card-title) {
+          font-size: 1.15rem;
+        }
         .discount-center :global(.p-tabview) {
           margin-top: 1rem;
         }
-
         .discount-center :global(.p-tabview-panels) {
-          padding: 1.5rem 0 0;
+          padding: 1.25rem 0 0;
         }
-
         .discount-center :global(.discount-dialog .p-dialog-content) {
-          padding: 0 1.5rem 2rem;
+          padding: 0 1.25rem 1.5rem;
         }
       `}</style>
     </div>
   );
-};
+}
 
-export { DiscountCenter };
+/* ============================= Discount Form ============================== */
 
-interface Discount {
-  //@ts-ignore
+type DiscountFormValue = {
   _id?: string;
-  name: string;
+  name?: string;
   code: string;
-  type: DiscountType;
+  type: DiscountType | string;
   value: number;
-  //@ts-ignore
-  startDate: Date;
-  //@ts-ignore
+  startDate?: Date;
   endDate?: Date;
   maxAmount?: number;
   minPurchase?: number;
-  appliesTo: 'ALL' | 'CATEGORY' | 'PRODUCT';
+  appliesTo?: 'ALL' | 'CATEGORY' | 'PRODUCT';
   targetIds?: string[];
-  isActive: boolean;
-}
-
-interface DiscountFormProps {
-  discount?: Discount | null;
-  onSubmit: (discount: Discount) => void;
-  onCancel: () => void;
-}
+  isActive?: boolean;
+};
 
 const discountTypes = [
   { label: 'Pourcentage', value: DiscountType.PERCENTAGE },
@@ -514,65 +585,74 @@ const appliesToOptions = [
   { label: 'Produit spécifique', value: 'PRODUCT' },
 ];
 
-const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
+function mapDiscountToForm(d: DiscountVM): DiscountFormValue {
+  return {
+    _id: d._id,
+    name: d.name,
+    code: d.code,
+    type: (d.type as any) ?? DiscountType.PERCENTAGE,
+    value: Number(d.value ?? 0),
+    startDate: d.startDate ? new Date(d.startDate) : new Date(),
+    endDate: d.endDate ? new Date(d.endDate) : undefined,
+    maxAmount: d.maxAmount,
+    minPurchase: d.minPurchase,
+    appliesTo: (d.appliesTo as any) ?? 'ALL',
+    targetIds: d.targetIds ?? [],
+    isActive: !!d.isActive,
+  };
+}
+
+function DiscountForm({
+  discount,
+  onSubmit,
+  onCancel,
+  currencySymbol = '€',
+}: {
+  discount?: DiscountFormValue;
+  onSubmit: (d: DiscountFormValue) => void;
+  onCancel: () => void;
+  currencySymbol?: string;
+}) {
   const toast = useRef<Toast>(null);
-  const [formData, setFormData] = useState<Discount>({
+  const [formData, setFormData] = useState<DiscountFormValue>({
     name: '',
     code: '',
     type: DiscountType.PERCENTAGE,
-    // @ts-ignore
     value: 0,
-    //@ts-ignore
     startDate: new Date(),
     appliesTo: 'ALL',
-
-    // @ts-ignore
     isActive: true,
     ...discount,
-    //@ts-ignore
-    startDate: discount?.startDate ? new Date(discount.startDate) : new Date(),
-    //@ts-ignore
-    endDate: discount?.endDate ? new Date(discount.endDate) : undefined,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'Le nom est requis';
+  const handleChange = (field: keyof DiscountFormValue, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors((prev) => {
+        const n = { ...prev };
+        delete n[field];
+        return n;
+      });
     }
-
-    if (!formData.code.trim()) {
-      newErrors.code = 'Le code est requis';
-    }
-
-    if (formData.value <= 0) {
-      newErrors.value = 'La valeur doit être positive';
-    }
-
-    if (formData.type === DiscountType.PERCENTAGE && formData.value > 100) {
-      newErrors.value = 'Le pourcentage ne peut dépasser 100%';
-    }
-
-    if (formData.endDate && formData.endDate < formData.startDate) {
-      newErrors.endDate = 'La date de fin doit être après la date de début';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
-    if (!validateForm()) {
-      showError('Veuillez corriger les erreurs dans le formulaire');
-      return;
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    if (!formData.code?.trim()) newErrors.code = 'Le code est requis';
+    if (formData.value === undefined || Number(formData.value) <= 0) {
+      newErrors.value = 'La valeur doit être positive';
     }
-
-    setSaving(true);
-    onSubmit(formData);
+    if (formData.type === DiscountType.PERCENTAGE && Number(formData.value) > 100) {
+      newErrors.value = 'Le pourcentage ne peut dépasser 100%';
+    }
+    if (formData.endDate && formData.startDate && formData.endDate < formData.startDate) {
+      newErrors.endDate = 'La date de fin doit être après la date de début';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const showError = (message: string) => {
@@ -580,21 +660,21 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
       severity: 'error',
       summary: 'Erreur',
       detail: message,
-      life: 5000,
+      life: 4500,
     });
   };
-  //@ts-ignore
 
-  const handleChange = (field: keyof Discount, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-
-    // Clear error when field changes
-    if (errors[field]) {
-      setErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
+  const handleSubmit = () => {
+    if (!validateForm()) {
+      showError('Veuillez corriger les erreurs dans le formulaire');
+      return;
+    }
+    setSaving(true);
+    try {
+      onSubmit(formData);
+    } finally {
+      // on laisse le parent remettre saving à false via fermeture du dialog; si error, ce setTimeout réactive le bouton.
+      setTimeout(() => setSaving(false), 400);
     }
   };
 
@@ -604,23 +684,22 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
 
       <div className="p-fluid grid">
         <div className="field col-12 md:col-6">
-          <label>Nom*</label>
+          <label>Nom</label>
           <InputText
-            value={formData.name}
+            value={formData.name ?? ''}
             onChange={(e) => handleChange('name', e.target.value)}
-            className={`w-full ${errors.name ? 'p-invalid' : ''}`}
-            placeholder="Ex: Remise été 2023"
+            className="w-full"
+            placeholder="Ex: Remise été"
           />
-          {errors.name && <small className="p-error">{errors.name}</small>}
         </div>
 
         <div className="field col-12 md:col-6">
           <label>Code*</label>
           <InputText
             value={formData.code}
-            onChange={(e) => handleChange('code', e.target.value.toUpperCase())}
+            onChange={(e) => handleChange('code', (e.target.value ?? '').toUpperCase())}
             className={`w-full ${errors.code ? 'p-invalid' : ''}`}
-            placeholder="Ex: ETE2023"
+            placeholder="Ex: ETE2025"
           />
           {errors.code && <small className="p-error">{errors.code}</small>}
         </div>
@@ -632,45 +711,43 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
             options={discountTypes}
             onChange={(e) => handleChange('type', e.value)}
             placeholder="Sélectionner un type"
-            className={`w-full ${errors.type ? 'p-invalid' : ''}`}
+            className="w-full"
           />
-          {errors.type && <small className="p-error">{errors.type}</small>}
         </div>
 
         <div className="field col-12 md:col-6">
           <label>Valeur*</label>
           <InputNumber
-            value={formData.value}
-            onValueChange={(e) => handleChange('value', e.value)}
-            mode={formData.type === DiscountType.PERCENTAGE ? 'decimal' : 'currency'}
+            value={Number(formData.value ?? 0)}
+            onValueChange={(e) => handleChange('value', e.value ?? 0)}
+            mode="decimal"
             min={0}
             max={formData.type === DiscountType.PERCENTAGE ? 100 : undefined}
-            suffix={formData.type === DiscountType.PERCENTAGE ? '%' : '€'}
+            suffix={formData.type === DiscountType.PERCENTAGE ? '%' : ` ${currencySymbol}`}
             className={`w-full ${errors.value ? 'p-invalid' : ''}`}
           />
           {errors.value && <small className="p-error">{errors.value}</small>}
         </div>
 
         <div className="field col-12 md:col-6">
-          <label>Date de Début*</label>
+          <label>Date de Début</label>
           <Calendar
-            //@ts-ignore
-            value={formData.startDate}
+            value={formData.startDate ?? null}
             onChange={(e) => handleChange('startDate', e.value as Date)}
             showTime
+            hourFormat="24"
             dateFormat="dd/mm/yy"
-            className={`w-full ${errors.startDate ? 'p-invalid' : ''}`}
+            className="w-full"
           />
-          {errors.startDate && <small className="p-error">{errors.startDate}</small>}
         </div>
 
         <div className="field col-12 md:col-6">
           <label>Date de Fin</label>
           <Calendar
-            //@ts-ignore
-            value={formData.endDate}
+            value={formData.endDate ?? null}
             onChange={(e) => handleChange('endDate', e.value as Date)}
             showTime
+            hourFormat="24"
             dateFormat="dd/mm/yy"
             className={`w-full ${errors.endDate ? 'p-invalid' : ''}`}
           />
@@ -680,54 +757,47 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
         <div className="field col-12 md:col-6">
           <label>Montant Maximum</label>
           <InputNumber
-            value={formData.maxAmount}
+            value={formData.maxAmount ?? null}
             onValueChange={(e) => handleChange('maxAmount', e.value)}
-            mode="currency"
-            currency="EUR"
+            mode="decimal"
             className="w-full"
-            placeholder="Limite de réduction"
+            placeholder="Limite de réduction (optionnel)"
           />
-          <small className="text-500">(Optionnel)</small>
         </div>
 
         <div className="field col-12 md:col-6">
           <label>Achat Minimum</label>
           <InputNumber
-            value={formData.minPurchase}
+            value={formData.minPurchase ?? null}
             onValueChange={(e) => handleChange('minPurchase', e.value)}
-            mode="currency"
-            currency="EUR"
+            mode="decimal"
             className="w-full"
-            placeholder="Montant minimum d'achat"
+            placeholder="Montant min. d'achat (optionnel)"
           />
-          <small className="text-500">(Optionnel)</small>
         </div>
 
         <div className="field col-12">
-          <label>Applicable à*</label>
+          <label>Applicable à</label>
           <Dropdown
-            value={formData.appliesTo}
+            value={formData.appliesTo ?? 'ALL'}
             options={appliesToOptions}
             onChange={(e) => handleChange('appliesTo', e.value)}
             placeholder="Sélectionner"
-            className={`w-full ${errors.appliesTo ? 'p-invalid' : ''}`}
+            className="w-full"
           />
-          {errors.appliesTo && <small className="p-error">{errors.appliesTo}</small>}
         </div>
 
         <div className="field col-12">
           <div className="flex align-items-center">
             <Checkbox
               inputId="isActive"
-              checked={formData.isActive}
-              onChange={(e) => handleChange('isActive', e.checked)}
-              className={errors.isActive ? 'p-invalid' : ''}
+              checked={!!formData.isActive}
+              onChange={(e) => handleChange('isActive', !!e.checked)}
             />
             <label htmlFor="isActive" className="ml-2">
               Réduction active
             </label>
           </div>
-          {errors.isActive && <small className="p-error">{errors.isActive}</small>}
         </div>
 
         <div className="col-12 flex justify-content-end gap-2 mt-4">
@@ -739,7 +809,7 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
             disabled={saving}
           />
           <Button
-            label={saving ? 'Enregistrement...' : 'Enregistrer'}
+            label={saving ? 'Enregistrement...' : discount ? 'Dupliquer' : 'Créer'}
             icon="pi pi-check"
             onClick={handleSubmit}
             disabled={saving}
@@ -755,6 +825,4 @@ const DiscountForm = ({ discount, onSubmit, onCancel }: DiscountFormProps) => {
       `}</style>
     </div>
   );
-};
-
-export default DiscountForm;
+}

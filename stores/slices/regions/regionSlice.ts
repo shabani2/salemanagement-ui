@@ -1,3 +1,4 @@
+// src/stores/slices/regions/regionSlice.ts
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
@@ -6,138 +7,327 @@ import {
   createAsyncThunk,
   createEntityAdapter,
   EntityAdapter,
+  PayloadAction,
 } from '@reduxjs/toolkit';
 import { RootState } from '../../store';
 import { apiClient } from '../../../lib/apiConfig';
 import { Region } from '@/Models/regionTypes';
 
-// ✅ Interface pour l'état des régions
+/** ---------------- Types pagination & requêtes ---------------- */
+type Status = 'idle' | 'loading' | 'succeeded' | 'failed';
 
-interface RegionState {
-  status: 'idle' | 'loading' | 'succeeded' | 'failed';
-  error: string | null;
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasPrev: boolean;
+  hasNext: boolean;
 }
 
-// ✅ Adapter pour gérer les régions
-const regionAdapter: EntityAdapter<Region, string> = createEntityAdapter<Region, string>({
-  //@ts-ignore
+export type Order = 'asc' | 'desc';
+
+export interface FetchParams {
+  page?: number;
+  limit?: number;
+  q?: string;
+  ville?: string;
+  sortBy?: string;
+  order?: Order;
+  includeTotal?: boolean;
+}
+
+interface RegionListResponse {
+  data: Region[]; // contrôleur liste: { data, meta }
+  meta?: PaginationMeta;
+}
+
+type RegionWithCount = Region & { pointVenteCount?: number };
+
+interface RegionStateExtra {
+  status: Status;
+  error: string | null;
+  meta: PaginationMeta | null;
+  lastQuery: Omit<FetchParams, 'page' | 'limit'> | null;
+}
+
+/** ---------------- Adapter ---------------- */
+const regionAdapter: EntityAdapter<RegionWithCount, string> = createEntityAdapter<
+  RegionWithCount,
+  string
+>({
+  // @ts-expect-error - compat: external lib types mismatch
   selectId: (region) => region._id,
+  sortComparer: false,
 });
 
-// ✅ Initialisation de l'état avec l'adapter
-const initialState = regionAdapter.getInitialState<RegionState>({
+const initialState = regionAdapter.getInitialState<RegionStateExtra>({
   status: 'idle',
   error: null,
+  meta: null,
+  lastQuery: null,
 });
 
-// ✅ Fonction pour récupérer le token d'authentification
+/** ---------------- Utils ---------------- */
 const getAuthHeaders = () => {
+  if (typeof window === 'undefined') return {};
   const token = localStorage.getItem('token-agricap');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// ✅ Thunk pour récupérer les régions
-export const fetchRegions = createAsyncThunk(
-  'regions/fetchRegions',
-  async (_, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.get('/region', {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
-      return rejectWithValue('Erreur lors de la récupération des régions');
-    }
-  }
-);
+const toQueryString = (params: Record<string, any>) => {
+  const sp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return;
+    sp.append(k, String(v));
+  });
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+};
 
-// ✅ Thunk pour ajouter une région
-export const addRegion = createAsyncThunk(
-  'regions/addRegion',
-  async (region: Omit<Region, '_id'>, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.post('/region', region, {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
-      return rejectWithValue('Erreur lors de l’ajout de la région');
-    }
-  }
-);
+/** ---------------- Thunks ---------------- */
 
-// ✅ Thunk pour mettre à jour une région
-export const updateRegion = createAsyncThunk(
-  'regions/updateRegion',
-  async (region: Region, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.put(`/region/${region._id}`, region, {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
-      return rejectWithValue('Erreur lors de la mise à jour de la région');
-    }
-  }
-);
+export const fetchRegions = createAsyncThunk<
+  RegionListResponse,
+  FetchParams | undefined,
+  { rejectValue: string }
+>('regions/fetchRegions', async (params, { rejectWithValue }) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      q,
+      ville,
+      sortBy = 'createdAt',
+      order = 'desc',
+      includeTotal = true,
+    } = params || {};
 
-// ✅ Thunk pour supprimer une région
-export const deleteRegion = createAsyncThunk(
+    const query = toQueryString({
+      page,
+      limit,
+      q,
+      ville,
+      sortBy,
+      order,
+      includeTotal,
+    });
+
+    const response = await apiClient.get(`/regions${query}`, {
+      headers: getAuthHeaders(),
+    });
+
+    return response.data as RegionListResponse;
+  } catch (error: unknown) {
+    if (error instanceof Error) return rejectWithValue(error.message);
+    return rejectWithValue('Erreur lors de la récupération des régions');
+  }
+});
+
+export const searchRegions = createAsyncThunk<
+  RegionListResponse,
+  FetchParams & { q: string },
+  { rejectValue: string }
+>('regions/searchRegions', async (params, { rejectWithValue }) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      q,
+      ville,
+      sortBy = 'createdAt',
+      order = 'desc',
+      includeTotal = true,
+    } = params;
+
+    const query = toQueryString({
+      page,
+      limit,
+      q,
+      ville,
+      sortBy,
+      order,
+      includeTotal,
+    });
+
+    const response = await apiClient.get(`/regions/search${query}`, {
+      headers: getAuthHeaders(),
+    });
+
+    return response.data as RegionListResponse;
+  } catch (error: unknown) {
+    if (error instanceof Error) return rejectWithValue(error.message);
+    return rejectWithValue('Erreur lors de la recherche des régions');
+  }
+});
+
+export const addRegion = createAsyncThunk<
+  RegionWithCount,
+  Omit<Region, '_id'>,
+  { rejectValue: string }
+>('regions/addRegion', async (region, { rejectWithValue }) => {
+  try {
+    const response = await apiClient.post('/regions', region, {
+      headers: getAuthHeaders(),
+    });
+    return response.data as RegionWithCount;
+  } catch (error: unknown) {
+    if (error instanceof Error) return rejectWithValue(error.message);
+    return rejectWithValue('Erreur lors de l’ajout de la région');
+  }
+});
+
+export const updateRegion = createAsyncThunk<
+  RegionWithCount,
+  Region & { pointVenteCount?: number },
+  { rejectValue: string }
+>('regions/updateRegion', async (region, { rejectWithValue }) => {
+  try {
+    const response = await apiClient.put(`/regions/${region._id}`, region, {
+      headers: getAuthHeaders(),
+    });
+    return response.data as RegionWithCount;
+  } catch (error: unknown) {
+    if (error instanceof Error) return rejectWithValue(error.message);
+    return rejectWithValue('Erreur lors de la mise à jour de la région');
+  }
+});
+
+export const deleteRegion = createAsyncThunk<string, string, { rejectValue: string }>(
   'regions/deleteRegion',
-  async (regionId: string, { rejectWithValue }) => {
+  async (regionId, { rejectWithValue }) => {
     try {
-      await apiClient.delete(`/region/${regionId}`, {
+      await apiClient.delete(`/regions/${regionId}`, {
         headers: getAuthHeaders(),
       });
       return regionId;
     } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
+      if (error instanceof Error) return rejectWithValue(error.message);
       return rejectWithValue('Erreur lors de la suppression de la région');
     }
   }
 );
 
-// ✅ Création du slice Redux
+/** NEW: GET /regions/:id */
+export const fetchRegionById = createAsyncThunk<RegionWithCount, string, { rejectValue: string }>(
+  'regions/fetchRegionById',
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/regions/${id}`, {
+        headers: getAuthHeaders(),
+      });
+
+      // pourquoi: certains contrôleurs renvoient { data }, d'autres l'objet direct
+      const payload = (response.data?.data ?? response.data) as RegionWithCount;
+      if (!payload || !('_id' in payload)) {
+        return rejectWithValue('Réponse invalide pour la région demandée');
+      }
+      return payload;
+    } catch (error: unknown) {
+      if (error instanceof Error) return rejectWithValue(error.message);
+      return rejectWithValue('Erreur lors de la récupération de la région');
+    }
+  }
+);
+
+/** ---------------- Slice ---------------- */
 const regionSlice = createSlice({
   name: 'regions',
   initialState,
-  reducers: {},
+  reducers: {
+    setMeta(state, action: PayloadAction<PaginationMeta | null>) {
+      state.meta = action.payload;
+    },
+  },
   extraReducers: (builder) => {
     builder
+      /** fetchRegions */
+      .addCase(fetchRegions.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
       .addCase(fetchRegions.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        regionAdapter.setAll(state, action.payload);
+        const data = action.payload?.data ?? [];
+        const meta = action.payload?.meta ?? null;
+
+        regionAdapter.setAll(state, data as RegionWithCount[]);
+        state.meta = meta;
+
+        const params = action.meta.arg ?? {};
+        const { page, limit, ...rest } = params;
+        state.lastQuery = rest ?? null;
       })
       .addCase(fetchRegions.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload as string;
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
       })
+
+      /** searchRegions */
+      .addCase(searchRegions.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(searchRegions.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        const data = action.payload?.data ?? [];
+        const meta = action.payload?.meta ?? null;
+
+        regionAdapter.setAll(state, data as RegionWithCount[]);
+        state.meta = meta;
+
+        const params = action.meta.arg ?? {};
+        const { page, limit, ...rest } = params;
+        state.lastQuery = rest ?? null;
+      })
+      .addCase(searchRegions.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
+      })
+
+      /** addRegion */
       .addCase(addRegion.fulfilled, (state, action) => {
         regionAdapter.addOne(state, action.payload);
+        if (state.meta) {
+          state.meta.total += 1;
+          state.meta.totalPages = Math.max(1, Math.ceil(state.meta.total / state.meta.limit));
+        }
       })
+
+      /** updateRegion */
       .addCase(updateRegion.fulfilled, (state, action) => {
         regionAdapter.upsertOne(state, action.payload);
       })
+
+      /** deleteRegion */
       .addCase(deleteRegion.fulfilled, (state, action) => {
         regionAdapter.removeOne(state, action.payload);
+        if (state.meta) {
+          state.meta.total = Math.max(0, state.meta.total - 1);
+          state.meta.totalPages = Math.max(1, Math.ceil(state.meta.total / state.meta.limit));
+        }
+      })
+
+      /** fetchRegionById */
+      .addCase(fetchRegionById.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(fetchRegionById.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        regionAdapter.upsertOne(state, action.payload);
+      })
+      .addCase(fetchRegionById.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
       });
   },
 });
 
+export const { setMeta } = regionSlice.actions;
 export const regionReducer = regionSlice.reducer;
 
-// ✅ Sélecteurs générés automatiquement
+/** ---------------- Selectors ---------------- */
 export const {
   selectAll: selectAllRegions,
   selectById: selectRegionById,
@@ -146,6 +336,6 @@ export const {
   selectTotal: selectTotalRegions,
 } = regionAdapter.getSelectors<RootState>((state) => state.regions);
 
-// ✅ Sélecteurs personnalisés
 export const selectRegionStatus = (state: RootState) => state.regions.status;
 export const selectRegionError = (state: RootState) => state.regions.error;
+export const selectRegionMeta = (state: RootState) => state.regions.meta;

@@ -8,15 +8,15 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch } from '@/stores/store';
 import { PrimeIcons } from 'primereact/api';
 import { classNames } from 'primereact/utils';
-import { MouvementStock } from '@/Models/mouvementStockType';
-import { UserRole } from '@/lib/utils';
-import { Region } from '@/Models/regionTypes';
-import { PointVente } from '@/Models/pointVenteType';
+import type { MouvementStock } from '@/Models/mouvementStockType';
+import type { UserRole } from '@/lib/utils';
+import type { Region } from '@/Models/regionTypes';
+import type { PointVente } from '@/Models/pointVenteType';
 import { fetchRegions, selectAllRegions } from '@/stores/slices/regions/regionSlice';
 import { fetchPointVentes, selectAllPointVentes } from '@/stores/slices/pointvente/pointventeSlice';
 import { motion } from 'framer-motion';
 
-// Constantes pour la cohérence visuelle
+/* ----------------------------- Constantes ----------------------------- */
 const COLORS = [
   '#3B82F6',
   '#10B981',
@@ -35,26 +35,47 @@ const OPERATION_TYPES = [
   { label: 'Vente', icon: PrimeIcons.SHOPPING_CART, value: 'Vente' },
   { label: 'Livraison', icon: PrimeIcons.CAR, value: 'Livraison' },
   { label: 'Commande', icon: PrimeIcons.SHOPPING_BAG, value: 'Commande' },
-];
+] as const;
 
-// Composant pour les indicateurs KPI
+/* ----------------------------- Helpers ----------------------------- */
+const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const toNumber = (v: unknown, d = 0) => {
+  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : d;
+};
+const idOf = (obj: any | undefined | null) =>
+  obj && typeof obj === 'object' ? (obj._id as string | undefined) : undefined;
 
+const getRegionObj = (item: MouvementStock): Region | undefined => {
+  const direct = item?.region as any;
+  if (direct && typeof direct === 'object') return direct as Region;
+  const pv = item?.pointVente as any;
+  const pvRegion = pv?.region;
+  if (pvRegion && typeof pvRegion === 'object') return pvRegion as Region;
+  return undefined;
+};
+
+const getPvObj = (item: MouvementStock): PointVente | undefined => {
+  const pv = item?.pointVente as any;
+  return pv && typeof pv === 'object' ? (pv as PointVente) : undefined;
+};
+
+/* ----------------------------- KPI card ----------------------------- */
 const KPIIndicator: React.FC<{
   label: string;
   value: string;
   quantity: number;
   icon: string;
-  color: string; // e.g., 'bg-blue-100'
-  iconColor: string; // e.g., 'text-blue-500'
+  color: string; // bg-...-50
+  iconColor: string; // text-...
 }> = ({ label, value, quantity, icon, color, iconColor }) => (
   <div
     className={classNames(
-      'bg-gradient-to-br  from-green-50 to-white rounded-xl shadow-lg overflow-hidden border border-green-100 transition-all duration-300 rounded-2xl shadow-md p-5 ',
-      'border border-gray-200 '
+      'bg-gradient-to-br from-green-50 to-white rounded-xl shadow-lg overflow-hidden',
+      'border border-green-100 transition-all duration-300 p-5'
     )}
   >
     <div className="flex items-center gap-4">
-      {/* Icon Container */}
       <div
         className={classNames(
           'w-12 h-12 rounded-full flex items-center justify-center shrink-0',
@@ -63,13 +84,11 @@ const KPIIndicator: React.FC<{
       >
         <i className={classNames(icon, iconColor, 'text-2xl')}></i>
       </div>
-
-      {/* Textual Data */}
       <div className="flex flex-col justify-center flex-1 min-w-0">
         <span className="text-gray-500 text-sm font-medium">{label}</span>
         <div className="flex items-baseline gap-2 mt-1">
           <span className="text-2xl font-bold text-gray-900">{quantity.toLocaleString()}</span>
-          <span className="text-sm text-gray-400 truncate" style={{ maxWidth: '140px' }}>
+          <span className="text-sm text-gray-400 truncate" style={{ maxWidth: 140 }}>
             {value}
           </span>
         </div>
@@ -78,7 +97,7 @@ const KPIIndicator: React.FC<{
   </div>
 );
 
-// Composant pour les filtres
+/* ----------------------------- Filtres UI ----------------------------- */
 const FilterControls: React.FC<{
   operationType: string;
   onOperationChange: (value: string) => void;
@@ -107,48 +126,54 @@ const FilterControls: React.FC<{
     );
   }, [pointsVente, selectedRegion]);
 
+  const showRegionDd = userRole === 'SuperAdmin';
+  const showPvDd = userRole === 'SuperAdmin' || userRole === 'AdminRegion';
+  const disablePvDd = userRole === 'SuperAdmin' && !selectedRegion;
+
   return (
     <div className="flex flex-wrap gap-3 justify-center">
       <Dropdown
         value={operationType}
-        options={OPERATION_TYPES}
+        options={OPERATION_TYPES as any}
         optionLabel="label"
         onChange={(e) => onOperationChange(e.value)}
         placeholder="Type d'opération"
         className="min-w-[200px]"
-        itemTemplate={(opt) => (
-          <div className="flex align-items-center gap-2">
+        itemTemplate={(opt: any) => (
+          <div className="flex items-center gap-2">
             <i className={opt.icon}></i>
             <span>{opt.label}</span>
           </div>
         )}
       />
 
-      {userRole === 'SuperAdmin' && (
+      {showRegionDd && (
         <Dropdown
           value={selectedRegion}
-          options={[{ nom: 'Toutes les régions', _id: 'all' }, ...regions]}
+          options={[{ nom: 'Toutes les régions', _id: 'all' } as any, ...regions]}
           optionLabel="nom"
           onChange={(e) => {
             onRegionChange(e.value?._id === 'all' ? null : e.value);
             onPointVenteChange(null);
           }}
           placeholder="Sélectionner une région"
-          className="min-w-[200px]"
-          itemTemplate={(opt) => <div>{opt._id === 'all' ? 'Toutes les régions' : opt.nom}</div>}
+          className="min-w-[220px]"
+          itemTemplate={(opt: any) => (
+            <div>{opt._id === 'all' ? 'Toutes les régions' : opt.nom}</div>
+          )}
         />
       )}
 
-      {(userRole === 'SuperAdmin' || userRole === 'AdminRegion') && (
+      {showPvDd && (
         <Dropdown
           value={selectedPointVente}
-          options={[{ nom: 'Tous les points de vente', _id: 'all' }, ...filteredPointVentes]}
+          options={[{ nom: 'Tous les points de vente', _id: 'all' } as any, ...filteredPointVentes]}
           optionLabel="nom"
           onChange={(e) => onPointVenteChange(e.value?._id === 'all' ? null : e.value)}
           placeholder="Sélectionner un point de vente"
-          className="min-w-[220px]"
-          disabled={!selectedRegion && userRole === 'SuperAdmin'}
-          itemTemplate={(opt) => (
+          className="min-w-[240px]"
+          disabled={disablePvDd}
+          itemTemplate={(opt: any) => (
             <div>{opt._id === 'all' ? 'Tous les points de vente' : opt.nom}</div>
           )}
         />
@@ -157,9 +182,9 @@ const FilterControls: React.FC<{
   );
 };
 
-// Composant principal
+/* ----------------------------- Composant principal ----------------------------- */
 const AnalyseMouvementStockChart: React.FC<{
-  data: MouvementStock[];
+  data: MouvementStock[]; // déjà filtré par dateFrom/dateTo dans le dashboard
   userRole: UserRole;
   initialRegion?: Region;
   initialPointVente?: PointVente;
@@ -168,82 +193,125 @@ const AnalyseMouvementStockChart: React.FC<{
   const regions = useSelector(selectAllRegions);
   const pointsVente = useSelector(selectAllPointVentes);
 
+  // Chargement référentiels si absents localement
+  useEffect(() => {
+    if (!regions?.length) dispatch(fetchRegions());
+    if (!pointsVente?.length) dispatch(fetchPointVentes());
+  }, [dispatch, regions?.length, pointsVente?.length]);
+
   const [operationType, setOperationType] = useState<
     'Entrée' | 'Sortie' | 'Vente' | 'Livraison' | 'Commande'
   >('Vente');
-  const [selectedRegion, setSelectedRegion] = useState<Region | null>(initialRegion || null);
+
+  // Forcer les sélections selon rôle
+  const [selectedRegion, setSelectedRegion] = useState<Region | null>(
+    userRole === 'AdminRegion' ? (initialRegion ?? null) : (initialRegion ?? null)
+  );
   const [selectedPointVente, setSelectedPointVente] = useState<PointVente | null>(
-    initialPointVente || null
+    userRole === 'AdminPointVente' ? (initialPointVente ?? null) : (initialPointVente ?? null)
   );
 
+  // Si AdminRegion/AdminPV : verrouiller la cohérence des sélections
   useEffect(() => {
-    dispatch(fetchRegions());
-    dispatch(fetchPointVentes());
-  }, [dispatch]);
+    if (
+      userRole === 'AdminRegion' &&
+      initialRegion &&
+      (!selectedRegion || selectedRegion._id !== initialRegion._id)
+    ) {
+      setSelectedRegion(initialRegion);
+    }
+    if (
+      userRole === 'AdminPointVente' &&
+      initialPointVente &&
+      (!selectedPointVente || selectedPointVente._id !== initialPointVente._id)
+    ) {
+      setSelectedPointVente(initialPointVente);
+    }
+  }, [userRole, initialRegion?._id, initialPointVente?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Synchronisation des points de vente avec la région sélectionnée
+  // Sync PV si la région change (et que le PV ne lui appartient pas)
   useEffect(() => {
     if (selectedRegion && selectedPointVente) {
-      const pvRegion =
-        typeof selectedPointVente.region !== 'string'
-          ? selectedPointVente.region?._id
-          : selectedPointVente.region;
-
-      if (pvRegion !== selectedRegion._id) {
+      const pvRegionId =
+        typeof selectedPointVente.region === 'string'
+          ? selectedPointVente.region
+          : selectedPointVente.region?._id;
+      if (pvRegionId && pvRegionId !== selectedRegion._id) {
         setSelectedPointVente(null);
       }
     }
   }, [selectedRegion, selectedPointVente]);
 
-  // Logique de traitement des données
-  const processedData = useMemo(() => {
-    const grouped: Record<string, Record<string, number>> = {};
+  /* ----------------------------- Traitement des données ----------------------------- */
+  type Grouped = Record<string /* produit */, Record<string /* label */, number /* quantite */>>;
 
-    const filtered = data.filter((item) => {
-      if (item.type !== operationType || !item.produit?.nom) return false;
+  // Détermine le "label" d'agrégation (x-axis) pour un mouvement
+  const labelFor = (item: MouvementStock): string | null => {
+    const rg = getRegionObj(item);
+    const pv = getPvObj(item);
 
-      const pv = item.pointVente;
-      const r = typeof pv?.region === 'string' ? null : pv?.region;
+    if (userRole === 'SuperAdmin') {
+      // Si une région est sélectionnée -> par PVs de cette région
+      if (selectedRegion) {
+        return idOf(rg) === selectedRegion._id ? (pv?.nom ?? null) : null;
+      }
+      // Sinon par régions
+      return rg?.nom ?? null;
+    }
 
-      if (selectedRegion) return r && r._id === selectedRegion._id;
-      if (selectedPointVente) return pv?._id === selectedPointVente._id;
+    if (userRole === 'AdminRegion') {
+      // toujours par PVs de la région
+      return pv?.nom ?? null;
+    }
+
+    if (userRole === 'AdminPointVente') {
+      // label unique : nom du PV
+      return selectedPointVente?.nom ?? pv?.nom ?? 'Point de vente';
+    }
+
+    return null;
+  };
+
+  const filtered = useMemo(() => {
+    return asArray<MouvementStock>(data).filter((item) => {
+      if (item.depotCentral) return false;
+      if (item.type !== operationType) return false;
+
+      const rg = getRegionObj(item);
+      const pv = getPvObj(item);
+
+      if (selectedPointVente && idOf(pv) !== selectedPointVente._id) return false;
+      if (selectedRegion && idOf(rg) !== selectedRegion._id) return false;
+
       return true;
     });
+    //@ts-ignore
+  }, [data, operationType, selectedRegion?._id, selectedPointVente?._id]);
 
-    filtered.forEach((item) => {
-      const produit = item.produit.nom;
-      let key = '';
-
-      if (userRole === 'SuperAdmin' || selectedRegion) {
-        key =
-          typeof item.pointVente?.region !== 'string'
-            ? item.pointVente?.region?.nom || 'Non défini'
-            : 'Non défini';
-      } else if (userRole === 'AdminRegion' || selectedPointVente) {
-        key = item.pointVente?.nom || 'Non défini';
-      } else {
-        key = produit;
-      }
-
+  const processedData = useMemo(() => {
+    const grouped: Grouped = {};
+    asArray<MouvementStock>(filtered).forEach((item) => {
+      const produit = item?.produit?.nom ?? '(sans nom)';
+      const label = labelFor(item);
+      if (!label) return;
       if (!grouped[produit]) grouped[produit] = {};
-      if (!grouped[produit][key]) grouped[produit][key] = 0;
-      grouped[produit][key] += item.quantite;
+      if (!grouped[produit][label]) grouped[produit][label] = 0;
+      grouped[produit][label] += toNumber(item.quantite, 0);
     });
-
     return grouped;
-  }, [data, operationType, userRole, selectedRegion, selectedPointVente]);
+  }, [filtered]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Préparation des données pour le graphique
+  /* ----------------------------- Préparation chart ----------------------------- */
   const chartData = useMemo(() => {
-    const keySet = new Set<string>();
+    const labelSet = new Set<string>();
     const productTotals: Record<string, number> = {};
 
-    Object.values(processedData).forEach((map) => Object.keys(map).forEach((k) => keySet.add(k)));
-    const keys = Array.from(keySet);
+    Object.values(processedData).forEach((map) => Object.keys(map).forEach((k) => labelSet.add(k)));
+    const labels = Array.from(labelSet);
 
     const datasets = Object.entries(processedData).map(([product, map], idx) => {
-      const data = keys.map((k) => map[k] || 0);
-      productTotals[product] = data.reduce((a, b) => a + b, 0);
+      const serie = labels.map((k) => toNumber(map[k], 0));
+      productTotals[product] = serie.reduce((a, b) => a + b, 0);
       return {
         label: product,
         backgroundColor: COLORS[idx % COLORS.length],
@@ -252,13 +320,12 @@ const AnalyseMouvementStockChart: React.FC<{
         borderRadius: 8,
         barPercentage: 0.8,
         categoryPercentage: 0.7,
-        data,
+        data: serie,
       };
     });
 
     const sorted = Object.entries(productTotals).sort((a, b) => b[1] - a[1]);
 
-    // Déterminer le contexte pour les labels KPI
     const context = selectedRegion
       ? `dans ${selectedRegion.nom}`
       : selectedPointVente
@@ -268,20 +335,20 @@ const AnalyseMouvementStockChart: React.FC<{
     const operationText = operationType.toLowerCase();
 
     return {
-      labels: keys,
+      labels,
       datasets,
       indicators: [
         {
           label: `Produit le plus ${operationText} ${context}`,
           value: sorted[0]?.[0] || 'Aucune donnée',
           quantity: sorted[0]?.[1] || 0,
-          //@ts-ignore
+          // @ts-expect-error - compat: external lib types mismatch
           icon: PrimeIcons.TROPHY,
           color: 'bg-green-50',
           iconColor: 'text-green-600',
         },
         {
-          label: `Produit moyen ${operationText} ${context}`,
+          label: `Produit médian ${operationText} ${context}`,
           value: sorted[Math.floor(sorted.length / 2)]?.[0] || 'Aucune donnée',
           quantity: sorted[Math.floor(sorted.length / 2)]?.[1] || 0,
           icon: PrimeIcons.CHART_BAR,
@@ -300,7 +367,6 @@ const AnalyseMouvementStockChart: React.FC<{
     };
   }, [processedData, operationType, selectedRegion, selectedPointVente]);
 
-  // Configuration du graphique
   const chartOptions = {
     maintainAspectRatio: false,
     responsive: true,
@@ -322,7 +388,7 @@ const AnalyseMouvementStockChart: React.FC<{
         bodyFont: { size: 14, weight: '500' as const },
         callbacks: {
           label: function (context: any) {
-            return `${context.dataset.label}: ${context.parsed.y.toLocaleString()}`;
+            return `${context.dataset.label}: ${toNumber(context.parsed.y).toLocaleString()}`;
           },
         },
       },
@@ -347,48 +413,52 @@ const AnalyseMouvementStockChart: React.FC<{
     animation: { duration: 800, easing: 'easeInOutQuart' as const },
   };
 
-  // Génération du titre dynamique
   const chartTitle = useMemo(() => {
-    const baseTitle = 'Analyse des mouvements de stock';
-    const operationText = operationType.toLowerCase();
-
-    if (selectedRegion) return `${baseTitle} - ${operationText} (${selectedRegion.nom})`;
-    if (selectedPointVente) return `${baseTitle} - ${operationText} (${selectedPointVente.nom})`;
-    return `${baseTitle} - ${operationText}`;
-  }, [operationType, selectedRegion, selectedPointVente]);
+    const baseTitle = 'Analyse des mouvements de stock (quantités)';
+    const op = operationType.toLowerCase();
+    if (userRole === 'AdminPointVente') {
+      return `${baseTitle} - ${op} (${selectedPointVente?.nom ?? 'Point de vente'})`;
+    }
+    if (selectedRegion) return `${baseTitle} - ${op} (${selectedRegion.nom})`;
+    if (selectedPointVente) return `${baseTitle} - ${op} (${selectedPointVente.nom})`;
+    return `${baseTitle} - ${op}`;
+  }, [operationType, selectedRegion, selectedPointVente, userRole]);
 
   return (
-    <motion.div
-      // whileHover={{ y: -3, scale: 1.02 }}
-      className="bg-gradient-to-br  from-green-50 to-white rounded-xl shadow-lg overflow-hidden border border-green-100 transition-all duration-300 w-full h-full"
-    >
+    <motion.div className="bg-gradient-to-br from-green-50 to-white rounded-xl shadow-lg overflow-hidden border border-green-100 transition-all duration-300 w-full h-full">
       <Card className="border-round-xl overflow-hidden w-full h-full bg-none border-none shadow-none">
-        <div className="flex justify-center flex-column h-full w-full ">
-          {/* En-tête moderne avec titre centré */}
-          <h2 className="text-900 font-semibold text-2xl m-0 mb-2">{chartTitle}</h2>
+        <div className="flex justify-center flex-col h-full w-full">
+          <h2 className="text-900 font-semibold text-2xl m-0 mb-2 text-center">{chartTitle}</h2>
         </div>
 
         <div className="p-5 pb-3 w-full gap-4">
           <FilterControls
             operationType={operationType}
-            //@ts-ignore
+            // @ts-expect-error - compat: external lib types mismatch
             onOperationChange={setOperationType}
-            selectedRegion={selectedRegion}
-            onRegionChange={setSelectedRegion}
-            selectedPointVente={selectedPointVente}
-            onPointVenteChange={setSelectedPointVente}
+            selectedRegion={
+              userRole === 'AdminRegion' ? (initialRegion ?? selectedRegion) : selectedRegion
+            }
+            onRegionChange={userRole === 'AdminRegion' ? () => {} : setSelectedRegion}
+            selectedPointVente={
+              userRole === 'AdminPointVente'
+                ? (initialPointVente ?? selectedPointVente)
+                : selectedPointVente
+            }
+            onPointVenteChange={userRole === 'AdminPointVente' ? () => {} : setSelectedPointVente}
             regions={regions}
             pointsVente={pointsVente}
             userRole={userRole}
           />
         </div>
-        {/* Indicateurs KPI sur une seule ligne */}
+
+        {/* KPI */}
         <div className="p-5 pb-3 w-full flex-shrink-0">
-          <div className="flex flex-row gap-4 flex-row w-full justify-center">
-            {chartData.indicators.map((indicator, idx) => (
-              <div key={idx} className="col-12 md:col-4">
-                <div className={classNames(indicator.color, 'bg-opacity-50')}>
-                  <KPIIndicator {...indicator} />
+          <div className="flex flex-row gap-4 w-full justify-center">
+            {chartData.indicators.map((it: any, idx: number) => (
+              <div key={idx} className="max-w-[360px] w-full">
+                <div className={classNames(it.color, 'bg-opacity-50')}>
+                  <KPIIndicator {...it} />
                 </div>
               </div>
             ))}
@@ -396,9 +466,14 @@ const AnalyseMouvementStockChart: React.FC<{
         </div>
 
         <div className="flex-grow px-5 pb-5 w-full h-full">
-          <div className="bg-opacity-60 border-round-lg p-3 h-full w-full border-1 border-green-100">
-            <div className="relative w-full h-full " style={{ minHeight: '300px' }}>
-              <Chart type="bar" data={chartData} options={chartOptions} className="min-h-[300px]" />
+          <div className="bg-opacity-60 rounded-lg p-3 h-full w-full border border-green-100">
+            <div className="relative w-full h-full" style={{ minHeight: 300 }}>
+              <Chart
+                type="bar"
+                data={chartData as any}
+                options={chartOptions as any}
+                className="min-h-[300px]"
+              />
             </div>
           </div>
         </div>

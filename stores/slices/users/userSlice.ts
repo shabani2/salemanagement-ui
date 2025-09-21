@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
 import {
@@ -6,201 +7,343 @@ import {
   createEntityAdapter,
   EntityAdapter,
 } from '@reduxjs/toolkit';
-import { RootState } from '../../store'; // Assure-toi que RootState est correctement importé
+import { RootState } from '../../store';
 import { apiClient } from '../../../lib/apiConfig';
 import { User, UserModel } from '../../../Models/UserType';
 
-// ✅ Interface pour l'état utilisateur
-interface UserState {
-  status: 'idle' | 'loading' | 'succeeded' | 'failed';
-  error: string | null;
+/* ---------------- Types pagination & requêtes ---------------- */
+type Status = 'idle' | 'loading' | 'succeeded' | 'failed';
+
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasPrev: boolean;
+  hasNext: boolean;
 }
 
-// ✅ Adapter pour gérer les utilisateurs avec Redux Toolkit
+export type Order = 'asc' | 'desc';
+
+export interface FetchParams {
+  page?: number;
+  limit?: number;
+  q?: string;
+  role?: string;
+  region?: string; // filtre par région (user.region ou pv.region)
+  pointVente?: string; // filtre par pointVente
+  sortBy?: string; // 'createdAt' | 'nom' | 'prenom' | 'email' | 'telephone' | 'role' | 'region.nom' | 'pointVente.nom'
+  order?: Order; // 'asc' | 'desc'
+  includeTotal?: boolean;
+}
+
+/* ---------------- State ---------------- */
+interface UserState {
+  status: Status;
+  error: string | null;
+  meta: PaginationMeta | null;
+}
+
 const userAdapter: EntityAdapter<User, string> = createEntityAdapter<User, string>({
-  selectId: (user) => user._id, // _id doit être une string ou un number
+  selectId: (user) => user._id,
 });
 
-// ✅ Initialisation de l'état avec l'adapter
 const initialState = userAdapter.getInitialState<UserState>({
   status: 'idle',
   error: null,
+  meta: null,
 });
 
-// ✅ Fonction pour récupérer le token d'authentification
+/* ---------------- Utils ---------------- */
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('token-agricap');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  try {
+    if (typeof window === 'undefined') return {};
+    const token = localStorage.getItem('token-agricap');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
 };
 
-// ✅ Thunk pour récupérer les utilisateurs
-export const fetchUsers = createAsyncThunk('users/fetchUsers', async (_, { rejectWithValue }) => {
+const toQueryString = (params: Record<string, any>) => {
+  const sp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return;
+    sp.append(k, String(v));
+  });
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+};
+
+/* ---------------- Thunks ---------------- */
+
+// Liste paginée / triée / filtrée
+export const fetchUsers = createAsyncThunk<
+  { data: User[]; meta?: PaginationMeta },
+  FetchParams | undefined,
+  { rejectValue: string }
+>('users/fetchUsers', async (params, { rejectWithValue }) => {
   try {
-    const response = await apiClient.get('/user', {
+    const {
+      page = 1,
+      limit = 10,
+      q,
+      role,
+      region,
+      pointVente,
+      sortBy = 'createdAt',
+      order = 'desc',
+      includeTotal = true,
+    } = params || {};
+
+    const query = toQueryString({
+      page,
+      limit,
+      q,
+      role,
+      region,
+      pointVente,
+      sortBy,
+      order,
+      includeTotal,
+    });
+
+    const response = await apiClient.get(`/user${query}`, {
       headers: getAuthHeaders(),
     });
-    console.log('response => : ', response.data);
-    return response.data;
+    return response.data as { data: User[]; meta?: PaginationMeta };
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      return rejectWithValue(error.message);
-    }
+    if (error instanceof Error) return rejectWithValue(error.message);
     return rejectWithValue('Erreur lors de la récupération des utilisateurs');
   }
 });
 
-export const fetchUsersByRegionId = createAsyncThunk(
-  'Stock/fetchUsersByregionId',
-  async (regionId: string, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.get(`/user/region/${regionId}`, {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
-      return rejectWithValue('Erreur lors de la récupération du mouvement de stock');
-    }
-  }
-);
+// Utilisateurs par région (AdminRegion) — accepte les mêmes query (q/tri/pagination)
+export const fetchUsersByRegionId = createAsyncThunk<
+  { data: User[]; meta?: PaginationMeta },
+  { regionId?: string } & Omit<FetchParams, 'region' | 'pointVente'>,
+  { rejectValue: string }
+>('users/fetchUsersByRegionId', async ({ regionId, ...params }, { rejectWithValue }) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      q,
+      role,
+      sortBy = 'createdAt',
+      order = 'desc',
+      includeTotal = true,
+    } = params;
 
-export const fetchUsersByPointVenteId = createAsyncThunk(
-  'Stock/fetchUsersBypointVenteId',
-  async (pointVenteId: string, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.get(`/user/${pointVenteId}`, {
-        headers: getAuthHeaders(),
-      });
-      return response.data;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
-      return rejectWithValue('Erreur lors de la récupération du mouvement de stock');
-    }
-  }
-);
+    const query = toQueryString({
+      page,
+      limit,
+      q,
+      role,
+      sortBy,
+      order,
+      includeTotal,
+    });
 
-// ✅ Thunk pour ajouter un utilisateur
-export const addUser = createAsyncThunk(
+    const url = regionId ? `/user/region/${regionId}${query}` : `/user/region${query}`;
+    const response = await apiClient.get(url, {
+      headers: getAuthHeaders(),
+    });
+    return response.data as { data: User[]; meta?: PaginationMeta };
+  } catch (error: unknown) {
+    if (error instanceof Error) return rejectWithValue(error.message);
+    return rejectWithValue('Erreur lors de la récupération des utilisateurs (région)');
+  }
+});
+
+// Utilisateurs par point de vente (AdminPointVente)
+export const fetchUsersByPointVenteId = createAsyncThunk<
+  { data: User[]; meta?: PaginationMeta },
+  { pointVenteId: string } & Omit<FetchParams, 'region' | 'pointVente'>,
+  { rejectValue: string }
+>('users/fetchUsersByPointVenteId', async ({ pointVenteId, ...params }, { rejectWithValue }) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      q,
+      role,
+      sortBy = 'createdAt',
+      order = 'desc',
+      includeTotal = true,
+    } = params;
+
+    const query = toQueryString({
+      page,
+      limit,
+      q,
+      role,
+      sortBy,
+      order,
+      includeTotal,
+    });
+
+    const response = await apiClient.get(`/user/pointvente/${pointVenteId}${query}`, {
+      headers: getAuthHeaders(),
+    });
+    return response.data as { data: User[]; meta?: PaginationMeta };
+  } catch (error: unknown) {
+    if (error instanceof Error) return rejectWithValue(error.message);
+    return rejectWithValue('Erreur lors de la récupération des utilisateurs (point de vente)');
+  }
+});
+
+// Création
+export const addUser = createAsyncThunk<User, UserModel, { rejectValue: string }>(
   'users/addUser',
-  async (user: UserModel, { rejectWithValue }) => {
+  async (user, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post('/user/', user, {
+      const response = await apiClient.post('/user', user, {
         headers: getAuthHeaders(),
       });
-      return response.data;
+      return response.data as User;
     } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
+      if (error instanceof Error) return rejectWithValue(error.message);
       return rejectWithValue('Erreur lors de l’ajout de l’utilisateur');
     }
   }
 );
 
-// ✅ Thunk pour mettre à jour un utilisateur
-export const updateUser = createAsyncThunk(
+// Mise à jour (multipart)
+export const updateUser = createAsyncThunk<User, FormData, { rejectValue: string }>(
   'users/updateUser',
-  async (user: User, { rejectWithValue }) => {
+  async (formData, { rejectWithValue }) => {
     try {
-      const response = await apiClient.put(`/user`, user, {
-        headers: getAuthHeaders(), // Ajoute le token d'authentification
+      const response = await apiClient.put(`/user`, formData, {
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'multipart/form-data',
+        },
       });
-      console.log('response updating => : ', response.data);
-      return response.data;
+      return response.data as User;
     } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
+      if (error instanceof Error) return rejectWithValue(error.message);
       return rejectWithValue('Erreur lors de la mise à jour de l’utilisateur');
     }
   }
 );
 
-// ✅ Thunk pour supprimer un utilisateur
-export const deleteUser = createAsyncThunk(
+// Suppression
+export const deleteUser = createAsyncThunk<string, string, { rejectValue: string }>(
   'users/deleteUser',
-  async (userId: string, { rejectWithValue }) => {
+  async (userId, { rejectWithValue }) => {
     try {
       await apiClient.delete(`/user/${userId}`, {
         headers: getAuthHeaders(),
       });
       return userId;
     } catch (error: unknown) {
-      if (error instanceof Error) {
-        return rejectWithValue(error.message);
-      }
+      if (error instanceof Error) return rejectWithValue(error.message);
       return rejectWithValue('Erreur lors de la suppression de l’utilisateur');
     }
   }
 );
 
-// ✅ Création du slice Redux
+/* ---------------- Slice ---------------- */
 const userSlice = createSlice({
   name: 'users',
   initialState,
   reducers: {
-    addUser: userAdapter.addOne,
+    addUserLocal: userAdapter.addOne,
   },
   extraReducers: (builder) => {
     builder
+      /** fetchUsers */
+      .addCase(fetchUsers.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
       .addCase(fetchUsers.fulfilled, (state, action) => {
-        fetchUsersByPointVenteId;
         state.status = 'succeeded';
-        userAdapter.setAll(state, action.payload);
+        const data = action.payload?.data ?? [];
+        const meta = action.payload?.meta ?? null;
+        userAdapter.setAll(state, data);
+        state.meta = meta;
       })
       .addCase(fetchUsers.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload as string;
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
       })
-      .addCase(addUser.fulfilled, (state, action) => {
-        userAdapter.addOne(state, action.payload);
-      })
-      .addCase(updateUser.fulfilled, (state, action) => {
-        userAdapter.upsertOne(state, action.payload);
-      })
-      .addCase(deleteUser.fulfilled, (state, action) => {
-        userAdapter.removeOne(state, action.payload);
-      })
-      .addCase(fetchUsersByPointVenteId.fulfilled, (state, action) => {
-        state.status = 'succeeded';
-        userAdapter.setAll(state, action.payload);
-      })
-      .addCase(fetchUsersByPointVenteId.rejected, (state, action) => {
-        state.status = 'failed';
-        state.error = action.payload as string;
+
+      /** fetchUsersByRegionId */
+      .addCase(fetchUsersByRegionId.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
       })
       .addCase(fetchUsersByRegionId.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        userAdapter.setAll(state, action.payload);
+        const data = action.payload?.data ?? [];
+        const meta = action.payload?.meta ?? null;
+        userAdapter.setAll(state, data);
+        state.meta = meta;
       })
       .addCase(fetchUsersByRegionId.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload as string;
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
+      })
+
+      /** fetchUsersByPointVenteId */
+      .addCase(fetchUsersByPointVenteId.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(fetchUsersByPointVenteId.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        const data = action.payload?.data ?? [];
+        const meta = action.payload?.meta ?? null;
+        userAdapter.setAll(state, data);
+        state.meta = meta;
+      })
+      .addCase(fetchUsersByPointVenteId.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = (action.payload as string) ?? 'Erreur inconnue';
+      })
+
+      /** addUser */
+      .addCase(addUser.fulfilled, (state, action) => {
+        userAdapter.addOne(state, action.payload);
+        if (state.meta) {
+          state.meta.total += 1;
+          state.meta.totalPages = Math.max(1, Math.ceil(state.meta.total / state.meta.limit));
+        }
+      })
+
+      /** updateUser */
+      .addCase(updateUser.fulfilled, (state, action) => {
+        userAdapter.upsertOne(state, action.payload);
+      })
+
+      /** deleteUser */
+      .addCase(deleteUser.fulfilled, (state, action) => {
+        userAdapter.removeOne(state, action.payload);
+        if (state.meta) {
+          state.meta.total = Math.max(0, state.meta.total - 1);
+          state.meta.totalPages = Math.max(1, Math.ceil(state.meta.total / state.meta.limit));
+        }
       });
   },
 });
 
 export const userReducer = userSlice.reducer;
 
-// ✅ Sélecteurs générés automatiquement par `createEntityAdapter`
+/* ---------------- Selectors ---------------- */
 export const {
-  selectAll: selectAllUsers, // Récupère tous les utilisateurs
-  selectById: selectUserById, // Récupère un utilisateur par ID
-  selectEntities: selectUserEntities, // Récupère les utilisateurs sous forme d’objet { id: user }
-  selectIds: selectUserIds, // Récupère uniquement les IDs des utilisateurs
-  selectTotal: selectTotalUsers, // Récupère le nombre total d’utilisateurs
+  selectAll: selectAllUsers,
+  selectById: selectUserById,
+  selectEntities: selectUserEntities,
+  selectIds: selectUserIds,
+  selectTotal: selectTotalUsers,
 } = userAdapter.getSelectors<RootState>((state) => state.users);
 
-// ✅ Sélecteurs personnalisés
 export const selectUserStatus = (state: RootState) => state.users.status;
 export const selectUserError = (state: RootState) => state.users.error;
+export const selectUserMeta = (state: RootState) => state.users.meta;
 
-// ✅ Sélecteur pour récupérer les utilisateurs selon leur rôle
-export const selectUserByRole = (role: string) => (state: RootState) => {
-  const usersArray = selectAllUsers(state); // 🔥 Assure-toi de récupérer un tableau
-  return usersArray.filter((user) => user?.role === role);
-};
+/** Filtre par rôle côté client (optionnel) */
+export const selectUserByRole = (role: string) => (state: RootState) =>
+  selectAllUsers(state).filter((u) => u?.role === role);

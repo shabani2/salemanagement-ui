@@ -130,12 +130,12 @@ export const updateOrganisation = createAsyncThunk(
       let body: FormData | Partial<Organisation> = data;
 
       // si nouveau logo (File), alors multipart/form-data
-      //@ts-ignore
+      // @ts-expect-error - compat: external lib types mismatch
       const hasFile = data.logo instanceof File;
       if (hasFile) {
         const formData = new FormData();
         for (const key in data) {
-          //@ts-ignore
+          // @ts-expect-error - compat: external lib types mismatch
           if (key === 'logo' && data.logo instanceof File) {
             formData.append('logo', data.logo);
           } else {
