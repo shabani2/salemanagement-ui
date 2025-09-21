@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 /** === VOS VALEURS PAR DÉFAUT SANS .env === */
-const DEFAULT_API_FALLBACK = 'https://agricap-api-3a2d9a422767.herokuapp.com';
+// const DEFAULT_API_FALLBACK = 'https://agricap-api-3a2d9a422767.herokuapp.com';
+const DEFAULT_API_FALLBACK = 'https://agricap-backend-da11c78fe082.herokuapp.com/';
 const HOST_TO_API: Record<string, string> = {
   'agricap-ui-429dded64762.herokuapp.com': DEFAULT_API_FALLBACK,
 };

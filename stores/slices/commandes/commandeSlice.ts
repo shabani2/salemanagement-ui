@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import {
@@ -94,11 +92,15 @@ const q = (params?: Record<string, any>) => {
 export const fetchCommandes = createAsyncThunk(
   'commandes/fetchCommandes',
   async (
-    { page = 1, limit = 10, filters = {} as Record<string, any> }: { page?: number; limit?: number; filters?: Record<string, any> },
+    {
+      page = 1,
+      limit = 10,
+      filters = {} as Record<string, any>,
+    }: { page?: number; limit?: number; filters?: Record<string, any> },
     { rejectWithValue }
   ) => {
     try {
-      const res = await apiClient.get(`/commandes${q({ page, limit, ...filters })}` , {
+      const res = await apiClient.get(`/commandes${q({ page, limit, ...filters })}`, {
         headers: getAuthHeaders(),
       });
       return { ...res.data, page, limit };
@@ -276,7 +278,8 @@ export const createCommande = createAsyncThunk<
         }
       );
 
-      const cd = (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
+      const cd =
+        (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
       const filename = parseFilenameFromDisposition(cd) || 'Bon_de_commande.pdf';
 
       return { type: 'pdf', blob: res.data as Blob, filename };
@@ -300,12 +303,13 @@ export const printCommandeById = createAsyncThunk<
   { rejectValue: string }
 >('commandes/printCommandeById', async ({ id, format = 'pos80' }, { rejectWithValue }) => {
   try {
-    const res = await apiClient.get(`/commandes/${id}/print?format=${encodeURIComponent(format)}` , {
+    const res = await apiClient.get(`/commandes/${id}/print?format=${encodeURIComponent(format)}`, {
       headers: { ...getAuthHeaders(), Accept: 'application/pdf' },
       responseType: 'blob',
     });
 
-    const cd = (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
+    const cd =
+      (res.headers as any)['content-disposition'] || (res.headers as any)['Content-Disposition'];
     const filename = parseFilenameFromDisposition(cd) || `Bon_de_commande_${id}.pdf`;
 
     return { blob: res.data as Blob, filename };
@@ -446,4 +450,3 @@ export const selectCommandeError = (state: RootState) => state.commandes.error;
 export const selectCommandeTotalCount = (state: RootState) => state.commandes.totalCommandes;
 export const selectCommandePage = (state: RootState) => state.commandes.page;
 export const selectCommandeLimit = (state: RootState) => state.commandes.limit;
-

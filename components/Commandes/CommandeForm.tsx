@@ -150,13 +150,12 @@ const CommandeForm: React.FC = () => {
           // @ts-expect-error -- raison claire
         } else if (u.role === 'AdminRegion' && u.region?._id) {
           await dispatch(fetchRegions({ limit: 100000 } as any));
-          
+
           await dispatch(
             // @ts-expect-error -- raison claire
             fetchPointVentesByRegionId({ regionId: u.region._id, limit: 100000 } as any)
           );
           setDestType('central'); // défaut
-         
         } else if (
           (u.role === 'AdminPointVente' || u.role === 'Logisticien') &&
           // @ts-expect-error -- raison claire

@@ -533,6 +533,8 @@ const Page: React.FC = () => {
     }
   }, [dispatch, newUser, refetchCurrent]);
 
+  console.log('users : ', users);
+
   /* ---------------------------------- UI ---------------------------------- */
   return (
     <div className="min-h-screen">
