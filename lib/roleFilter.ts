@@ -16,9 +16,15 @@ export function filterRoutesByRole(role: UserRole) {
     case 'adminpointvente':
       return base.concat(
         menuItems.filter((r) =>
-          ['Opérations', 'Stock', 'Rapports', 'Utilisateurs', 'Finances', 'Commandes'].includes(
-            r.title
-          )
+          [
+            'Opérations',
+            'Stock',
+            'Produits',
+            'Rapports',
+            'Utilisateurs',
+            'Finances',
+            'Commandes',
+          ].includes(r.title)
         )
       );
 

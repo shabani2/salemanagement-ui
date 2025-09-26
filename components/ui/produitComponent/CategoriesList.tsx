@@ -7,6 +7,8 @@ import { Button } from 'primereact/button';
 import { Paginator } from 'primereact/paginator';
 import { Categorie } from '@/Models/produitsType';
 import { useRef, useState } from 'react';
+import { API_URL } from '@/lib/apiConfig';
+import { resolveFinalImagePath } from '@/lib/utils/baseUrl';
 
 interface Props {
   categories: Categorie[];
@@ -65,7 +67,7 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
                 <div className="relative w-12 h-12 rounded-full overflow-hidden">
                   {categorie.image && (
                     <img
-                      src={`http://localhost:8000/${categorie.image.replace('../', '')}`}
+                      src={resolveFinalImagePath(categorie?.image, '1')}
                       alt={categorie.nom}
                       className="object-cover w-full h-full"
                     />

@@ -101,7 +101,6 @@ const Page: React.FC = () => {
     email: '',
     telephone: '',
     adresse: '',
-    password: '',
     role: '',
     region: '',
     pointVente: '',
@@ -255,15 +254,16 @@ const Page: React.FC = () => {
         email: selectedUser.email ?? '',
         telephone: selectedUser.telephone ?? '',
         adresse: selectedUser.adresse ?? '',
-        password: '',
         role: selectedUser.role ?? '',
         region:
           typeof selectedUser.region === 'object' && selectedUser.region
-            ? (selectedUser.region._id ?? '')
+            ? //@ts-ignore
+              (selectedUser.region._id ?? '')
             : ((selectedUser.region as any) ?? ''),
         pointVente:
           typeof selectedUser.pointVente === 'object' && selectedUser.pointVente
-            ? (selectedUser.pointVente._id ?? '')
+            ? //@ts-ignore
+              (selectedUser.pointVente._id ?? '')
             : ((selectedUser.pointVente as any) ?? ''),
         image: typeof selectedUser.image === 'string' ? selectedUser.image : null,
       });
@@ -442,14 +442,15 @@ const Page: React.FC = () => {
     if (!isNonEmptyString(payload.nom)) errs.nom = 'Requis';
     if (!isNonEmptyString(payload.prenom)) errs.prenom = 'Requis';
     if (!isNonEmptyString(payload.email)) errs.email = 'Requis';
-    if (!isEdit && !isNonEmptyString(payload.password)) errs.password = 'Requis';
+
     return errs;
   };
 
   const handleCreateOrUpdate = useCallback(async () => {
-    const isEditMode = !!newUser?._id;
-    const errs = validateUserPayload(newUser, isEditMode);
-    setErrors(errs);
+    const isEditMode = !!(newUser as any)?._id;
+
+    const errs = validateUserPayload(newUser as any, isEditMode);
+    setErrors(errs as any);
     if (Object.keys(errs).length > 0) {
       toast.current?.show({
         severity: 'warn',
@@ -466,8 +467,8 @@ const Page: React.FC = () => {
       // Toujours FormData (image possible)
       const fd = new FormData();
 
-      if (isEditMode && newUser._id) {
-        fd.append('_id', String(newUser._id));
+      if (isEditMode && (newUser as any)._id) {
+        fd.append('_id', String((newUser as any)._id));
       }
 
       fd.append('nom', newUser.nom);
@@ -475,24 +476,19 @@ const Page: React.FC = () => {
       fd.append('telephone', newUser.telephone ?? '');
       fd.append('email', newUser.email);
       fd.append('adresse', newUser.adresse ?? '');
-
-      if (!isEditMode || newUser.password) {
-        fd.append('password', newUser.password);
-      }
-
       fd.append('role', newUser.role ?? '');
 
       if (newUser.region) {
         const regionValue = isRegion(newUser.region as any)
           ? (newUser.region as any)?._id
-          : newUser.region;
+          : (newUser.region as unknown as string);
         if (regionValue) fd.append('region', String(regionValue));
       }
 
       if (newUser.pointVente) {
         const pvValue = isPointVente(newUser.pointVente as any)
           ? (newUser.pointVente as any)?._id
-          : newUser.pointVente;
+          : (newUser.pointVente as unknown as string);
         if (pvValue) fd.append('pointVente', String(pvValue));
       }
 
@@ -531,9 +527,15 @@ const Page: React.FC = () => {
     } finally {
       setLoadingCreateOrUpdate(false);
     }
-  }, [dispatch, newUser, refetchCurrent]);
-
-  console.log('users : ', users);
+  }, [
+    dispatch,
+    newUser,
+    setErrors,
+    setDialogType,
+    setNewUser,
+    refetchCurrent,
+    setLoadingCreateOrUpdate,
+  ]);
 
   /* ---------------------------------- UI ---------------------------------- */
   return (
@@ -702,9 +704,11 @@ const Page: React.FC = () => {
                       <td className="px-4 py-2">{row?.telephone ?? '—'}</td>
                       <td className="px-4 py-2">
                         {typeof row?.pointVente === 'object' && row?.pointVente
-                          ? row.pointVente.nom
+                          ? //@ts-ignore
+                            row.pointVente.nom
                           : typeof row?.region === 'object' && row?.region
-                            ? row.region.nom
+                            ? //@ts-ignore
+                              row.region.nom
                             : 'Depot Central'}
                       </td>
 

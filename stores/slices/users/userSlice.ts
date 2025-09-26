@@ -45,6 +45,7 @@ interface UserState {
 }
 
 const userAdapter: EntityAdapter<User, string> = createEntityAdapter<User, string>({
+  //@ts-ignore
   selectId: (user) => user._id,
 });
 
@@ -76,6 +77,75 @@ const toQueryString = (params: Record<string, any>) => {
 };
 
 /* ---------------- Thunks ---------------- */
+
+// file: [Votre fichier de slice/thunks Redux (ex: usersSlice.ts)]
+
+// Modèles pour les données entrantes et sortantes
+type MessageResponse = { message: string; user: User }; // Assumons que le backend renvoie le message ET l'utilisateur créé/mis à jour
+interface UserCreationPayload {
+  // Pour le cas où l'Admin envoie les données sans fichier (JSON)
+  nom: string;
+  prenom: string;
+  telephone: string;
+  email: string;
+  adresse: string;
+  password: string; // Le mot de passe est obligatoire lors de la création manuelle
+  role: User['role'];
+  pointVente?: string;
+  region?: string;
+  // Image non incluse ici car elle sera gérée par l'Admin via une route séparée ou l'update
+}
+
+// --- Thunk 1: Ajout d'un Utilisateur par Admin (Route: /api/users/create, pas d'upload initial) ---
+export const createUser = createAsyncThunk<
+  User, // La valeur renvoyée par le thunk (l'utilisateur créé)
+  UserCreationPayload, // Le payload attendu pour la création manuelle
+  { rejectValue: string }
+>('users/addUser', async (user, { rejectWithValue }) => {
+  try {
+    // 🛑 L'URL est modifiée pour correspondre à la nouvelle fonction createUser du controller user
+    const response = await apiClient.post<MessageResponse>('/user', user, {
+      headers: getAuthHeaders(),
+    });
+
+    // On retourne l'objet utilisateur pour l'ajouter au state
+    return response.data.user;
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      'Erreur lors de l’ajout de l’utilisateur.';
+    return rejectWithValue(String(msg));
+  }
+});
+
+// --- Thunk 2: Mise à jour d'un Utilisateur (Utilise FormData pour gérer les fichiers) ---
+export const updateUser = createAsyncThunk<
+  User, // La valeur renvoyée par le thunk (l'utilisateur mis à jour)
+  FormData, // Le payload est FormData car il peut inclure des fichiers
+  { rejectValue: string }
+>('users/updateUser', async (formData, { rejectWithValue }) => {
+  try {
+    // L'ID doit généralement être inclus dans le FormData ou dans l'URL/Headers pour l'identifier
+    // Assumons que l'ID est dans le FormData et que le backend sait le traiter.
+    const response = await apiClient.put<MessageResponse>(`/user`, formData, {
+      headers: {
+        ...getAuthHeaders(),
+        // 🛑 Très important pour les uploads avec FormData
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    // On retourne l'objet utilisateur mis à jour
+    return response.data.user;
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      'Erreur lors de la mise à jour de l’utilisateur.';
+    return rejectWithValue(String(msg));
+  }
+});
 
 // Liste paginée / triée / filtrée
 export const fetchUsers = createAsyncThunk<
@@ -193,42 +263,6 @@ export const fetchUsersByPointVenteId = createAsyncThunk<
   }
 });
 
-// Création
-export const addUser = createAsyncThunk<User, UserModel, { rejectValue: string }>(
-  'users/addUser',
-  async (user, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.post('/user', user, {
-        headers: getAuthHeaders(),
-      });
-      return response.data as User;
-    } catch (error: unknown) {
-      if (error instanceof Error) return rejectWithValue(error.message);
-      return rejectWithValue('Erreur lors de l’ajout de l’utilisateur');
-    }
-  }
-);
-
-// Mise à jour (multipart)
-export const updateUser = createAsyncThunk<User, FormData, { rejectValue: string }>(
-  'users/updateUser',
-  async (formData, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.put(`/user`, formData, {
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      return response.data as User;
-    } catch (error: unknown) {
-      if (error instanceof Error) return rejectWithValue(error.message);
-      return rejectWithValue('Erreur lors de la mise à jour de l’utilisateur');
-    }
-  }
-);
-
-// Suppression
 export const deleteUser = createAsyncThunk<string, string, { rejectValue: string }>(
   'users/deleteUser',
   async (userId, { rejectWithValue }) => {
@@ -305,7 +339,7 @@ const userSlice = createSlice({
       })
 
       /** addUser */
-      .addCase(addUser.fulfilled, (state, action) => {
+      .addCase(createUser.fulfilled, (state, action) => {
         userAdapter.addOne(state, action.payload);
         if (state.meta) {
           state.meta.total += 1;

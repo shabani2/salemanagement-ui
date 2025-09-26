@@ -17,11 +17,7 @@ import { usePathname } from 'next/navigation';
 import { User, isRegion, isPointVente } from '../../../Models/UserType';
 import { isUserRole } from '@/lib/utils';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
-
-// interface NavbarProps {
-//   onMenuClick: () => void;
-//   isOpen: boolean;
-// }
+import { resolveFinalImagePath } from '@/lib/utils/baseUrl';
 
 interface NavbarProps {
   onMenuClick: () => void;
@@ -35,7 +31,6 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
   const pathname = usePathname();
 
   const [user, setUser] = useState<User | null>(null);
-  const [hasMounted, setHasMounted] = useState(false);
 
   const handleLogout = () => {
     dispatch(logoutUser()).then(() => {
@@ -77,13 +72,12 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
     } else {
       setUser(null);
     }
-    setHasMounted(true);
+
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore - typage imprécis de la lib externe
   }, [pathname]); // 🔥 relit user sur changement de route
 
-  if (!hasMounted) return null;
-
+  const imagePath: string = resolveFinalImagePath(user?.image, '1');
   return (
     <nav
       className={`fixed top-0 !bg-green-700 text-gray-100 shadow flex justify-between items-center p-4 z-50 transition-all duration-300`}
@@ -115,7 +109,7 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
             </h3>
             {user?.image && (
               <img
-                src={`http://localhost:8000/${user.image.replace('../', '')}`}
+                src={imagePath}
                 width={32}
                 height={32}
                 className="rounded-full cursor-pointer"
