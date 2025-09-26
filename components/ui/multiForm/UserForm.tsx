@@ -14,9 +14,9 @@ import { createUser } from '@/stores/slices/users/userSlice';
 // Liste des rôles disponibles
 const roles = [
   { label: 'Super Administrateur', value: 'SuperAdmin' },
-  { label: 'Administrateur', value: 'Admin' },
-  { label: 'Vendeur', value: 'Vendeur' },
-  { label: 'Client', value: 'Client' },
+  // { label: 'Administrateur', value: 'Admin' },
+  // { label: 'Vendeur', value: 'Vendeur' },
+  // { label: 'Client', value: 'Client' },
 ];
 
 interface InputWithErrorProps {

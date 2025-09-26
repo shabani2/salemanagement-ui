@@ -145,6 +145,7 @@ export default function Page() {
         detail:
           //@ts-expect-error --explication
           e?.response?.data?.message ||
+          //@ts-expect-error --explication  
           e?.message ||
           'Impossible de mettre à jour le mot de passe.',
         life: 3500,
