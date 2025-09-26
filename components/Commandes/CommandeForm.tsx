@@ -165,6 +165,7 @@ const CommandeForm: React.FC = () => {
           const res: any = await dispatch(fetchPointVenteById(u.pointVente._id));
           const pv = res?.payload as PointVente | undefined;
           const regId = ((typeof pv !== 'string' ? pv?.region : undefined) ??
+            //@ts-expect-error --explication
             (typeof u.pointVente !== 'string' ? u.pointVente?.region : undefined)) as any;
 
           if (typeof regId === 'string' && regId) {

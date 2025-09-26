@@ -1,9 +1,10 @@
+// file: src/components/users/UserDialog.tsx
+import React from 'react';
 import { Dialog } from 'primereact/dialog';
 import { InputText } from 'primereact/inputtext';
 import { Dropdown } from 'primereact/dropdown';
-import { FileUpload } from 'primereact/fileupload';
+import { FileUpload, FileUploadSelectEvent } from 'primereact/fileupload';
 import { Button } from 'primereact/button';
-import React from 'react';
 import { isPointVente, isRegion } from '@/Models/UserType';
 import { getRoleOptionsByUser } from '@/lib/utils';
 
@@ -13,7 +14,6 @@ interface NewUser {
   telephone: string;
   email: string;
   adresse: string;
-  password?: string;
   role: string;
   region?: string | { _id: string; nom: string };
   pointVente?: string | { _id: string; nom: string };
@@ -33,6 +33,10 @@ interface UserDialogProps {
   loadingCreateOrUpdate: boolean;
 }
 
+const normalizeEmail = (v: string) => v.toLowerCase().replace(/\s+/g, '');
+const stripSpaces = (v: string) => v.replace(/\s+/g, '');
+const collapseSpaces = (v: string) => v.trim().replace(/\s+/g, ' ');
+
 const UserDialog: React.FC<UserDialogProps> = ({
   dialogType,
   setDialogType,
@@ -46,6 +50,7 @@ const UserDialog: React.FC<UserDialogProps> = ({
   loadingCreateOrUpdate,
 }) => {
   const readOnly = dialogType === 'detail';
+
   const effectivePreviewUrl =
     newUser.image instanceof File
       ? previewUrl
@@ -58,9 +63,24 @@ const UserDialog: React.FC<UserDialogProps> = ({
     newUser?.role === 'AdminPointVente' ||
     newUser?.role === 'Vendeur' ||
     newUser?.role === 'Logisticien';
+
   const user =
     typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user-agricap') || '{}') : null;
   const allowedOptions = getRoleOptionsByUser(user?.role);
+
+  const handleChange = (name: keyof NewUser, raw: string) => {
+    let value = raw ?? '';
+    if (name === 'email') value = normalizeEmail(value);
+    else if (name === 'telephone') value = stripSpaces(value);
+    else if (name === 'nom' || name === 'prenom' || name === 'adresse')
+      value = collapseSpaces(value);
+    setNewUser({ ...newUser, [name]: value } as NewUser);
+  };
+
+  const handleBlur = (name: keyof NewUser) => {
+    const current = (newUser[name] as unknown as string) || '';
+    handleChange(name, current); // réapplique la règle (collapsing/trim) à la sortie
+  };
 
   if (user?.role === 'Logisticien' || user?.role === 'Vendeur') return null;
 
@@ -82,22 +102,21 @@ const UserDialog: React.FC<UserDialogProps> = ({
         <div className="overflow-y-auto flex-grow px-4 py-2 space-y-4">
           {/* Nom & Prénom */}
           <div className="flex space-x-4">
-            {['nom', 'prenom'].map((name) => (
-              <div key={name} className="relative w-1/2 flex items-center">
-                <InputText
-                  type="text"
-                  placeholder={name === 'nom' ? 'Nom' : 'Prénom'}
-                  value={
-                    typeof newUser[name as keyof NewUser] === 'string'
-                      ? (newUser[name as keyof NewUser] as string)
-                      : ''
-                  }
-                  onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
-                  disabled={readOnly}
-                  required
-                  className="w-full pr-10"
-                />
-                <i className="pi pi-user absolute right-2  text-gray-5000 text-lg" />
+            {(['nom', 'prenom'] as const).map((name) => (
+              <div key={name} className="relative w-1/2 flex flex-col">
+                <div className="relative">
+                  <InputText
+                    type="text"
+                    placeholder={name === 'nom' ? 'Nom' : 'Prénom'}
+                    value={(newUser[name] as string) || ''}
+                    onChange={(e) => handleChange(name, e.target.value)}
+                    onBlur={() => handleBlur(name)}
+                    disabled={readOnly}
+                    className="w-full pr-10"
+                    required
+                  />
+                  <i className="pi pi-user absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-lg" />
+                </div>
                 {errors[name] && <small className="text-red-700">{errors[name]}</small>}
               </div>
             ))}
@@ -105,57 +124,64 @@ const UserDialog: React.FC<UserDialogProps> = ({
 
           {/* Téléphone & Email */}
           <div className="flex space-x-4">
-            {[
-              { name: 'telephone', placeholder: 'Téléphone', icon: 'pi-phone' },
-              { name: 'email', placeholder: 'Email', icon: 'pi-envelope' },
-            ].map(({ name, placeholder, icon }) => (
-              <div key={name} className="relative w-1/2 flex items-center">
+            {/* Téléphone */}
+            <div className="relative w-1/2 flex flex-col">
+              <div className="relative">
                 <InputText
                   type="text"
-                  placeholder={placeholder}
-                  value={
-                    typeof newUser[name as keyof NewUser] === 'string'
-                      ? (newUser[name as keyof NewUser] as string)
-                      : ''
-                  }
-                  onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
+                  placeholder="Téléphone"
+                  value={newUser.telephone || ''}
+                  onChange={(e) => handleChange('telephone', e.target.value)}
+                  onBlur={() => handleBlur('telephone')}
                   disabled={readOnly}
-                  required
                   className="w-full pr-10"
+                  required
                 />
-                <i className={`pi ${icon} absolute right-2  text-gray-5000 text-lg`} />
-                {errors[name] && <small className="text-red-700">{errors[name]}</small>}
+                <i className="pi pi-phone absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-lg" />
               </div>
-            ))}
+              {errors.telephone && <small className="text-red-700">{errors.telephone}</small>}
+            </div>
+
+            {/* Email */}
+            <div className="relative w-1/2 flex flex-col">
+              <div className="relative">
+                <InputText
+                  type="email"
+                  placeholder="Email"
+                  value={newUser.email || ''}
+                  onChange={(e) => handleChange('email', e.target.value)}
+                  onBlur={() => handleBlur('email')}
+                  disabled={readOnly}
+                  className="w-full pr-10"
+                  required
+                />
+                <i className="pi pi-envelope absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-lg" />
+              </div>
+              {errors.email && <small className="text-red-700">{errors.email}</small>}
+            </div>
           </div>
 
-          {/* Adresse & Mot de passe */}
-          {[
-            { name: 'adresse', placeholder: 'Adresse', icon: 'pi-map-marker' },
-            { name: 'password', placeholder: 'Mot de passe', icon: 'pi-key', type: 'password' },
-          ].map(({ name, placeholder, icon, type }) => (
-            <div key={name} className="relative flex items-center">
+          {/* Adresse */}
+          <div className="relative flex flex-col">
+            <div className="relative">
               <InputText
-                type={type || 'text'}
-                placeholder={placeholder}
-                value={
-                  typeof newUser[name as keyof NewUser] === 'string'
-                    ? (newUser[name as keyof NewUser] as string)
-                    : ''
-                }
-                onChange={(e) => setNewUser({ ...newUser, [name]: e.target.value })}
-                disabled={readOnly || (dialogType === 'edit' && name === 'password')}
-                required
+                type="text"
+                placeholder="Adresse"
+                value={newUser.adresse || ''}
+                onChange={(e) => handleChange('adresse', e.target.value)}
+                onBlur={() => handleBlur('adresse')}
+                disabled={readOnly}
                 className="w-full pr-10"
+                required
               />
-              <i className={`pi ${icon} absolute right-2  text-gray-5000 text-lg`} />
-              {errors[name] && <small className="text-red-700">{errors[name]}</small>}
+              <i className="pi pi-map-marker absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-lg" />
             </div>
-          ))}
+            {errors.adresse && <small className="text-red-700">{errors.adresse}</small>}
+          </div>
 
           {/* Rôle */}
           <Dropdown
-            value={newUser?.role}
+            value={newUser.role}
             options={allowedOptions}
             placeholder="Sélectionner un rôle"
             onChange={(e) => setNewUser({ ...newUser, role: e.value })}
@@ -192,15 +218,18 @@ const UserDialog: React.FC<UserDialogProps> = ({
           )}
 
           {/* Upload + Preview */}
-          {/* Upload + Preview */}
           {!readOnly && (
             <div className="flex items-center space-x-4">
               <FileUpload
                 mode="basic"
                 accept="image/*"
-                maxFileSize={1000000}
+                maxFileSize={1_000_000}
                 chooseLabel="Choisir une image"
-                onSelect={(e) => setNewUser({ ...newUser, image: e.files[0] })}
+                onSelect={(e: FileUploadSelectEvent) => {
+                  const file = (e.files && e.files[0]) as File | undefined;
+                  setNewUser({ ...newUser, image: file ?? null });
+                }}
+                onClear={() => setNewUser({ ...newUser, image: null })}
                 className="w-full"
               />
               {effectivePreviewUrl && (
@@ -232,7 +261,6 @@ const UserDialog: React.FC<UserDialogProps> = ({
               className="!bg-green-700 text-white"
               onClick={handleCreateOrUpdate}
               loading={loadingCreateOrUpdate}
-              severity={undefined}
             />
           </div>
         )}

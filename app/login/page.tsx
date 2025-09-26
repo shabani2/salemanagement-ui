@@ -1,3 +1,4 @@
+// file: app/login/page.tsx
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,15 +18,12 @@ import { EyeIcon } from '@heroicons/react/24/outline';
 import inaf from '@/assets/images/globals/inaf.png';
 import { loginUser } from '@/stores/slices/auth/authSlice';
 import { AppDispatch } from '@/stores/store';
+import { apiClient } from '@/lib/apiConfig'; // Pourquoi: utiliser la même config HTTP que le store
 
-/* ----------------------------- Helpers robustes ---------------------------- */
+/* ----------------------------- Helpers ----------------------------- */
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 const trimOrEmpty = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
-const phoneLooksValid = (v: string) => {
-  // tolérant: +, espaces, -, (), et chiffres ; impose >= 8 chiffres
-  const digits = v.replace(/\D/g, '');
-  return digits.length >= 8;
-};
+const emailLooksValid = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 export default function LoginPage() {
   const dispatch = useDispatch<AppDispatch>();
@@ -34,69 +32,94 @@ export default function LoginPage() {
 
   const [error, setError] = useState<string | null>(null);
 
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false); // Pourquoi: éviter multi-clics
 
-  /* ----------------------------- Hydrate rememberMe ----------------------------- */
+  /* ------------------------ Hydrate rememberMe ------------------------ */
   useEffect(() => {
     try {
       const saved = localStorage.getItem('auth-remember');
-      const savedPhone = localStorage.getItem('auth-phone');
-      if (saved === '1' && isNonEmptyString(savedPhone)) {
+      const savedEmail = localStorage.getItem('auth-email');
+      if (saved === '1' && isNonEmptyString(savedEmail)) {
         setRememberMe(true);
-        setPhone(savedPhone);
+        setEmail(savedEmail);
       }
     } catch {
-      // ignore
+      /* ignore */
     }
   }, []);
 
   const canSubmit = useMemo(() => {
-    const p = trimOrEmpty(phone);
+    const em = trimOrEmpty(email);
     const pwd = trimOrEmpty(password);
-    return isNonEmptyString(p) && isNonEmptyString(pwd) && phoneLooksValid(pwd ? p : '');
-  }, [phone, password]);
+    return emailLooksValid(em) && isNonEmptyString(pwd);
+  }, [email, password]);
 
   const persistRemember = useCallback(
-    (tel: string) => {
+    (eml: string) => {
       try {
         if (rememberMe) {
           localStorage.setItem('auth-remember', '1');
-          localStorage.setItem('auth-phone', tel);
+          localStorage.setItem('auth-email', eml);
         } else {
           localStorage.removeItem('auth-remember');
-          localStorage.removeItem('auth-phone');
+          localStorage.removeItem('auth-email');
         }
       } catch {
-        // storage indisponible : pas bloquant
+        /* non bloquant */
       }
     },
     [rememberMe]
   );
 
-  const handleLogin = useCallback(async () => {
-    setError(null);
-
-    const tel = trimOrEmpty(phone);
-    const pwd = trimOrEmpty(password);
-
-    if (!isNonEmptyString(tel) || !isNonEmptyString(pwd)) {
+  const handleForgotPassword = useCallback(async () => {
+    const eml = trimOrEmpty(email);
+    if (!emailLooksValid(eml)) {
       toast.current?.show({
         severity: 'warn',
-        summary: 'Champs requis',
-        detail: 'Veuillez renseigner le téléphone et le mot de passe.',
+        summary: 'Email requis',
+        detail: 'Saisissez un email valide pour recevoir le lien.',
         life: 2500,
       });
       return;
     }
-    if (!phoneLooksValid(tel)) {
+    try {
+      setForgotLoading(true);
+      await apiClient.post('/auth/forgot-password', { email: eml });
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Email envoyé',
+        detail: 'Si un compte existe, un email a été envoyé.',
+        life: 3000,
+      });
+    } catch (e) {
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Échec',
+        //@ts-expect-error --explication
+        detail: e?.response?.data?.message || "Impossible d'envoyer l'email.",
+        life: 3500,
+      });
+    } finally {
+      setForgotLoading(false);
+    }
+  }, [email]);
+
+  const handleLogin = useCallback(async () => {
+    setError(null);
+
+    const eml = trimOrEmpty(email);
+    const pwd = trimOrEmpty(password);
+
+    if (!emailLooksValid(eml) || !isNonEmptyString(pwd)) {
       toast.current?.show({
         severity: 'warn',
-        summary: 'Téléphone invalide',
-        detail: 'Veuillez saisir un numéro valide (au moins 8 chiffres).',
+        summary: 'Champs requis',
+        detail: 'Veuillez renseigner un email valide et le mot de passe.',
         life: 2500,
       });
       return;
@@ -104,32 +127,24 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      await dispatch(loginUser({ telephone: tel, password: pwd })).unwrap();
-      persistRemember(tel);
+      // ⚠️ Assure-toi que le thunk loginUser accepte { email, password }
+      await dispatch(loginUser({ email: eml, password: pwd })).unwrap();
+      persistRemember(eml);
 
       toast.current?.show({
         severity: 'success',
         summary: 'Connexion réussie',
-        detail: 'Bienvenue 👋',
+        detail: 'Bienvenue',
         life: 1500,
       });
 
-      // redirection après un petit délai visuel
       setTimeout(() => router.push('/'), 300);
     } catch (err: unknown) {
-      let message: string;
-      if (typeof err === 'object' && err !== null) {
-        if ('message' in err && typeof (err as { message?: unknown }).message === 'string') {
-          message = (err as { message: string }).message;
-        } else if ('error' in err && typeof (err as { error?: unknown }).error === 'string') {
-          message = (err as { error: string }).error;
-        } else if ('detail' in err && typeof (err as { detail?: unknown }).detail === 'string') {
-          message = (err as { detail: string }).detail;
-        } else {
-          message = "Une erreur s'est produite lors de la connexion";
-        }
-      } else {
-        message = "Une erreur s'est produite lors de la connexion";
+      let message = "Une erreur s'est produite lors de la connexion";
+      if (typeof err === 'object' && err) {
+        if ('message' in err && typeof err.message === 'string') message = err.message;
+        else if ('error' in err && typeof err.error === 'string') message = err.error;
+        else if ('detail' in err && typeof err.detail === 'string') message = err.detail;
       }
 
       setError(String(message));
@@ -142,7 +157,7 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  }, [dispatch, password, persistRemember, phone, router]);
+  }, [dispatch, email, password, persistRemember, router]);
 
   const handleCreateAccount = useCallback(() => {
     router.push('/subscription');
@@ -169,28 +184,29 @@ export default function LoginPage() {
 
         <h2 className="text-2xl font-semibold text-gray-700 text-center mb-6">Se connecter</h2>
 
-        {/* Téléphone */}
+        {/* Email */}
         <div className="mb-4">
-          <label className="block text-gray-700 text-sm font-medium mb-2" htmlFor="phone">
-            Téléphone
+          <label className="block text-gray-700 text-sm font-medium mb-2" htmlFor="email">
+            Email
           </label>
           <InputText
-            id="phone"
-            inputMode="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value ?? '')}
+            id="email"
+            type="email"
+            inputMode="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value ?? '')}
             onKeyDown={onKeyDown}
-            placeholder="exemple: +243 81 234 56 78"
+            placeholder="exemple: utilisateur@domaine.com"
             className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-700"
-            aria-invalid={!phoneLooksValid(phone) && isNonEmptyString(phone)}
+            aria-invalid={!emailLooksValid(email) && isNonEmptyString(email)}
           />
-          {!phoneLooksValid(phone) && isNonEmptyString(phone) && (
-            <small className="text-red-600">Numéro non valide</small>
+          {!emailLooksValid(email) && isNonEmptyString(email) && (
+            <small className="text-red-600">Email non valide</small>
           )}
         </div>
 
         {/* Mot de passe */}
-        <div className="mb-4">
+        <div className="mb-2">
           <label className="block text-gray-700 text-sm font-medium mb-2" htmlFor="password">
             Mot de passe
           </label>
@@ -216,20 +232,30 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Se souvenir de moi */}
-        <div className="flex items-center mb-4">
-          <Checkbox
-            inputId="rememberMe"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(!!e.checked)}
-            className="mr-2"
-          />
-          <label htmlFor="rememberMe" className="text-gray-700">
-            Se souvenir de moi
-          </label>
+        {/* Se souvenir de moi + Mot de passe oublié */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Checkbox
+              inputId="rememberMe"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(!!e.checked)}
+              className="mr-2"
+            />
+            <label htmlFor="rememberMe" className="text-gray-700">
+              Se souvenir de moi
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            disabled={forgotLoading}
+            className="text-sm text-blue-700 hover:underline disabled:opacity-60"
+          >
+            {forgotLoading ? 'Envoi…' : 'Mot de passe oublié ?'}
+          </button>
         </div>
 
-        {/* Message d'erreur (fallback) */}
+        {/* Message d'erreur */}
         {error && <p className="text-red-700 text-sm mb-4">{String(error)}</p>}
 
         <div className="flex justify-end gap-2 mb-3">
@@ -244,11 +270,7 @@ export default function LoginPage() {
           disabled={loading || !canSubmit}
         >
           {loading ? (
-            <ProgressSpinner
-              style={{ width: '28px', height: '28px' }}
-              strokeWidth="8"
-              // pas de fill custom (PrimeReact gère)
-            />
+            <ProgressSpinner style={{ width: '28px', height: '28px' }} strokeWidth="8" />
           ) : null}
         </Button>
       </div>

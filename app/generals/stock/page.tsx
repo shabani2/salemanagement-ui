@@ -91,7 +91,11 @@ const Page: React.FC = () => {
 
   const serverFilters = useMemo(() => {
     const roleFilters: Record<string, any> = {};
-    if (user?.role === 'AdminPointVente' || user?.role === 'Vendeur' || user?.role === 'Logisticien' && isNonEmptyString((user as any)?.pointVente?._id)) {
+    if (
+      user?.role === 'AdminPointVente' ||
+      user?.role === 'Vendeur' ||
+      (user?.role === 'Logisticien' && isNonEmptyString((user as any)?.pointVente?._id))
+    ) {
       roleFilters.pointVente = (user as any).pointVente._id;
     } else if (user?.role === 'AdminRegion' && isNonEmptyString((user as any)?.region?._id)) {
       roleFilters.region = (user as any).region._id;

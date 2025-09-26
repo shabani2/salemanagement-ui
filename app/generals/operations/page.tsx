@@ -200,6 +200,7 @@ const Page = () => {
   const montantFranc = useMemo(() => montantDollar * tauxFranc, [montantDollar, tauxFranc]);
 
   /* ------------------------- Chargements initiaux -------------------------- */
+  //@ts-expect-error --explication
   const regionId = getRegionId((user as User)?.region);
 
   useEffect(() => {
@@ -264,6 +265,7 @@ const Page = () => {
 
   useEffect(() => {
     if (isPointVenteLocked && user?.pointVente && pointsVente.length > 0) {
+      //@ts-expect-error --explication
       const targetId = typeof user.pointVente === 'string' ? user.pointVente : user.pointVente?._id;
       if (targetId && getValues('pointVente') !== targetId) setValue('pointVente', targetId);
     }
@@ -408,10 +410,8 @@ const Page = () => {
       return;
     }
     try {
-      const action = await dispatch(
-        searchProduits({ q, page: 1, limit: 10, includeTotal: false }) as any
-      );
-      if ((searchProduits as any).fulfilled.match(action)) {
+      const action = await dispatch(searchProduits({ q, page: 1, limit: 10, includeTotal: false }));
+      if (searchProduits.fulfilled.match(action)) {
         const list = extractProduitList(action.payload);
         list.forEach((p) => {
           if (p?._id) productCacheRef.current[p._id] = p;
