@@ -32,6 +32,7 @@ import type { MouvementStock } from '@/Models/mouvementStockType';
 
 import { useUserRole } from '@/hooks/useUserRole';
 import { API_URL } from '@/lib/apiConfig';
+import { resolveFinalImagePath } from '@/lib/utils/baseUrl';
 
 /* ----------------------------- Helpers ----------------------------- */
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
@@ -434,18 +435,17 @@ const Page: React.FC = () => {
                       <td className="px-4 py-2">{firstIndex + idx + 1}</td>
 
                       <td className="px-4 py-2">
-                        {imageUrl ? (
+                        
                           <div className="w-8 h-8">
                             <img
-                              src={imageUrl}
+                              src={resolveFinalImagePath(imageUrl, '2')}
                               alt={cat?.nom ?? ''}
                               className="rounded-full w-full h-full object-cover border border-gray-100"
                               onError={(e) => (e.currentTarget.style.display = 'none')}
                             />
                           </div>
-                        ) : (
-                          <span>—</span>
-                        )}
+                        
+                      
                       </td>
 
                       <td className="px-4 py-2">{row?.produit?.nom ?? '—'}</td>

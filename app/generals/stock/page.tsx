@@ -33,6 +33,7 @@ import { Toast } from 'primereact/toast';
 import type { Stock } from '@/Models/stock';
 import type { PointVente } from '@/Models/pointVenteType';
 import type { Categorie } from '@/Models/produitsType';
+import { resolveFinalImagePath } from '@/lib/utils/baseUrl';
 
 /* ----------------------------- Helpers ----------------------------- */
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
@@ -368,16 +369,14 @@ const Page: React.FC = () => {
                       <td className="px-4 py-2">{firstIndex + idx + 1}</td>
 
                       <td className="px-4 py-2">
-                        {imageUrl ? (
+                       
                           <img
-                            src={imageUrl}
+                            src={resolveFinalImagePath(imageUrl, '2')}
                             alt={cat?.nom ?? ''}
                             className="w-8 h-8 rounded-full object-cover border border-gray-100"
                             onError={(e) => (e.currentTarget.style.display = 'none')}
                           />
-                        ) : (
-                          <span>—</span>
-                        )}
+                      
                       </td>
 
                       <td className="px-4 py-2">{row?.produit?.nom ?? '—'}</td>

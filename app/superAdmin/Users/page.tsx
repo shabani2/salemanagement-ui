@@ -43,6 +43,7 @@ import { API_URL } from '@/lib/apiConfig';
 import type { User, UserModel } from '@/Models/UserType';
 import type { PointVente } from '@/Models/pointVenteType';
 import { isPointVente, isRegion } from '@/Models/UserType';
+import { resolveFinalImagePath } from '@/lib/utils/baseUrl';
 
 /* --------------------------------- helpers -------------------------------- */
 const breadcrumbItems = [{ label: 'Accueil', url: '/' }, { label: 'Gestion des utilisateurs' }];
@@ -379,9 +380,8 @@ const Page: React.FC = () => {
   );
 
   /* ------------------------------- rendu image ------------------------------- */
-  const avatarTemplate = (data: User) => {
-    const srcRaw = typeof data?.image === 'string' ? data.image : '';
-    const src = isNonEmptyString(srcRaw) ? `${API_URL()}/${srcRaw.replace('../', '')}` : '';
+  const avatarTemplate = (data: User) => {    
+    const src = resolveFinalImagePath(data?.image, '1')
     if (!src) {
       return (
         <div

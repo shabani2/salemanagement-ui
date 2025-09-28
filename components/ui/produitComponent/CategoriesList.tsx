@@ -65,13 +65,13 @@ const CategorieList: React.FC<Props> = ({ categories, onAction }) => {
                 /> */}
 
                 <div className="relative w-12 h-12 rounded-full overflow-hidden">
-                  {categorie.image && (
+                  
                     <img
-                      src={resolveFinalImagePath(categorie?.image, '1')}
+                      src={resolveFinalImagePath(categorie?.image, '2')}
                       alt={categorie.nom}
                       className="object-cover w-full h-full"
                     />
-                  )}
+                
                 </div>
 
                 <span className="text-lg font-medium">{categorie.nom}</span>
