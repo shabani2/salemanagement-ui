@@ -107,7 +107,7 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
             <h3 className="mr-2 text-[1.5rem] font-bold">
               {user ? `${user.nom} ${user.prenom}` : ''}
             </h3>
-            {user?.image && (
+           
               <img
                 src={imagePath}
                 width={32}
@@ -115,7 +115,7 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
                 className="rounded-full cursor-pointer"
                 alt="User"
               />
-            )}
+            
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
