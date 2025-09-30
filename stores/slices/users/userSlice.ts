@@ -103,7 +103,7 @@ export const createUser = createAsyncThunk<
   { rejectValue: string }
 >('users/addUser', async (user, { rejectWithValue }) => {
   try {
-    // 🛑 L'URL est modifiée pour correspondre à la nouvelle fonction createUser du controller user
+   
     const response = await apiClient.post<MessageResponse>('/user', user, {
       headers: getAuthHeaders(),
     });

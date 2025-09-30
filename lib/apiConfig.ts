@@ -101,3 +101,57 @@ apiClient.interceptors.request.use((config) => {
   }
   return config;
 });
+
+
+
+
+
+
+
+
+
+function extractTenantSlugFromHost(host: string): string | null {
+  if (!host) return null;
+  host = host.toLowerCase();
+  if (host === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(host)) return null;
+  if (host.endsWith(".herokuapp.com")) return null; // pas de wildcard multi-tenant sur herokuapp.com
+  const parts = host.split(".");
+  if (parts.length >= 3 && parts[0] !== "www") return parts[0];
+  return null;
+}
+
+/** Injecte automatiquement le tenant */
+apiClient.interceptors.request.use((config) => {
+  // Auth header (conservé)
+  if (typeof window !== "undefined") {
+    try {
+      const token = localStorage.getItem("authToken");
+      if (token) {
+        config.headers = config.headers ?? {};
+        (config.headers as any).Authorization = `Bearer ${token}`;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Tenant headers
+  if (typeof window !== "undefined") {
+    config.headers = config.headers ?? {};
+    // 1) Id direct si disponible (post-login)
+    const orgId = localStorage.getItem("organisationId"); // <-- stockez ceci après login
+    if (orgId) {
+      (config.headers as any)["x-tenant-id"] = orgId;
+      return config;
+    }
+    // 2) Sinon, slug depuis le sous-domaine (custom domain recommandé)
+    const slug = extractTenantSlugFromHost(window.location.hostname);
+    if (slug) (config.headers as any)["x-tenant-slug"] = slug;
+  }
+
+  return config;
+});
+
+// Exemple: à l’issue du login, stockez l’orgId pour fiabiliser toutes les requêtes suivantes
+export function afterLoginPersistOrg(orgId: string) {
+  try { localStorage.setItem("organisationId", orgId); } catch { /* ignore */ }
+}
+

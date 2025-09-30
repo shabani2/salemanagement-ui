@@ -521,7 +521,7 @@ const Page: React.FC = () => {
       toast.current?.show({
         severity: 'error',
         summary: 'Erreur',
-        detail: String(err?.message || "Échec de l'opération"),
+        detail: String(err?.message || "la creation a echoue"),
         life: 3500,
       });
     } finally {
