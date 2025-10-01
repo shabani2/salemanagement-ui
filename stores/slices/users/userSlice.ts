@@ -98,24 +98,36 @@ interface UserCreationPayload {
 
 // --- Thunk 1: Ajout d'un Utilisateur par Admin (Route: /api/users/create, pas d'upload initial) ---
 export const createUser = createAsyncThunk<
-  User, // La valeur renvoyée par le thunk (l'utilisateur créé)
-  UserCreationPayload, // Le payload attendu pour la création manuelle
+  User,                // valeur renvoyée
+  UserCreationPayload, // payload
   { rejectValue: string }
->('users/addUser', async (user, { rejectWithValue }) => {
+>('users/addUser', async (user, { rejectWithValue, signal }) => {
   try {
-   
-    const response = await apiClient.post<MessageResponse>('/user', user, {
-      headers: getAuthHeaders(),
+    const hasFile = (user as any)?.image instanceof File;
+    const body = hasFile ? new FormData() : user as any;
+    if (hasFile) {
+      Object.entries(user as any).forEach(([k, v]) => {
+        if (k === 'image' && v instanceof File) (body as FormData).append('image', v);
+        else if (v != null) (body as FormData).append(k, String(v));
+      });
+    }
+
+    const response = await apiClient.post('/user', body, {
+      headers: {
+        ...getAuthHeaders(),
+        ...(hasFile ? { 'Content-Type': 'multipart/form-data' } : {}),
+      },
+      timeout: 15000, // ← coupe l’attente infinie
+      signal,
     });
 
-    // On retourne l'objet utilisateur pour l'ajouter au state
-    return response.data.user;
-  } catch (error: any) {
-    const msg =
-      error?.response?.data?.message ||
-      error?.message ||
-      'Erreur lors de l’ajout de l’utilisateur.';
-    return rejectWithValue(String(msg));
+    // ✅ IMPORTANT: retourner la data
+    // backend renvoie { message, user }, on renvoie l'objet user
+    return (response.data.user ?? response.data) as User;
+
+  } catch (e: any) {
+    const msg = e?.response?.data?.message || e?.message || "Erreur création utilisateur";
+    return rejectWithValue(msg);
   }
 });
 

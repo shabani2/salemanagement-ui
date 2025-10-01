@@ -155,3 +155,28 @@ export function afterLoginPersistOrg(orgId: string) {
   try { localStorage.setItem("organisationId", orgId); } catch { /* ignore */ }
 }
 
+
+
+
+
+
+apiClient.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    try {
+      const token = localStorage.getItem("authToken") || localStorage.getItem("token-agricap");
+      if (token) {
+        config.headers = config.headers ?? {};
+        (config.headers as any).Authorization = `Bearer ${token}`;
+      }
+      // ✅ EN-TÊTE TENANT MINIMALISTE
+      const orgId = localStorage.getItem("organisationId");
+      if (orgId) {
+        config.headers = config.headers ?? {};
+        (config.headers as any)["x-tenant-id"] = orgId;
+      }
+    } catch { /* noop */ }
+  }
+  return config;
+});
+
+
