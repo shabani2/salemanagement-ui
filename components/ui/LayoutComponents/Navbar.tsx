@@ -1,13 +1,11 @@
-// file: app/components/Navbar.tsx
+// ======================================================================
+// 3) app/components/Navbar.tsx  — sécuriser handleLogout
+// ======================================================================
 'use client';
-
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdowns/dropdown-menu';
 import { Menu } from 'lucide-react';
 import { useDispatch } from 'react-redux';
@@ -18,6 +16,7 @@ import { User, isRegion, isPointVente } from '../../../Models/UserType';
 import { isUserRole } from '@/lib/utils';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { resolveFinalImagePath } from '@/lib/utils/baseUrl';
+import { afterLogoutCleanup, removeAxiosAuthHeader } from '@/lib/apiConfig';
 
 interface NavbarProps {
   onMenuClick: () => void;
@@ -27,72 +26,60 @@ interface NavbarProps {
 
 export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
   const dispatch = useDispatch<AppDispatch>();
-
   const pathname = usePathname();
 
   const [user, setUser] = useState<User | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleLogout = () => {
-    dispatch(logoutUser()).then(() => {
-      localStorage.removeItem('user-agricap');
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await dispatch(logoutUser()).unwrap();
+    } catch {
+      // ignore & proceed
+    } finally {
+      // ✅ Double sécurité locale
+      afterLogoutCleanup();
+      removeAxiosAuthHeader();
       setUser(null);
       onNavigate('/login');
-    });
+      setIsLoggingOut(false);
+    }
   };
 
   const getHeaderTitle = () => {
-    if (user && !user?.role) return 'Tableau de Bord';
-    const roleId = user && isUserRole(user?.role);
+    if (!user?.role) return 'Tableau de Bord';
+    const roleId = isUserRole(user.role);
     switch (roleId) {
-      case 1:
-        return 'Dépôt Central';
-      case 2:
-        return user && isRegion(user.region) ? user.region.nom : 'Région';
+      case 1: return 'Dépôt Central';
+      case 2: return isRegion(user.region) ? user.region.nom : 'Région';
       case 3:
       case 4:
-      case 5:
-        return user && isPointVente(user.pointVente) ? user.pointVente.nom : 'Point de Vente';
-      default:
-        return 'Tableau de Bord';
+      case 5: return isPointVente(user.pointVente) ? user.pointVente.nom : 'Point de Vente';
+      default: return 'Tableau de Bord';
     }
   };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const storedUser = localStorage.getItem('user-agricap');
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser);
-        if (!user || parsed?.id !== user?.id) {
-          setUser(parsed);
-        }
-      } catch (e) {
-        console.error('Erreur parsing:', e);
-      }
-    } else {
-      setUser(null);
-    }
+    const raw = localStorage.getItem('user-agricap');
+    if (!raw) { setUser(null); return; }
+    try {
+      const parsed: User = JSON.parse(raw);
+      if (!user || parsed?.id !== user?.id) setUser(parsed);
+    } catch { setUser(null); }
+  }, [pathname]);
 
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore - typage imprécis de la lib externe
-  }, [pathname]); // 🔥 relit user sur changement de route
+  const imagePath = useMemo(() => resolveFinalImagePath(user?.image, '1'), [user?.image]);
 
-  const imagePath: string = resolveFinalImagePath(user?.image, '1');
   return (
     <nav
-      className={`fixed top-0 !bg-green-700 text-gray-100 shadow flex justify-between items-center p-4 z-50 transition-all duration-300`}
-      style={{
-        left: isOpen ? '16rem' : '0',
-        width: isOpen ? 'calc(100% - 16rem)' : '100%',
-      }}
+      className="fixed top-0 !bg-green-700 text-gray-100 shadow flex justify-between items-center p-4 z-50 transition-all duration-300"
+      style={{ left: isOpen ? '16rem' : '0', width: isOpen ? 'calc(100% - 16rem)' : '100%' }}
     >
       <div className="flex justify-start">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onMenuClick}
-          className="mr-2 outline-none cursor-pointer"
-        >
+        <Button variant="ghost" size="icon" onClick={onMenuClick} className="mr-2 outline-none cursor-pointer">
           <Menu className="w-6 h-6 cursor-pointer" />
         </Button>
         <h1 className="text-xl font-semibold">{getHeaderTitle()}</h1>
@@ -104,40 +91,20 @@ export function Navbar({ onMenuClick, isOpen, onNavigate }: NavbarProps) {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger className="outline-none flex flex-row items-center">
-            <h3 className="mr-2 text-[1.5rem] font-bold">
-              {user ? `${user.nom} ${user.prenom}` : ''}
-            </h3>
-           
-              <img
-                src={imagePath}
-                width={32}
-                height={32}
-                className="rounded-full cursor-pointer"
-                alt="User"
-              />
-            
+            <h3 className="mr-2 text-[1.5rem] font-bold">{user ? `${user.nom} ${user.prenom}` : ''}</h3>
+            <img src={imagePath} width={32} height={32} className="rounded-full cursor-pointer" alt="User" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => onNavigate('/generals/profile')}
-              className="cursor-pointer"
-            >
-              <i className="pi pi-user text-blue-600 mr-2" />
-              Profil
+            <DropdownMenuItem onClick={() => onNavigate('/generals/profile')} className="cursor-pointer">
+              <i className="pi pi-user text-blue-600 mr-2" /> Profil
             </DropdownMenuItem>
-            {user && user?.role === 'SuperAdmin' && (
-              <DropdownMenuItem
-                onClick={() => onNavigate('/superAdmin/abonnements')}
-                className="cursor-pointer"
-              >
-                <i className="pi pi-users text-green-600 mr-2" />
-                Abonnements
+            {user?.role === 'SuperAdmin' && (
+              <DropdownMenuItem onClick={() => onNavigate('/superAdmin/abonnements')} className="cursor-pointer">
+                <i className="pi pi-users text-green-600 mr-2" /> Abonnements
               </DropdownMenuItem>
             )}
-
-            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-              <i className="pi pi-sign-out text-red-600 mr-2" />
-              Déconnexion
+            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer" disabled={isLoggingOut}>
+              <i className="pi pi-sign-out text-red-600 mr-2" /> {isLoggingOut ? 'Déconnexion…' : 'Déconnexion'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

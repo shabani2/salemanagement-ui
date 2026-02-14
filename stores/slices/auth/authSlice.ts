@@ -9,7 +9,7 @@ import {
   EntityAdapter,
   PayloadAction,
 } from '@reduxjs/toolkit';
-import { apiClient } from '../../../lib/apiConfig';
+import { afterLoginPersistToken, afterLogoutCleanup, apiClient, removeAxiosAuthHeader } from '../../../lib/apiConfig';
 import { User } from '@/Models/UserType';
 
 type RegisterResponse = { message: string };
@@ -68,17 +68,37 @@ export const registerUser = createAsyncThunk<RegisterResponse, FormData, { rejec
   }
 );
 
+
+
+
+
+// export interface LoginResponse {
+//   token: string;
+//   user: any; // ← garde ton type User si tu l'as: `user: User`
+//   needsEmailVerification?: boolean;
+// }
+
 export const loginUser = createAsyncThunk<
   LoginResponse,
   { email: string; password: string },
   { rejectValue: string }
 >('auth/loginUser', async (credentials, { rejectWithValue }) => {
   try {
+    // L'interceptor injecte automatiquement le slug tenant UNIQUEMENT pour /auth/login
     const { data } = await apiClient.post<LoginResponse>('/auth/login', credentials);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('token-agricap', data.token);
-      localStorage.setItem('user-agricap', JSON.stringify(data.user));
+
+    // Stocke le JWT (authToken) et purge toutes les anciennes clés tenant locales
+    afterLoginPersistToken(data.token);
+
+    // Conserve l'utilisateur pour l'UI (nom, avatar, etc.)
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user-agricap', JSON.stringify(data.user));
+      }
+    } catch {
+      /* noop */
     }
+
     return data;
   } catch (error: any) {
     const msg =
@@ -90,31 +110,26 @@ export const loginUser = createAsyncThunk<
   }
 });
 
-export const logoutUser = createAsyncThunk<MessageResponse | null, void, { rejectValue: string }>(
+export const logoutUser = createAsyncThunk<MessageResponse, void, { rejectValue: string }>(
   'auth/logoutUser',
   async (_arg, { rejectWithValue }) => {
     try {
       const { data } = await apiClient.post<MessageResponse>('/auth/logout');
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token-agricap');
-        localStorage.removeItem('user-agricap');
-      }
       return data ?? { message: 'Déconnexion réussie' };
     } catch (error: any) {
-      // On nettoie quand même localStorage côté client
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token-agricap');
-        localStorage.removeItem('user-agricap');
-      }
       const msg =
         error?.response?.data?.message ||
-        error?.response?.data ||
         error?.message ||
         'Erreur lors de la déconnexion';
       return rejectWithValue(String(msg));
+    } finally {
+      // ✅ Toujours nettoyer, succès ou erreur
+      afterLogoutCleanup();
+      removeAxiosAuthHeader();
     }
   }
 );
+
 
 export const forgotPassword = createAsyncThunk<
   MessageResponse,
